@@ -86,8 +86,9 @@ public class Gazetteer {
         return citiesByName.getOrDefault(key(text), List.of());
     }
 
+    /** Every city in a metro, by its key ("NCR"); the map is keyed like all lookups, so normalize first. */
     public List<City> citiesInMetro(String metroKey) {
-        return citiesByMetro.getOrDefault(metroKey, List.of());
+        return citiesByMetro.getOrDefault(key(metroKey), List.of());
     }
 
     /** The normalization every lookup uses: no accents, single spaces, lowercase. "  Ôsaka " -> "osaka". */

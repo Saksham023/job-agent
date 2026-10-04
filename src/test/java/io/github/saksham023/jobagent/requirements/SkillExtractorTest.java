@@ -169,4 +169,15 @@ class SkillExtractorTest {
         assertThat(extractor.extract("Staff Software Development Engineer - Java/Go", null, "zscaler").primaryLanguages())
                 .containsExactly("Java", "Go");
     }
+
+    // ---------------------------------------------------------------- one name as a person types it (profiles)
+
+    @Test
+    void canonicalNameForATypedSkill() {
+        assertThat(extractor.canonical("k8s")).map(SkillExtractor.SkillName::skill).hasValue("Kubernetes");
+        assertThat(extractor.canonical("  postgres ")).map(SkillExtractor.SkillName::skill).hasValue("PostgreSQL");
+        assertThat(extractor.canonical("go")).map(SkillExtractor.SkillName::category).hasValue(SkillExtractor.Category.LANGUAGE);
+        assertThat(extractor.canonical("Spring Boot")).map(SkillExtractor.SkillName::skill).hasValue("Spring Boot");
+        assertThat(extractor.canonical("Underwater basket weaving")).isEmpty();
+    }
 }

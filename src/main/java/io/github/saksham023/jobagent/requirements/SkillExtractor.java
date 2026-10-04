@@ -8,9 +8,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -41,7 +44,11 @@ public class SkillExtractor {
     public record Skills(List<String> required, List<String> preferred, List<String> primaryLanguages) {
     }
 
-    private record Alias(String skill, Category category, Pattern pattern, boolean ambiguous) {}
+    /** A canonical skill and its category, e.g. ("PostgreSQL", DATASTORE). */
+    public record SkillName(String skill, Category category) {
+    }
+
+    private record Alias(String skill, Category category, String word, Pattern pattern, boolean ambiguous) {}
 
     private record Found(String skill, Category category, int start) {}
 
@@ -49,9 +56,11 @@ public class SkillExtractor {
     private static final Pattern NAME_CONTEXT = Pattern.compile("(?i)\\b(?:in|with|using)\\s+$");
 
     private final List<Alias> aliases;
+    private final Map<String, SkillName> skillsByName;
 
     public SkillExtractor() {
         this.aliases = load("classify/skills.csv");
+        this.skillsByName = indexByName(aliases);
         log.info("Skill dictionary loaded: {} skills, {} aliases",
                 aliases.stream().map(Alias::skill).distinct().count(), aliases.size());
     }
@@ -107,6 +116,14 @@ public class SkillExtractor {
         return new Skills(List.copyOf(required), List.copyOf(preferred), primary);
     }
 
+    /**
+     * The canonical skill for ONE name as a person types it in a skill list: "k8s", "Postgres", "golang", "go",
+     * "Spring". Unlike text scanning, ambiguous names count here (in a skill list "go" means the language).
+     */
+    public Optional<SkillName> canonical(String name) {
+        return name == null ? Optional.empty() : Optional.ofNullable(skillsByName.get(nameKey(name)));
+    }
+
     // ---------------------------------------------------------------- matching
 
     /** Every dictionary skill in one piece of text, in order of position, without duplicates. */
@@ -140,6 +157,21 @@ public class SkillExtractor {
         return result.stream().filter(f -> seen.add(f.skill())).toList();
     }
 
+    private static Map<String, SkillName> indexByName(List<Alias> aliases) {
+        Map<String, SkillName> byName = new HashMap<>();
+        for (Alias alias : aliases) {
+            SkillName skill = new SkillName(alias.skill(), alias.category());
+            byName.putIfAbsent(nameKey(alias.word()), skill);
+            byName.putIfAbsent(nameKey(alias.skill()), skill);
+        }
+        return Map.copyOf(byName);
+    }
+
+    /** "  Spring  Boot " -> "spring boot": lowercase, single spaces. */
+    private static String nameKey(String name) {
+        return name.strip().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
     private static String normalize(String name) {
         return name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
     }
@@ -165,7 +197,7 @@ public class SkillExtractor {
                 // a slash separates skills ("Python/Java", "Java/Go"), so it is not part of the guards
                 String regex = "(?<![\\w+#.-])" + Pattern.quote(word) + (ambiguous ? "(?![\\w+#&-])" : "(?![\\w+#])");
                 Pattern pattern = ambiguous ? Pattern.compile(regex) : Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
-                aliases.add(new Alias(skill, category, pattern, ambiguous));
+                aliases.add(new Alias(skill, category, word, pattern, ambiguous));
             }
         }
         return List.copyOf(aliases);

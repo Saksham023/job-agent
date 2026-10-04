@@ -42,7 +42,14 @@ Future idea: detect company boilerplate lines (same line in >50% of a company's 
 Concurrency plan (decided 2026-10-05): crawling is network-bound, so in M7 the scheduler crawls companies
 grouped BY HOST in parallel (one virtual thread per host, sequential + polite within a host); extraction is
 CPU-bound and incremental, so it stays single-threaded (optimize regex matching before adding threads).
-Next: Milestone 3 (matching v1).
+Milestone 3 DONE 2026-10-05: `matching` package: Profile (preferredLocations = explicit filter only),
+MatchCandidateRepository (hard filters in SQL: open, IN, family, location/remote/no-city, years -1/+3,
+unknown years pass), MatchScorer (skills 65 capped at 8 required, primary language 20, experience 15,
+neutral 0.5 for missing data, human-readable reasons; 9 tests), MatchService (canonical skills via
+SkillExtractor.canonical, places via Gazetteer, unknownSkills/unknownLocations reported), MatchController
+POST /admin/match. Fixed Gazetteer.citiesInMetro key bug. Real run (3-yr Java backend profile): 52 eligible
+across India, Paytm Java backend roles on top; NCR filter -> 8 eligible. Known quirk: "Jira Administrator"
+looks Java-primary from "Java/Python scripting". Next: Milestone 4 (MCP server).
 
 ## 1. Why this project (context)
 
@@ -321,6 +328,11 @@ Decided (2026-10-04):
   every rule change is re-scored (regression). Bake-off compares rules vs embedding nearest-neighbour vs
   local LLM on UNSEEN companies; the winner becomes tier 1/2.
 - No LLM in the matching step itself: deterministic filters + skill scoring (+ embeddings later).
+- **Location is the user's explicit choice (decided 2026-10-05, user's call).** Never inferred from the
+  resume's address (where someone lives is not where they want to work). `Profile.preferredLocations` is a
+  FILTER only (empty = anywhere in India; remote jobs pass when openToRemote); location is never part of the
+  score. The M4 MCP tool description and `find-jobs` prompt must tell Claude to ASK the user for location
+  preferences and never fill them from the resume. Score = skills 65 + primary language 20 + experience 15.
 - Stateless profiles first (profile passed per call); `save_profile` later for digests.
 - Web UI: later, as a thin layer over the same services (REST + MCP tools share services).
 
