@@ -1,0 +1,156 @@
+# canonical,category,aliases
+# One row per skill. aliases are separated by | and matched as whole tokens, case-insensitively.
+# An alias starting with ~ is AMBIGUOUS (an ordinary English word too: Go, R, Swift, Excel, Spring...). It
+# counts only when written exactly as here (case-sensitive) AND either another skill appears within 40
+# characters on the same line ("Java, Python or Go") or it follows "in / with / using" ("experience in Go"),
+# so "go-to-market" and "excel in a team" do not count.
+# Only LANGUAGE skills can become primary languages (SQL and Bash are DATA / DEVOPS on purpose).
+# Categories: LANGUAGE FRAMEWORK FRONTEND MOBILE DATASTORE MESSAGING CLOUD DEVOPS DATA ML_AI CONCEPT TOOL
+# --- languages ---
+Java,LANGUAGE,java|core java|java 8|java 11|java 17|java 21
+Python,LANGUAGE,python|python3
+Go,LANGUAGE,golang|~Go
+Kotlin,LANGUAGE,kotlin
+Scala,LANGUAGE,scala
+C++,LANGUAGE,c++|cpp|c/c++
+C#,LANGUAGE,c#|csharp
+Rust,LANGUAGE,rust
+JavaScript,LANGUAGE,javascript|js|es6
+TypeScript,LANGUAGE,typescript
+Ruby,LANGUAGE,ruby
+PHP,LANGUAGE,php
+Swift,LANGUAGE,~Swift
+Objective-C,LANGUAGE,objective-c
+R,LANGUAGE,~R
+SQL,DATA,sql|t-sql|pl/sql
+Bash,DEVOPS,bash|shell scripting|~Shell
+Dart,LANGUAGE,~Dart
+Elixir,LANGUAGE,elixir
+Perl,LANGUAGE,perl
+MATLAB,LANGUAGE,matlab
+Verilog,LANGUAGE,verilog|systemverilog
+VHDL,LANGUAGE,vhdl
+# --- backend frameworks and API styles ---
+Spring Boot,FRAMEWORK,spring boot|springboot|spring framework|spring mvc|~Spring
+Hibernate,FRAMEWORK,hibernate|jpa
+Django,FRAMEWORK,django
+Flask,FRAMEWORK,flask
+FastAPI,FRAMEWORK,fastapi
+Node.js,FRAMEWORK,node.js|nodejs|~Node
+Express,FRAMEWORK,express.js|expressjs|~Express
+.NET,FRAMEWORK,.net|dotnet|asp.net|.net core
+Ruby on Rails,FRAMEWORK,ruby on rails|rails
+gRPC,FRAMEWORK,grpc
+GraphQL,FRAMEWORK,graphql
+REST APIs,FRAMEWORK,rest api|rest apis|restful|restful apis|rest/json
+# --- frontend ---
+React,FRONTEND,react|react.js|reactjs
+Angular,FRONTEND,angular|angularjs
+Vue.js,FRONTEND,vue|vue.js|vuejs
+Next.js,FRONTEND,next.js|nextjs
+Redux,FRONTEND,redux
+HTML,FRONTEND,html|html5
+CSS,FRONTEND,css|css3|scss|sass|tailwind
+# --- mobile ---
+Android,MOBILE,android
+iOS,MOBILE,ios
+Flutter,MOBILE,flutter
+React Native,MOBILE,react native
+Jetpack Compose,MOBILE,jetpack compose
+SwiftUI,MOBILE,swiftui
+# --- datastores ---
+PostgreSQL,DATASTORE,postgresql|postgres|psql
+MySQL,DATASTORE,mysql
+Oracle Database,DATASTORE,oracle database|oracle db
+SQL Server,DATASTORE,sql server|mssql
+MongoDB,DATASTORE,mongodb|mongo
+Redis,DATASTORE,redis
+Cassandra,DATASTORE,cassandra
+DynamoDB,DATASTORE,dynamodb
+Elasticsearch,DATASTORE,elasticsearch|elastic search|opensearch
+Neo4j,DATASTORE,neo4j
+ClickHouse,DATASTORE,clickhouse
+Snowflake,DATASTORE,snowflake
+BigQuery,DATASTORE,bigquery
+Redshift,DATASTORE,redshift
+HBase,DATASTORE,hbase
+Memcached,DATASTORE,memcached
+Vector Databases,DATASTORE,vector database|vector databases|vector db|pinecone|weaviate|milvus|pgvector
+# --- messaging and streaming ---
+Kafka,MESSAGING,kafka|apache kafka|kafka streams
+RabbitMQ,MESSAGING,rabbitmq
+Pulsar,MESSAGING,pulsar
+AWS SQS,MESSAGING,sqs
+Kinesis,MESSAGING,kinesis
+# --- cloud ---
+AWS,CLOUD,aws|amazon web services
+GCP,CLOUD,gcp|google cloud|google cloud platform
+Azure,CLOUD,azure|microsoft azure
+# --- devops and infrastructure ---
+Kubernetes,DEVOPS,kubernetes|k8s|eks|gke|aks
+Docker,DEVOPS,docker|containers|containerization
+Terraform,DEVOPS,terraform
+Ansible,DEVOPS,ansible
+Helm,DEVOPS,helm
+Jenkins,DEVOPS,jenkins
+CI/CD,DEVOPS,ci/cd|cicd|ci-cd|github actions|gitlab ci|argocd|argo cd
+Prometheus,DEVOPS,prometheus
+Grafana,DEVOPS,grafana
+Datadog,DEVOPS,datadog
+OpenTelemetry,DEVOPS,opentelemetry
+Linux,DEVOPS,linux|unix
+Git,DEVOPS,git|github|gitlab|bitbucket
+Nginx,DEVOPS,nginx
+Istio,DEVOPS,istio|service mesh
+# --- data engineering and analytics ---
+Apache Spark,DATA,spark|pyspark|apache spark|spark sql
+Hadoop,DATA,hadoop|hdfs|mapreduce
+Hive,DATA,hive
+Airflow,DATA,airflow|apache airflow
+Flink,DATA,flink|apache flink
+dbt,DATA,dbt
+Trino,DATA,trino|presto
+Databricks,DATA,databricks
+Delta Lake,DATA,delta lake
+ETL,DATA,etl|elt|data pipelines|data pipeline
+Data Warehousing,DATA,data warehouse|data warehousing|data lake|lakehouse
+Tableau,DATA,tableau
+Power BI,DATA,power bi|powerbi
+Looker,DATA,looker
+Pandas,DATA,pandas
+NumPy,DATA,numpy
+Excel,TOOL,ms excel|microsoft excel|advanced excel|~Excel
+# --- ML and AI ---
+# "AI/ML" alone is boilerplate in many postings (Zscaler adds it to every job), so the bare abbreviation is ambiguous
+Machine Learning,ML_AI,machine learning|~ML
+Deep Learning,ML_AI,deep learning|neural networks
+PyTorch,ML_AI,pytorch
+TensorFlow,ML_AI,tensorflow|keras
+scikit-learn,ML_AI,scikit-learn|sklearn
+LLMs,ML_AI,llm|llms|large language models|large language model
+Generative AI,ML_AI,generative ai|genai|gen ai
+NLP,ML_AI,nlp|natural language processing
+Computer Vision,ML_AI,computer vision
+LangChain,ML_AI,langchain|langgraph
+RAG,ML_AI,rag|retrieval augmented generation|retrieval-augmented generation
+Hugging Face,ML_AI,hugging face|huggingface
+MLOps,ML_AI,mlops|mlflow|kubeflow
+CUDA,ML_AI,cuda
+# --- engineering concepts ---
+Distributed Systems,CONCEPT,distributed systems|distributed system|distributed computing
+System Design,CONCEPT,system design|systems design|high-level design|low-level design|hld|lld
+Microservices,CONCEPT,microservices|microservice|micro-services|microservice architecture
+Event-Driven Architecture,CONCEPT,event-driven|event driven
+Data Structures & Algorithms,CONCEPT,data structures|algorithms|dsa
+Design Patterns,CONCEPT,design patterns
+OOP,CONCEPT,oop|object-oriented|object oriented
+Concurrency,CONCEPT,multithreading|multi-threading|concurrency|concurrent programming
+Networking,CONCEPT,tcp/ip|tcp|http/2|~networking
+API Design,CONCEPT,api design
+# --- business and productivity tools ---
+Salesforce,TOOL,salesforce|sfdc
+SAP,TOOL,sap|sap fico|sap hana|s/4hana
+ServiceNow,TOOL,servicenow
+Workday,TOOL,~Workday
+Jira,TOOL,jira
+Figma,TOOL,figma

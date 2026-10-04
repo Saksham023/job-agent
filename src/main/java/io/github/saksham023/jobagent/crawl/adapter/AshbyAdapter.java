@@ -67,6 +67,7 @@ public class AshbyAdapter implements JobBoardAdapter {
                 text(posting, "id"),
                 text(posting, "title"),
                 department != null ? department : text(posting, "team"),
+                null,                                               // no structured job function
                 locations(posting),
                 text(posting, "employmentType"),                    // "FullTime", "Intern", ...
                 text(posting, "jobUrl"),

@@ -1,0 +1,10 @@
+# family,keywords
+# Distinct keywords counted in the description. The family with the most hits gets ONE weak vote if it has at
+# least 3 distinct hits and no other family ties it. Keywords are separated by | and matched as whole words.
+# TECH = generic technical evidence (see department-families.csv).
+TECH,java|python|golang|spring|microservices|rest api|kafka|distributed systems|system design|data structures|algorithms|react|node.js|kubernetes|docker|ci/cd|git|typescript|c++|scalability
+DATA_ML,machine learning|deep learning|pytorch|tensorflow|llm|llms|nlp|model training|transformers|statistics|feature engineering|fine-tuning|inference
+FINANCE,gst|tds|ledger|reconciliation|reconciliations|accounts payable|audit|ifrs|ind as|balance sheet|p&l|tally|sap fico|month-end closing|statutory
+HR,recruitment|onboarding|payroll|hrms|employee relations|talent acquisition|performance management|compensation|attrition|employee engagement
+SALES,quota|pipeline|closing deals|crm|revenue targets|enterprise accounts|prospecting|negotiation|upsell|cross-sell|account planning
+MARKETING,campaigns|brand|seo|content strategy|social media|go-to-market|positioning|messaging|performance marketing

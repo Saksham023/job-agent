@@ -11,6 +11,7 @@ import java.util.List;
  * A job after normalization, in our own format and ready to store.
  * Derived fields (places, cities, countryCodes, remote, contentHash) are computed once, by JobNormalizer.
  *
+ * @param function     the platform's structured job function, when it has one (SmartRecruiters)
  * @param locations    the platform's raw location texts, kept as-is for display and debugging
  * @param places       every parsed location (canonical city/region/country + status)
  * @param cities       distinct canonical cities across places, e.g. ["Bengaluru", "Pune"]
@@ -23,6 +24,7 @@ public record NormalizedJob(
         String externalId,
         String title,
         String department,
+        String function,
         List<String> locations,
         List<ParsedLocation> places,
         List<String> cities,

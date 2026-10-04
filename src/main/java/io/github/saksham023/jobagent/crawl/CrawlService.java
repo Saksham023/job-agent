@@ -6,6 +6,7 @@ import io.github.saksham023.jobagent.geo.ParsedLocation.Status;
 import io.github.saksham023.jobagent.job.JobRepository;
 import io.github.saksham023.jobagent.job.JobRepository.UpsertOutcome;
 import io.github.saksham023.jobagent.job.NormalizedJob;
+import io.github.saksham023.jobagent.requirements.RequirementsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,7 +28,8 @@ import java.util.stream.Collectors;
 
 /**
  * Runs crawls: picks the adapter for a company's platform, fetches, normalizes, keeps only jobs in the
- * configured countries, and (for a real crawl) upserts them in one short transaction.
+ * configured countries, and (for a real crawl) upserts them in one short transaction, then extracts the
+ * requirements of the jobs that are new or changed.
  * The HTTP fetch happens outside the transaction so a slow job board never holds a DB connection.
  */
 @Service
@@ -39,18 +41,21 @@ public class CrawlService {
     private final JobNormalizer normalizer;
     private final JobRepository jobRepository;
     private final TransactionTemplate transactionTemplate;
+    private final RequirementsService requirementsService;
     private final Set<String> wantedCountries;
 
     public CrawlService(List<JobBoardAdapter> adapters,
                         JobNormalizer normalizer,
                         JobRepository jobRepository,
                         PlatformTransactionManager transactionManager,
+                        RequirementsService requirementsService,
                         @Value("${jobagent.crawl.countries:IN}") List<String> wantedCountries) {
         this.adaptersByPlatform = adapters.stream()
                 .collect(Collectors.toUnmodifiableMap(JobBoardAdapter::platform, Function.identity()));
         this.normalizer = normalizer;
         this.jobRepository = jobRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.requirementsService = requirementsService;
         this.wantedCountries = wantedCountries.stream()
                 .map(code -> code.strip().toUpperCase(Locale.ROOT))
                 .collect(Collectors.toUnmodifiableSet());
@@ -68,6 +73,7 @@ public class CrawlService {
      * @param inserted            new jobs saved (0 for a preview)
      * @param updated             known jobs whose content changed (0 for a preview)
      * @param unchanged           known jobs seen again with the same content (0 for a preview)
+     * @param extracted           jobs whose requirements were (re)extracted after saving (0 for a preview)
      * @param unresolvedLocations location segments we could not resolve, most frequent first, across ALL jobs
      */
     public record CrawlResult(
@@ -82,6 +88,7 @@ public class CrawlService {
             int inserted,
             int updated,
             int unchanged,
+            int extracted,
             Map<String, Long> unresolvedLocations,
             List<NormalizedJob> keptJobs,
             long elapsedMs
@@ -124,17 +131,32 @@ public class CrawlService {
         int inserted = outcomes.getOrDefault(UpsertOutcome.INSERTED, 0);
         int updated = outcomes.getOrDefault(UpsertOutcome.UPDATED, 0);
         int unchanged = outcomes.getOrDefault(UpsertOutcome.UNCHANGED, 0);
+        int extracted = inserted + updated > 0 ? extractRequirements(company) : 0;
 
         long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
         log.info("{}: {} fetched {} via {}, kept {} in {}, other {}, unresolved {}, skipped {}{} ({} ms)",
                 company.slug(), save ? "CRAWL" : "PREVIEW", rawJobs.size(), adapter.platform(), kept.size(),
                 wantedCountries, otherCountries, unresolved, skipped,
-                save ? ", inserted " + inserted + ", updated " + updated + ", unchanged " + unchanged : "",
+                save ? ", inserted " + inserted + ", updated " + updated + ", unchanged " + unchanged
+                        + ", extracted " + extracted : "",
                 elapsedMs);
 
         return new CrawlResult(company.slug(), adapter.platform(), save, rawJobs.size(), skipped, kept.size(),
-                otherCountries, unresolved, inserted, updated, unchanged,
+                otherCountries, unresolved, inserted, updated, unchanged, extracted,
                 unresolvedLocationCounts(normalized), kept, elapsedMs);
+    }
+
+    /**
+     * Runs requirement extraction for jobs that are new or changed (the jobs table is already committed).
+     * A failure here is logged and does not fail the crawl: the next rebuild picks the jobs up again.
+     */
+    private int extractRequirements(Company company) {
+        try {
+            return requirementsService.rebuild(false).extracted();
+        } catch (RuntimeException e) {
+            log.warn("{}: requirement extraction after crawl failed: {}", company.slug(), e.toString());
+            return 0;
+        }
     }
 
     /** Normalizes each job on its own, so one malformed posting is skipped instead of failing the company. */

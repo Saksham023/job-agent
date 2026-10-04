@@ -12,6 +12,7 @@ import java.util.Objects;
  * content hash). No business rules here.
  *
  * @param externalId  the platform's own job id (unique within one company's board)
+ * @param function    a structured job function when the platform has one (SmartRecruiters "Engineering"), else null
  * @param locations   the job's locations as reported: free text and/or structured parts (see RawLocation)
  * @param description as the platform sent it; may contain HTML (the normalizer converts it)
  * @param raw         the platform's original JSON for this job, kept for re-parsing and debugging
@@ -20,6 +21,7 @@ public record RawJob(
         String externalId,
         String title,
         String department,
+        String function,
         List<RawLocation> locations,
         String employmentType,
         String url,

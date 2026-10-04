@@ -1,0 +1,12 @@
+# specialization,pattern
+# Only for tech families. Matched against the title; FIRST match wins; no match = no specialization.
+FULL_STACK,\bfull[ -]?stack\b
+FRONTEND,\b(?:frontend|front-end|ui engineer|react)\b
+BACKEND,\b(?:backend|back-end|server-side)\b
+MOBILE,\b(?:android|ios|mobile|flutter|react native)\b
+EMBEDDED,\b(?:embedded|firmware)\b
+DATA_ENGINEERING,\bdata engineer|\bbig data\b|\betl\b|\bdata platform\b
+ML_AI,\b(?:machine learning|ml|ai engineer|llm|data scien\w*|applied scientist|nlp)\b
+SRE,\b(?:sre|site reliability)\b
+PLATFORM_INFRA,\b(?:platform|infrastructure|cloud|kubernetes|devops|networking)\b
+SECURITY,\b(?:security|psirt|threat|detection)\b

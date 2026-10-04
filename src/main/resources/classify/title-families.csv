@@ -1,0 +1,41 @@
+# family,pattern
+# Matched case-insensitively against the job title. The FIRST matching line wins, so specific rules come
+# before generic ones ("Sales Engineer" before "Engineer"). Patterns are Java regexes without commas.
+# Level words (Senior, Staff, Lead, Associate, Analyst, Manager...) are deliberately absent: they say how
+# senior a job is, never what it is.
+# --- roles that contain "engineer" but are not software engineering ---
+SALES_ENGINEERING,\b(?:sales|solutions?|pre-?sales|field|partner|deployment|implementation|integration|customer) engineer
+SALES_ENGINEERING,\bsolutions? (?:architect|consultant|specialist|engineering)\b
+SALES_ENGINEERING,\bpre-?sales\b|\btechnical consultant\b|\btechnical account manager\b|\bdeveloper (?:relations|advocate)\b|\bsolution engineering\b
+SUPPORT,\b(?:technical |product )?support engineer\b|\bescalation engineer\b
+# --- managing engineers ---
+ENG_MANAGEMENT,\bengineering manager\b|\bmanager[ ,-]+(?:software (?:development )?)?engineering\b|\bhead of engineering\b|\bengineering director\b|\bdirector[ ,-]+(?:of )?engineering\b|\bvp[ ,-]+(?:of )?engineering\b|\bcto\b
+# --- product and marketing before security/data ("Product Manager - Security AI", "Product Marketing") ---
+MARKETING,\bproduct marketing\b
+PRODUCT,\bproduct (?:manager|management|owner|lead|head)\b|\bhead of product\b|\b(?:apm|associate product manager)\b
+# --- HR roles whose titles mention another function ("HRBP - Lending Sales", "Talent Acquisition - Sales Hiring") ---
+HR,\b(?:hr|hrbp|human resources|recruit(?:er|ing|ment)|talent acquisition|people (?:partner|operations)|total rewards|compensation|learning & development|l ?& ?d|employee experience|exit management)\b
+# --- sales roles whose titles name a technology ("Account Executive, Data Security") ---
+SALES,\b(?:account executive|account manager|sales)\b|\bdeal desk\b
+# --- specialist engineering families ---
+SECURITY,\b(?:security|cyber ?security|appsec|psirt|threat|detection engineer|penetration|red team|soc analyst)\b
+QA,\b(?:qa|quality assurance|sdet|test(?:ing)? engineer|automation test|test automation)\b
+DATA_ML,\b(?:machine learning|ml|ai engineer|ai/ml|ml/ai|ai researcher|data scien\w*|applied scientist|research scientist|llm|nlp|computer vision|mlops|deep learning)\b
+DATA_ML,\bdata engineer
+INFRA_DEVOPS,\b(?:sre|site reliability|devops|platform engineer|infrastructure engineer|cloud engineer|network(?:ing)? engineer|systems engineer|kubernetes|database administrator|dba)\b
+# --- software engineering role words ---
+SOFTWARE_ENGINEERING,\b(?:software|backend|back-end|frontend|front-end|full[ -]?stack|mobile|android|ios|web|forward deployed) (?:engineer|developer|development)
+SOFTWARE_ENGINEERING,\b(?:sde|swe|mts|smts|lmts|pmts|amts|member of (?:the )?technical staff|developer|programmer)\b
+# --- non-tech families ---
+DESIGN,\b(?:designer|design lead|design manager|product design|ux|ui/ux|user experience|user research)\b
+PROGRAM_MANAGEMENT,\b(?:program(?:me)? manage(?:r|ment)|project manager|tpm|scrum master|delivery manager|pmo)\b
+ANALYTICS,\b(?:business analyst|data analyst|analytics|business intelligence|bi analyst|mis)\b
+LEGAL,\b(?:legal|counsel|lawyer|attorney|paralegal|company secretary)\b
+FINANCE,\b(?:finance|financial|accountant|accounts payable|accounts receivable|accounting|audit|tax|treasury|fp&a|controller|payroll|chartered accountant|credit and collections|billing|revenue manager)\b
+RISK_COMPLIANCE,\b(?:risk|compliance|fraud|aml|kyc|regulatory|governance|ethics|investigations?|forensics?)\b
+MARKETING,\b(?:marketing|brand|content|seo|social media|campaign|communications|creative|copywriter|video editor|advertising|youtube|growth)\b
+SALES,\b(?:sales|account executive|account manager|business development|bdm|bde|key account|kam|relationship manager|partnerships?|alliances?|channel|merchant acquisition|tele ?caller|inside sales|renewals?|gtm)\b
+SUPPORT,\b(?:customer support|customer service|customer success|customer experience|cst|support associate|helpdesk|service desk|technical support)\b
+OPERATIONS,\b(?:operations|ops|collections?|procurement|supply chain|logistics|admin|facilities|strategy|chief of staff|fulfil?ment|executive assistant|claims|trainer|training|corporate development)\b
+# --- generic engineering words last: "Staff Engineer", "Principal Architect" ---
+SOFTWARE_ENGINEERING,\b(?:engineer|engineering|architect)\b

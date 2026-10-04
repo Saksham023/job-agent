@@ -61,6 +61,7 @@ public class JobNormalizer {
                 raw.externalId(),
                 title,
                 raw.department(),
+                raw.function(),
                 locationTexts,
                 places,
                 cities,

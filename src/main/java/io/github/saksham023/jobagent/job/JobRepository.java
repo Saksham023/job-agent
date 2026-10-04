@@ -23,15 +23,16 @@ public class JobRepository {
     }
 
     private static final String UPSERT = """
-            INSERT INTO jobs (company_id, external_id, title, department, locations, cities, country_codes, places,
+            INSERT INTO jobs (company_id, external_id, title, department, function, locations, cities, country_codes, places,
                               remote, employment_type, url, description, posted_at, source_updated_at,
                               content_hash, raw, first_seen_at, last_seen_at, content_changed_at, closed_at)
-            VALUES (:companyId, :externalId, :title, :department, :locations, :cities, :countryCodes,
+            VALUES (:companyId, :externalId, :title, :department, :function, :locations, :cities, :countryCodes,
                     CAST(:places AS jsonb), :remote, :employmentType, :url, :description, :postedAt,
                     :sourceUpdatedAt, :contentHash, CAST(:raw AS jsonb), :seenAt, :seenAt, :seenAt, NULL)
             ON CONFLICT (company_id, external_id) DO UPDATE SET
                 title              = EXCLUDED.title,
                 department         = EXCLUDED.department,
+                function           = EXCLUDED.function,
                 locations          = EXCLUDED.locations,
                 cities             = EXCLUDED.cities,
                 country_codes      = EXCLUDED.country_codes,
@@ -74,6 +75,7 @@ public class JobRepository {
                 .param("externalId", job.externalId())
                 .param("title", job.title())
                 .param("department", job.department())
+                .param("function", job.function())
                 .param("locations", job.locations().toArray(String[]::new))
                 .param("cities", job.cities().toArray(String[]::new))
                 .param("countryCodes", job.countryCodes().toArray(String[]::new))

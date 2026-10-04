@@ -1,0 +1,21 @@
+# family,pattern
+# Matched case-insensitively against the platform's department (and SmartRecruiters' function). FIRST match
+# wins. Department names are company-specific; unknown or uninformative ones ("Business", "Other", "Growth",
+# "CEO Office", internal product names) simply give no vote.
+# TECH is not a family: it is generic technical evidence that SUPPORTS whatever technical family the title
+# chose (an SRE in an "IT" department is still INFRA_DEVOPS), and counts as SOFTWARE_ENGINEERING otherwise.
+SALES_ENGINEERING,\bfield engineering\b|\bsolutions?\b|professional services|deployment engineering|technical account|delivery solutions
+SECURITY,\bsecurity\b
+DATA_ML,\bmodels\b|\bai services\b|data science|\bml\b
+INFRA_DEVOPS,\binfrastructure\b|\bsre\b
+TECH,\bengineering\b|\btech\b|\btechnology\b|\bbackend\b|commerce platform|digital technology|\br&d\b|\bit\b|information technology
+PRODUCT,\bproduct\b
+DESIGN,\bdesign\b|art/creative|\bux\b
+LEGAL,\blegal\b
+FINANCE,\bfinance\b|\baccounting\b|fp&a|\bpurchase\b|internal controls
+RISK_COMPLIANCE,\brisk\b|compliance|regulatory
+HR,human resources|\bhr\b|\bpeople\b|recruiting|\btalent\b|culture
+MARKETING,marketing|advertising|writing/editing
+SALES,\bsales\b|business development|alliances|channel|partnership|renewals|\bgtm\b|enterprise partnership
+SUPPORT,\bsupport\b|customer service|customer success|customer excellence|cs operations|\bcx\b
+OPERATIONS,\boperations\b|strategy/planning|fulfil|procurement|\banalytics\b

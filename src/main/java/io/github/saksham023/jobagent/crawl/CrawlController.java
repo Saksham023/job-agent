@@ -111,13 +111,14 @@ public class CrawlController {
             int inserted,
             int updated,
             int unchanged,
+            int extracted,
             long elapsedMs,
             Map<String, Long> unresolvedLocations,
             List<?> sample
     ) {
         static CrawlReport of(CrawlResult r, List<?> sample) {
             return new CrawlReport(r.company(), r.platform(), r.saved(), r.fetched(), r.skipped(), r.kept(),
-                    r.otherCountries(), r.unresolved(), r.inserted(), r.updated(), r.unchanged(), r.elapsedMs(),
+                    r.otherCountries(), r.unresolved(), r.inserted(), r.updated(), r.unchanged(), r.extracted(), r.elapsedMs(),
                     r.unresolvedLocations(), sample);
         }
     }

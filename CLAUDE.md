@@ -26,7 +26,23 @@ zscaler 82, razorpay 17, groww 7); re-crawl = all unchanged. Then LeverAdapter (
 single-location postings), SmartRecruitersAdapter (server-side country=in, offset paging, one detail call
 per posting with 250 ms pause: PhonePe ~117 s), AshbyAdapter (postal address -> text). Milestone 1 core
 DONE 2026-10-05: 12/12 companies, 706 India jobs (lever 249, greenhouse 200, smartrecruiters 198,
-ashby 59). JsonFields refactor done (shared null-safe JSON helpers for adapters). Next: Milestone 2.
+ashby 59). JsonFields refactor done (shared null-safe JSON helpers for adapters).
+Milestone 2 core DONE 2026-10-05: `requirements` package: ExperienceExtractor (+ title estimate fallback,
+23 tests), JobFamily + JobClassifier (evidence voting, TECH umbrella, 14 tests), DescriptionSections,
+SkillExtractor (127-skill dictionary, ambiguous aliases, 16 tests), RequirementsRepository/Service/Controller
+(V5 job_requirements, V6 years_confidence, EXTRACTOR_VERSION=1, POST /admin/requirements/rebuild[?all],
+GET /admin/requirements/coverage); data files in src/main/resources/classify/. First full run: 706 jobs in
+17.6 s; years HIGH 447 / MEDIUM 136 / LOW 53 / NONE 70; 29 UNCLASSIFIED; 392 with required skills, 205 with
+a primary language; re-run extracts 0. Leftovers fixed by Claude on request (2026-10-05): common/CsvResource
+(one CSV reader), ExperienceExtractor uses DescriptionSections (intro sections skipped), skills after a slash
+count ("Python/Java", "Java/Go"), `~ML` is ambiguous (Zscaler appends "AI/ML" boilerplate to every job),
+jobs.function column (V7, backfilled) filled by adapters, CrawlService runs incremental extraction after a
+crawl that inserted/updated jobs (CrawlReport.extracted). EXTRACTOR_VERSION=2. 90 unit tests green.
+Future idea: detect company boilerplate lines (same line in >50% of a company's postings) and skip them.
+Concurrency plan (decided 2026-10-05): crawling is network-bound, so in M7 the scheduler crawls companies
+grouped BY HOST in parallel (one virtual thread per host, sequential + polite within a host); extraction is
+CPU-bound and incremental, so it stays single-threaded (optimize regex matching before adding threads).
+Next: Milestone 3 (matching v1).
 
 ## 1. Why this project (context)
 
@@ -232,14 +248,21 @@ resume ──> embeddings ──> candidate shortlist (vector) ──> LLM re-ra
    ladders via an optional `levelScheme` in companies.config ("bank": Analyst < Associate < VP < ED < MD).
    Family decided by evidence voting (title role words > department/function > description skills),
    low evidence = UNCLASSIFIED (reported), LLM fallback in M5.
-   End-goal search filters: family, specialization, city/metro/country/remote, years + seniority, skills,
+   End-goal search filters: family, specialization, city/metro/country/remote, years, skills,
    employment type, company, freshness, keyword text (M3), fit score (M3/M5).
+   Seniority labels DROPPED (decided 2026-10-05, user's call): matching needs years, which ExperienceExtractor
+   finds for 602/706 jobs; level words like Manager/Executive/Analyst/Associate mean different things per
+   company (in India "Manager" is often a pay band). Of the 104 jobs without years only 35 have a clear level
+   word. At most a tiny fallback: estimate years only from unambiguous title words (intern/trainee 0-1,
+   junior 0-2, senior 5+, staff/principal 8+, director/head/VP 12+), LOW confidence. Unknown years never
+   exclude a job. The `seniority` column in job_requirements stays unused (nullable).
 3. Matching v1 (no LLM, no embeddings): profile record, experience hard filter, weighted skill score,
    score breakdown; REST endpoint to test it.
 4. MCP server (Spring AI MCP server starter): match_jobs, get_job, new_jobs_since, list_companies + a
    `find-jobs` prompt. Connect Claude Code. FIRST END-TO-END DEMO.
 5. Quality: ClaudeCliChatModel (custom Spring AI ChatModel over `claude -p`) for extraction leftovers,
    local embeddings + PgVectorStore (ask before download), labeled eval set, keyword vs hybrid numbers.
+   Build the extraction cascade (see §8 "Extraction cascade"), including the local-model bake-off.
 6. Workday (facet discovery), Eightfold (cookie/CSRF), Oracle (locationId discovery).
 7. Scheduler, change tracking (new/updated/closed), dedup, health checks + admin alerts.
 8. Custom adapters by value: Amazon, IBM, Cisco, Google, Apple, then the rest.
@@ -273,6 +296,30 @@ Decided (2026-10-04):
   (b) Interactive use: MCP-first. Our Spring AI MCP server exposes tools; the USER's own Claude (Desktop,
   claude.ai, Code) reads the resume, fills the profile schema, calls `match_jobs`, explains/re-ranks.
   No per-user LLM cost on our side; serving other users from a personal subscription is not allowed.
+- **Extraction cascade (decided 2026-10-05, user's design; a focus area, build it properly).** Applies to
+  every extraction task: experience, job family + seniority, location (unresolved strings), skills.
+  Tier 1 rules (ms, deterministic, tested) -> HIGH confidence is final. Tier 2 a small LOCAL model
+  (Ollama, ~2-4 GB, via Spring AI `OllamaChatModel`) for LOW / UNCLASSIFIED / unresolved cases and
+  rule-vs-model disagreements. Tier 3 Claude (`ClaudeCliChatModel`) only when tier 2 fails. MEDIUM is
+  verified by tier 2 only if the labeled eval shows rules are weak there.
+  A tier-2 answer is accepted only if ALL pass: JSON schema; the model did not answer NOT_SURE (the prompt
+  asks it to, but small models are poorly calibrated, so this is never the only check); grounding (the
+  returned value literally appears in the source text); agreement with rule candidates (or two runs/models
+  agree). Every model answer is cached and stored with its source (`rules` / `local:<model>` / `claude`).
+  Model bake-off before adopting tier 2: user labels ~100 jobs (oversample MEDIUM/LOW/UNCLASSIFIED), split
+  into tune/test halves; compare 2-3 local models at temperature 0 on accuracy, abstain rate,
+  hallucination (grounding-fail) rate and latency, PER TASK; a task skips tier 2 if no model is good enough.
+  Report calls, accuracy and latency per tier (resume numbers).
+- **Generalization check (decided 2026-10-05).** Extraction rules were fitted to 706 jobs from 12 companies, so
+  they are a measured first tier, not truth. For every new platform/company batch (Workday, Eightfold,
+  Oracle, custom): run extraction BEFORE editing any rule, measure abstain rate (UNCLASSIFIED / NONE / LOW /
+  unresolved) and accuracy of the confident results on ~50 random new jobs (= the honest generalization
+  number), then fix rules/data and re-measure. Known gap to expect: semiconductor companies (Nvidia, Intel,
+  Qualcomm, AMD, TI) have hardware roles ("ASIC Design / Physical Design / Verification Engineer") that the
+  generic "engineer" rule would mislabel as SOFTWARE_ENGINEERING; add a HARDWARE_ENGINEERING family then.
+  Banks bring the Analyst/Associate/VP ladder (levelScheme). The gold set must span companies/platforms;
+  every rule change is re-scored (regression). Bake-off compares rules vs embedding nearest-neighbour vs
+  local LLM on UNSEEN companies; the winner becomes tier 1/2.
 - No LLM in the matching step itself: deterministic filters + skill scoring (+ embeddings later).
 - Stateless profiles first (profile passed per call); `save_profile` later for digests.
 - Web UI: later, as a thin layer over the same services (REST + MCP tools share services).

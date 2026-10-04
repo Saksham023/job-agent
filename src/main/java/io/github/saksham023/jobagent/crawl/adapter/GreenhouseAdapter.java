@@ -64,6 +64,7 @@ public class GreenhouseAdapter implements JobBoardAdapter {
                 text(job, "id"),
                 text(job, "title"),
                 firstDepartment(job),
+                null,                                   // no structured job function
                 locations(job),
                 null,                                   // Greenhouse has no standard employment-type field
                 text(job, "absolute_url"),

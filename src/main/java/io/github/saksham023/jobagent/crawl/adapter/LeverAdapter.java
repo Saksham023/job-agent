@@ -68,6 +68,7 @@ public class LeverAdapter implements JobBoardAdapter {
                 text(posting, "id"),
                 text(posting, "text"),
                 department != null ? department : text(categories, "team"),
+                null,                                           // no structured job function
                 locations(posting),
                 text(categories, "commitment"),                 // "full time", "Intern", ...
                 text(posting, "hostedUrl"),

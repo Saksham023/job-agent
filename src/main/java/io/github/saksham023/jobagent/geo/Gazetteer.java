@@ -1,15 +1,10 @@
 package io.github.saksham023.jobagent.geo;
 
+import io.github.saksham023.jobagent.common.CsvResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -121,7 +116,7 @@ public class Gazetteer {
         }
 
         String file = "geo/country-aliases.csv";                              // reads geo/country-aliases.csv
-        for (String[] row : readCsv(file, 2)) {
+        for (String[] row : CsvResource.read(file, 2)) {
             countriesByName.put(key(row[0]), requireCountry(row[1], file));
         }
     }
@@ -129,7 +124,7 @@ public class Gazetteer {
     /** Reads geo/subdivisions.csv. Short uppercase aliases (OR, TG) are stored as codes, not names. */
     private void loadSubdivisions() {
         String file = "geo/subdivisions.csv";                                 // reads geo/subdivisions.csv
-        for (String[] row : readCsv(file, 4)) {
+        for (String[] row : CsvResource.read(file, 4)) {
             Country country = requireCountry(row[0], file);
             Subdivision subdivision = new Subdivision(country.code(), row[1], row[2]);
 
@@ -148,7 +143,7 @@ public class Gazetteer {
     /** Reads geo/metros.csv. */
     private void loadMetros() {
         String file = "geo/metros.csv";                                       // reads geo/metros.csv
-        for (String[] row : readCsv(file, 4)) {
+        for (String[] row : CsvResource.read(file, 4)) {
             Metro metro = new Metro(requireCountry(row[0], file).code(), row[1], row[2]);
             metrosByKey.put(metro.key(), metro);
             metrosByName.put(key(metro.key()), metro);
@@ -162,7 +157,7 @@ public class Gazetteer {
     /** Reads geo/cities.csv. Region and metro must already exist, so typos fail at startup. */
     private void loadCities() {
         String file = "geo/cities.csv";                                       // reads geo/cities.csv
-        for (String[] row : readCsv(file, 6)) {
+        for (String[] row : CsvResource.read(file, 6)) {
             Country country = requireCountry(row[0], file);
             String region = row[1].isEmpty() ? null : requireSubdivision(country.code(), row[1], file).name();
             int priority = Integer.parseInt(row[4]);
@@ -180,32 +175,6 @@ public class Gazetteer {
     }
 
     // ---------------------------------------------------------------- helpers
-
-    /** Reads a classpath CSV: skips blank and # lines, requires exactly `columns` fields per row. */
-    private static List<String[]> readCsv(String path, int columns) {
-        List<String[]> rows = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(new ClassPathResource(path).getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            int lineNumber = 0;
-            while ((line = reader.readLine()) != null) {
-                lineNumber++;
-                String trimmed = line.strip();
-                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                    continue;
-                }
-                String[] fields = trimmed.split(",", -1);
-                if (fields.length != columns) {
-                    throw new IllegalStateException(path + ":" + lineNumber + " expected " + columns
-                            + " columns but found " + fields.length + ": " + line);
-                }
-                rows.add(Arrays.stream(fields).map(String::strip).toArray(String[]::new));
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException("Cannot read " + path, e);
-        }
-        return rows;
-    }
 
     private static List<String> aliases(String field) {
         return Arrays.stream(field.split("\\|"))

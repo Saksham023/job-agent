@@ -114,6 +114,7 @@ public class SmartRecruitersAdapter implements JobBoardAdapter {
                 id,
                 text(posting, "name"),
                 department != null ? department : text(posting.path("function"), "label"),
+                text(posting.path("function"), "label"),          // "Engineering", "Human Resources"...
                 locations(posting.path("location")),
                 text(posting.path("typeOfEmployment"), "label"),
                 url != null ? url : "https://jobs.smartrecruiters.com/" + config.companyId() + "/" + id,
