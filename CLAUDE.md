@@ -1,0 +1,250 @@
+# job-agent: notes for Claude
+
+A personal job-search agent for the Indian tech market. It crawls live job postings directly from major
+companies' careers platforms (Workday, Eightfold, Oracle, Greenhouse, Lever, SmartRecruiters, plus custom
+sites), ranks them against the user's resume with embeddings + an LLM, and helps act on them (shortlist,
+tailored notes, outreach drafts, tracking, reminders). The human always clicks "apply".
+
+This file holds everything decided so far (planned 2026-10-01..04 in the `python learning` session).
+Progress: Milestone 0 DONE (2026-10-04): DB `jobagent`, Flyway V1 (companies table, config jsonb) + V2
+(12 companies: greenhouse/lever/smartrecruiters/ashby), `company` package (Company record,
+CompanyRepository with JdbcClient + manual row mapper, CompanyController GET /admin/companies[/{slug}]).
+Next: Milestone 1, adapter interface + Greenhouse adapter.
+
+## 1. Why this project (context)
+
+- The user is a backend engineer (Java, Spring Boot, Kafka, Postgres, Redis, DynamoDB, Elasticsearch; UKG
+  payments, Goldman Sachs internship; resume has a distributed chat platform project). They want an AI
+  project for their resume that is a real agent that gets things done, not a wrapper.
+- Lessons from earlier projects:
+  - `~/Desktop/Study/code-mcp` (closed): vector search over code was weak; agents used grep. Vectors work
+    when the query and the documents are both natural language, paraphrased, without exact identifiers, on
+    data the model has not memorized, and when there is an answer key. Resume text vs job descriptions
+    fits all of these.
+  - `~/Desktop/Study/oncall-copilot`: judged too thin for the resume because "the model does the
+    impressive part". So here the impressive part must be OUR engineering: multi-source crawling, adapters,
+    normalization, dedup, change detection, health monitoring, ranking quality with measured numbers.
+- Separately, the user also chose an **LLM gateway** as their one systems/infra project (not started; see
+  the memory note). The job agent can route its LLM calls through that gateway later, tying both together.
+- Ideas considered and rejected for this agent: auto-applying (breaks site terms, CAPTCHAs, bans, spammy);
+  LinkedIn / Naukri / Instahyre scraping (no API, against terms); aggregator APIs like JSearch / Adzuna as
+  the main source (easy but less impressive; free tiers limited). They may be an optional fallback.
+
+## 2. Working agreement (user preferences)
+
+- Explain concepts briefly with concrete examples, then code. Short answers for small questions.
+- Learning mode (decided 2026-10-04): the user builds step by step and types/pastes ALL code themselves.
+  Claude NEVER writes code into the repo (no Java, SQL, YAML, pom edits). For a new file, Claude only
+  creates it empty (touch) at the right path; the user pastes the contents after asking questions.
+  Claude may edit docs (CLAUDE.md, notes) itself.
+- Give WHOLE files, ONE file at a time. With each file: what it achieves and why it exists, a table of
+  every function/method + a one-line purpose, and its shortcomings / known limitations / what a
+  production version would do differently.
+- The user runs commands; Claude may run read-only checks when asked. Ask before anything that writes
+  (DB, git commits, installs) and before downloading anything (models, packages). Never push.
+- Analyses of pasted output: a few lines (what's right, what's wrong, did it improve).
+- Never use em-dashes in writing.
+- The user is new to Python (comfortable with requests, functions, classes, list comprehensions, env vars;
+  no async/typing yet) but strong in Java. Language/stack choice is still open (see §8).
+- Local services available: Postgres 18 + pgvector in Docker container `rag-postgres` (localhost:5433,
+  postgres/ragpass). Hugging Face embedding models were deleted on 2026-10-01 to free disk; any embedding
+  model must be re-downloaded (ask first).
+- The Claude CLI is logged in on the user's subscription (headless `claude -p` works), as used in
+  oncall-copilot.
+
+## 3. Data sources: research results (2026-10-04)
+
+51 major tech companies in India were checked live with read-only requests. Full details (exact URL,
+method, body, headers, India count, sample job, notes) are in `research/sources_2026-10-04.json`.
+
+Summary: **41 work, 2 partial, 4 have no fetchable list, 4 blocked by bot protection. ~7,700 India jobs
+in total.** The user manually verified the two lowest counts on the websites (Flipkart 8 = "Showing 8
+Jobs", Oracle 15 = "JOBS 15"), so the API totals are credible.
+
+### 3.1 By platform (India job counts as of 2026-10-04)
+
+| Platform | Companies (India jobs) | Notes |
+|---|---|---|
+| **Workday** (9) | Nvidia 244, Mastercard 207, Salesforce 111, Visa 81, Adobe 79, Intel 58, Samsung 31, Expedia 30, PayPal 10 | One adapter |
+| **Eightfold** (4) | Qualcomm 573, Microsoft 219, Morgan Stanley 118, UKG 81 | One adapter; MS and UKG need a cookie + CSRF handshake |
+| **Oracle Recruiting Cloud** (5 + Dell) | JPMorgan 313, Texas Instruments 133, Goldman Sachs 102, Amex 49, Oracle 15 | One adapter; India `locationId` differs per tenant |
+| **Greenhouse** (4) | Databricks 95, Zscaler 84, Razorpay 21, Groww 7 | Official public API |
+| **Lever** (3 + Zeta) | Paytm 161, Meesho 56, CRED 8 (Zeta 23) | Official public API |
+| **SmartRecruiters** (3) | PhonePe 90, ServiceNow 77, Freshworks 31 | Official public API |
+| **TurboHire** (2) | Flipkart 8, Ola 0 | Anonymous token flow |
+| **Custom / one-off** | **Amazon 2,324**, IBM 884, Cisco 285 (Phenom), Google 285, Deutsche Bank 232 (BeeSite), AMD 205 (iCIMS/Jibe), Apple 160, Swiggy 78 (MyNextHire), Atlassian 62, Intuit 28 (Radancy), Zoho 2 (Zoho Recruit) | One adapter each |
+| Partial | Dell (Oracle feed works, 0 India jobs; mid-migration, re-check), LinkedIn (guest HTML endpoint; DO NOT use, against terms) | |
+| No fetchable list | Walmart Global Tech (Next.js site, probable GraphQL not identified), Zomato/Eternal (no listings), Myntra (Spire2Grow API needs a token), Dream11 (Lever board removed) | Skip for now |
+| Blocked (bot protection) | Meta (GraphQL + tokens), SAP (Cloudflare), Uber (Cloudflare), Zepto (AWS WAF) | **Skip. Never bypass bot protection** |
+
+About 6 platform adapters cover ~28 companies; custom adapters are added selectively by value (Amazon alone
+has ~2,300 India jobs).
+
+### 3.2 Platform recipes (what worked)
+
+- **Workday**: `POST https://<tenant>.wd<N>.myworkdayjobs.com/wday/cxs/<tenant>/<site>/jobs`, JSON body
+  `{"appliedFacets":{...},"limit":20,"offset":0,"searchText":""}`. Response: `total`, `jobPostings[]`,
+  `facets[]`. **Never filter with `searchText:"India"`**: it matches "Indiana". Instead read the facets of
+  an unfiltered first call and apply the India filter id. The country facet has different names per
+  tenant: `locationCountry` (Adobe, Visa), `Location_Country` (Samsung), a long custom name (Salesforce),
+  `locationHierarchy1` (Nvidia), or only city-level `locations` (Intel, PayPal, Mastercard, Expedia: sum
+  the India cities). The India country id `c4f78be1a8f14da0ab49ce1162348a5e` was the same across tenants.
+  Job details: `GET .../wday/cxs/<tenant>/<site>/job/<externalPath>`.
+- **Eightfold**: only the PCSX API works: `GET https://<host>/api/pcsx/search?domain=<company domain>&query=&location=India&start=0`
+  (`data.count` = total, 10 per page). `/api/apply/v2/jobs` returns 403 "Not authorized for PCSX". Some
+  tenants (Morgan Stanley, UKG) need the session cookie from `GET <host>/careers?location=India` plus an
+  `x-csrf-token` header taken from `<meta name="_csrf">` on that page. Hosts: apply.careers.microsoft.com,
+  careers.qualcomm.com, morganstanley.eightfold.ai, apply.ukg.com.
+- **Oracle Recruiting Cloud**: `GET https://<host>/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations&finder=findReqs;siteNumber=<site>,locationId=<id>,limit=25,offset=0,sortBy=POSTING_DATES_DESC`
+  (`TotalJobsCount`). The India `locationId` is tenant-specific: discover it with
+  `facetsList=LOCATIONS` + `expand=locationsFacet`. Keyword "India" undercounts (TI: 16 vs 133).
+  Tenants: eeho.fa.us2/CX_45001 (Oracle), edbz.fa.us2/CX (TI), hdpc.fa.us2/LateralHiring (Goldman, found
+  in higher.gs.com's JS), jpmc.fa/CX_1001 (JPMorgan), egug.fa.us2/CX_1 (Amex), enterpriseplatform.dell.com/CX_1001 (Dell).
+- **Greenhouse**: `GET https://boards-api.greenhouse.io/v1/boards/<token>/jobs` (`?content=true` for
+  descriptions). No server-side location filter; filter on `location.name` (Zscaler uses "IND" too).
+- **Lever**: `GET https://api.lever.co/v0/postings/<name>?mode=json`; filter by `categories.location`.
+- **SmartRecruiters**: `GET https://api.smartrecruiters.com/v1/companies/<id>/postings?country=in&limit=100&offset=N`.
+  Company ids can be non-obvious (`PHONEPELIMITED`, not `PhonePe`).
+- **Ashby**: `GET https://api.ashbyhq.com/posting-api/job-board/<name>` (e.g. Sarvam AI, 59 jobs).
+- **TurboHire**: `GET https://api.turbohire.co/api/token/noauth` with the career page's Origin + Referer
+  headers gives the same anonymous token the public page uses, then `POST https://api.turbohire.co/api/careerpagev2/filteredjobs?orgId=<org>&pageType=0`
+  body `{}` with `Authorization: Bearer <token>`.
+- **Custom**:
+  - Amazon: `GET https://www.amazon.jobs/en/search.json?normalized_country_code[]=IND&result_limit=10&offset=0`.
+  - IBM: `POST https://www-api.ibm.com/search/api/v2`, an Elasticsearch-style body with `post_filter` on
+    `field_keyword_05` = India, plus an `Origin: https://www.ibm.com` header.
+  - Cisco (Phenom): `POST https://careers.cisco.com/widgets` with `ddoKey: refineSearch`,
+    `selected_fields.country: ["India"]`, `refNum: CISCISGLOBAL`.
+  - Google: no JSON API. Parse the `AF_initDataCallback` `ds:1` blob in the results page HTML (20 per page).
+  - Apple: parse `window.__staticRouterHydrationData` in `jobs.apple.com/en-in/search?location=india-INDC`.
+  - Deutsche Bank (BeeSite): one GET returns all ~1,864 jobs; filter `CountryCode=IN` locally.
+  - AMD (Jibe): `GET https://careers.amd.com/api/jobs?location=India&page=1&limit=10`.
+  - Atlassian: `GET https://www.atlassian.com/endpoint/careers/listings` returns all jobs; filter locally.
+  - Intuit (Radancy): JSON wrapping an HTML fragment; India facet id 1269750.
+  - Swiggy (MyNextHire): `POST https://swiggy.mynexthire.com/employer/careers/reqlist/get` body
+    `{"source":"careers","code":"","filterByBuId":-1}`.
+  - PhonePe: also `phonepe.com/apollo/job-postings/latest.json` (keep `status=PUBLIC`).
+  - Zoho: a JSON list in a hidden `<input>` on careers.zohocorp.com/jobs/Careers.
+- **Uber**: `jobs.uber.com/robots.txt` allows all and publishes `https://jobs.uber.com/en/jobs/sitemap.xml`
+  (583 job IDs like `/en/jobs/149574/`), but the sitemap has no titles or locations, and the job pages are
+  behind Cloudflare's challenge. Applications go through Workday, but there is no public Workday board. At
+  most: use the sitemap to detect "N new Uber jobs" and link the user to open them in their own browser.
+
+### 3.3 How to verify a count manually
+
+Open the careers page in Chrome → DevTools (Cmd+Option+I) → Network → Fetch/XHR → apply the India filter
+→ click the request → Response. Compare its total with the number on the page. If the page shows more,
+we are querying the wrong site/org or too narrow a filter; if both agree, the number is real.
+
+## 4. Rules for crawling (non-negotiable)
+
+- Read-only requests to public, unauthenticated endpoints that the public careers page itself uses, or
+  official APIs. Never log in, never create accounts.
+- Never bypass bot protection: no Cloudflare/WAF/CAPTCHA solving, no headless-browser stealth. A blocked
+  site is skipped.
+- Be gentle: low request rate per host, delays, caching, conditional requests where possible, crawl every
+  few hours, not continuously. Respect robots.txt. Identify with a sensible User-Agent.
+- Store only what is needed (job fields), keep personal data (resume) local.
+- No auto-apply. The agent prepares; the human submits.
+
+## 5. Architecture (planned)
+
+```
+companies config (DB) ──> scheduler ──> adapters (per platform + custom) ──> normalizer ──> jobs DB
+                                             │                                    │
+                                    health checks/alerts                 dedup + change tracking
+                                                                                  │
+resume ──> embeddings ──> candidate shortlist (vector) ──> LLM re-rank with reasons ──> agent (MCP tools)
+                                                                                  │
+                                    digests, outreach drafts, tracker (Notion/Sheets), reminders
+```
+
+- **Company registry** (in the DB, not code): company, platform, tenant/host, site, India filter ids,
+  enabled flag, last success, last count. Adding a company on a known platform = one row, no code.
+- **Adapters**: one per platform (Workday, Eightfold, Oracle, Greenhouse, Lever, SmartRecruiters, Ashby,
+  TurboHire, Phenom, Radancy, Jibe) + one per custom site (Amazon, IBM, Google, Apple, Deutsche Bank,
+  Atlassian, Swiggy...). A common interface: `list_jobs(config) -> [RawJob]`, `job_detail(config, id)`.
+- **Normalizer**: one schema: source, company, external id, title, locations (normalized cities: Bengaluru
+  = Bangalore), remote flag, department, experience range if available, posted date, URL, description,
+  first_seen, last_seen, closed_at.
+- **Change tracking**: diff each crawl: new jobs, updated, closed (missing for N crawls). Enables "new
+  jobs since yesterday" digests.
+- **Dedup**: same job posted in several cities or on two sites (e.g. PhonePe on SmartRecruiters and its
+  own JSON).
+- **Health detection and alerts (admin)**: after each crawl per company, check: HTTP errors, schema/parse
+  failures, redirects to a new domain, platform fingerprint changed (e.g. page now mentions eightfold
+  instead of myworkdayjobs), count dropped to 0 or by >X% vs the recent average. Raise an alert (log +
+  email/Slack/dashboard) so someone manually checks and updates the company's config row. Real examples
+  already seen: Microsoft moved to Eightfold, Adobe has a custom site alongside Workday, UKG moved from
+  Workday to Eightfold, Amex's old Eightfold link is dead, Dell is mid-migration, Dream11's Lever board
+  was removed.
+- **Matching**: embed the resume (and/or its sections) and job descriptions; vector shortlist (top ~50),
+  then an LLM re-ranks with reasons and a fit score; hard filters for location / experience.
+- **Agent**: Claude (headless `claude -p` on the subscription, as in oncall-copilot, or the API later)
+  with MCP tools over the jobs DB: search jobs, get job, explain fit, draft a tailored summary / cover
+  note / referral message, add to tracker, set a follow-up reminder. Tracker via a Notion or Google
+  Sheets MCP server.
+
+## 6. Evaluation (resume numbers must be real)
+
+- Coverage: companies and platforms covered, jobs per crawl, crawl duration, freshness (time from posting
+  to our DB), adapter failure rate, time to detect a broken source.
+- Matching quality: the user labels ~100 jobs as fit / not fit; report precision@10 / nDCG of keyword vs
+  vector vs vector + LLM re-rank.
+- Placeholder numbers are allowed only in sample resumes shared with friends; real resume numbers come
+  from measurements.
+
+## 7. Milestones (decided 2026-10-04; vertical slice first, then widen)
+
+0. Skeleton: Spring Initializr project, own database `jobagent` in `rag-postgres`, Flyway schema
+   (companies, jobs, crawl_runs), import the company registry from `research/sources_2026-10-04.json`.
+1. Adapter framework + easy official APIs (Greenhouse, Lever, SmartRecruiters, Ashby): RestClient,
+   per-host politeness, normalizer (cities, remote), upsert into `jobs`, manual trigger endpoint.
+2. Rule-based requirement extraction: years-of-experience regex, skill dictionary with aliases, primary
+   language, seniority; stored per job.
+3. Matching v1 (no LLM, no embeddings): profile record, experience hard filter, weighted skill score,
+   score breakdown; REST endpoint to test it.
+4. MCP server (Spring AI MCP server starter): match_jobs, get_job, new_jobs_since, list_companies + a
+   `find-jobs` prompt. Connect Claude Code. FIRST END-TO-END DEMO.
+5. Quality: ClaudeCliChatModel (custom Spring AI ChatModel over `claude -p`) for extraction leftovers,
+   local embeddings + PgVectorStore (ask before download), labeled eval set, keyword vs hybrid numbers.
+6. Workday (facet discovery), Eightfold (cookie/CSRF), Oracle (locationId discovery).
+7. Scheduler, change tracking (new/updated/closed), dedup, health checks + admin alerts.
+8. Custom adapters by value: Amazon, IBM, Cisco, Google, Apple, then the rest.
+9. Extras: digests, draft_referral, tracker, README, measurements; later a read-only web UI.
+
+## 8. Decisions and open questions
+
+Decided (2026-10-04):
+- Stack: all Java / Spring Boot + Spring AI (user's strength, Spring AI learning goal). Spring Boot
+  4.1.1 (modular starters: `starter-webmvc`, per-module `-test` starters), Maven, Java 21 target (virtual
+  threads; avoid `synchronized` around blocking I/O, use ReentrantLock), run on the local JDK 25.
+  Group `io.github.saksham023`, package `io.github.saksham023.jobagent`, artifact `jobagent`.
+  Data access: plain `JdbcClient` (JDBC API starter), no JPA / Spring Data JDBC / Spring Batch.
+  Schema via Flyway (`src/main/resources/db/migration`). DB: database `jobagent` in `rag-postgres`.
+  Spring AI deps (MCP server, pgvector, embeddings) are added by hand to the pom when needed.
+- Company registry seed: curated SQL migrations per milestone (the research JSON is free text, not
+  machine-importable); per-platform settings live in a `config jsonb` column.
+- LLM access without an API key: (a) background jobs (job requirement extraction, digests) call headless
+  `claude -p` via a custom Spring AI `ClaudeCliChatModel implements ChatModel` (`--output-format json`,
+  `--json-schema`, `--tools ""`), used for completions/structured output only (Spring AI tool calling
+  does not work through the CLI). Swappable for `AnthropicChatModel` / the LLM gateway later.
+  (b) Interactive use: MCP-first. Our Spring AI MCP server exposes tools; the USER's own Claude (Desktop,
+  claude.ai, Code) reads the resume, fills the profile schema, calls `match_jobs`, explains/re-ranks.
+  No per-user LLM cost on our side; serving other users from a personal subscription is not allowed.
+- No LLM in the matching step itself: deterministic filters + skill scoring (+ embeddings later).
+- Stateless profiles first (profile passed per call); `save_profile` later for digests.
+- Web UI: later, as a thin layer over the same services (REST + MCP tools share services).
+
+Open:
+- Which embedding model: in-JVM ONNX (spring-ai-transformers) vs Ollama (local, needs a download, ask first).
+- Delivery of digests: email, Telegram, Slack, or a small web UI.
+- Whether to add an aggregator API (Adzuna has an India API with a free key) as a fallback for blocked or
+  unlisted companies (Meta, Uber, Walmart, Zomato).
+- Extending beyond the 51 companies (more Workday/Greenhouse/Lever tenants are cheap to add).
+
+## 9. Related folders
+
+- `~/Desktop/Study/oncall-copilot`: headless `claude -p` + MCP server patterns (its CLAUDE.md §8).
+- `~/Desktop/Study/code-mcp`: MCP server (Python SDK v2), pgvector + embeddings, eval methodology.
+- `~/Desktop/Study/python learning`: the RAG learning track.

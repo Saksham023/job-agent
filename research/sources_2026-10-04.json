@@ -1,0 +1,512 @@
+[
+  {
+    "company": "Microsoft",
+    "platform": "Eightfold (apply.careers.microsoft.com, PCSX)",
+    "endpoint": "GET https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&query=&location=India&start=0&sort_by=distance",
+    "works": "yes",
+    "india_jobs": 219,
+    "count_note": "API total (data.count); 10 per page, paginate with start",
+    "sample": "Multidisciplinary Manager (TPM) | India, Multiple Locations",
+    "notes": "/api/apply/v2/jobs returns 403 'Not authorized for PCSX'; use pcsx. Old careers.microsoft.com search URL now 404s."
+  },
+  {
+    "company": "Google",
+    "platform": "Custom (google.com/about/careers, server-rendered)",
+    "endpoint": "GET https://www.google.com/about/careers/applications/jobs/results?location=India (parse AF_initDataCallback key 'ds:1' JSON in HTML; &page=N)",
+    "works": "yes",
+    "india_jobs": 285,
+    "count_note": "Total embedded in ds:1 payload; 20 per page",
+    "sample": "Policy Specialist | Hyderabad, Telangana, India",
+    "notes": "No public JSON API; HTML is ~1.2MB, job data is in the ds:1 script blob."
+  },
+  {
+    "company": "Amazon",
+    "platform": "Custom (amazon.jobs)",
+    "endpoint": "GET https://www.amazon.jobs/en/search.json?normalized_country_code[]=IND&result_limit=10&offset=0",
+    "works": "yes",
+    "india_jobs": 2324,
+    "count_note": "API total (hits)",
+    "sample": "SLP Specialist, INTL, Security & Loss Prevention | Hyderabad, Telangana, IND",
+    "notes": "Clean JSON, offset/result_limit pagination."
+  },
+  {
+    "company": "Apple",
+    "platform": "Custom (jobs.apple.com, React Router SSR)",
+    "endpoint": "GET https://jobs.apple.com/en-in/search?location=india-INDC (parse window.__staticRouterHydrationData JSON -> loaderData.search; &page=N)",
+    "works": "yes",
+    "india_jobs": 160,
+    "count_note": "totalRecords from embedded JSON; 20 per page",
+    "sample": "IN-Business Expert | India",
+    "notes": "No login needed; JSON API exists behind CSRF token, but SSR hydration JSON is simpler."
+  },
+  {
+    "company": "Meta",
+    "platform": "Custom (metacareers.com, GraphQL)",
+    "endpoint": null,
+    "works": "blocked",
+    "india_jobs": null,
+    "count_note": null,
+    "sample": null,
+    "notes": "curl gets HTTP 400 error page on /jobs; GraphQL needs lsd token + doc_id from a real browser session. Would need a headless browser."
+  },
+  {
+    "company": "Adobe",
+    "platform": "Workday",
+    "endpoint": "POST https://adobe.wd5.myworkdayjobs.com/wday/cxs/adobe/external_experienced/jobs body {\"appliedFacets\":{\"locationCountry\":[\"c4f78be1a8f14da0ab49ce1162348a5e\"]},\"limit\":20,\"offset\":0,\"searchText\":\"\"}",
+    "works": "yes",
+    "india_jobs": 79,
+    "count_note": "API total with India country facet",
+    "sample": "Product Security Engineer 5 | Bangalore",
+    "notes": "India country facet id c4f78be1a8f14da0ab49ce1162348a5e (generic Workday India id). Also an external_university site."
+  },
+  {
+    "company": "Salesforce",
+    "platform": "Workday",
+    "endpoint": "POST https://salesforce.wd12.myworkdayjobs.com/wday/cxs/salesforce/External_Career_Site/jobs body {\"appliedFacets\":{\"CF_-_REC_-_LRV_-_Job_Posting_Anchor_-_Country_from_Job_Posting_Location_Extended\":[\"c4f78be1a8f14da0ab49ce1162348a5e\"]},\"limit\":20,\"offset\":0,\"searchText\":\"\"}",
+    "works": "yes",
+    "india_jobs": 111,
+    "count_note": "API total with India country facet",
+    "sample": "Performance Engineer - Software Engineering SMTS | India - Hyderabad",
+    "notes": "Country facet has a custom long name; searchText 'India' also matches Indiana (235)."
+  },
+  {
+    "company": "Oracle",
+    "platform": "Oracle Recruiting Cloud",
+    "endpoint": "GET https://eeho.fa.us2.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations,flexFieldsFacet.values&finder=findReqs;siteNumber=CX_45001,facetsList=LOCATIONS,limit=25,locationId=300000000106947,sortBy=POSTING_DATES_DESC",
+    "works": "yes",
+    "india_jobs": 15,
+    "count_note": "API TotalJobsCount (also matches location=India)",
+    "sample": "Data Center Technician | NAVI MUMBAI, MAHARASHTRA, India",
+    "notes": "Count surprisingly low (15) but consistent across locationId and location=India; verify on site."
+  },
+  {
+    "company": "SAP",
+    "platform": "SAP SuccessFactors (jobs.sap.com)",
+    "endpoint": null,
+    "works": "blocked",
+    "india_jobs": null,
+    "count_note": null,
+    "sample": null,
+    "notes": "jobs.sap.com returns 403 Cloudflare 'Just a moment...' challenge to curl."
+  },
+  {
+    "company": "Nvidia",
+    "platform": "Workday",
+    "endpoint": "POST https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia/NVIDIAExternalCareerSite/jobs body {\"appliedFacets\":{\"locationHierarchy1\":[\"2fcb99c455831013ea52b82135ba3266\"]},\"limit\":20,\"offset\":0,\"searchText\":\"\"}",
+    "works": "yes",
+    "india_jobs": 244,
+    "count_note": "API total with India locationHierarchy1 facet",
+    "sample": "Senior System Software Engineer - Graphics | 3 Locations (India)",
+    "notes": "Big India presence: Bengaluru 196, Pune 71, Hyderabad 37."
+  },
+  {
+    "company": "Intel",
+    "platform": "Workday",
+    "endpoint": "POST https://intel.wd1.myworkdayjobs.com/wday/cxs/intel/External/jobs body {\"appliedFacets\":{\"locations\":[\"1e4a4eb3adf101f44070f976bf8184cf\",\"fabab36f05f51000ba74e9448dc20000\"]},\"limit\":20,\"offset\":0,\"searchText\":\"\"}",
+    "works": "yes",
+    "india_jobs": 58,
+    "count_note": "API total with India location ids (Bangalore + Virtual India)",
+    "sample": "Silicon Packaging Design Engineer | India, Bangalore",
+    "notes": "No country facet; only city-level 'locations' facet."
+  },
+  {
+    "company": "Qualcomm",
+    "platform": "Eightfold (careers.qualcomm.com, PCSX)",
+    "endpoint": "GET https://careers.qualcomm.com/api/pcsx/search?domain=qualcomm.com&query=&location=India&start=0",
+    "works": "yes",
+    "india_jobs": 573,
+    "count_note": "API total (data.count)",
+    "sample": "Senior Engineer - Audio DSP | Hyderabad, Telangana, India",
+    "notes": "/api/apply/v2/jobs returns 403 'Not authorized for PCSX'."
+  },
+  {
+    "company": "Cisco",
+    "platform": "Phenom (careers.cisco.com)",
+    "endpoint": "POST https://careers.cisco.com/widgets body {\"lang\":\"en_global\",\"deviceType\":\"desktop\",\"country\":\"global\",\"pageName\":\"search-results\",\"ddoKey\":\"refineSearch\",\"from\":0,\"size\":10,\"jobs\":true,\"counts\":true,\"all_fields\":[\"country\"],\"jdsource\":\"facets\",\"pageId\":\"page20\",\"siteType\":\"external\",\"keywords\":\"\",\"global\":true,\"selected_fields\":{\"country\":[\"India\"]},\"refNum\":\"CISCISGLOBAL\"}",
+    "works": "yes",
+    "india_jobs": 285,
+    "count_note": "API totalHits (country facet = India)",
+    "sample": "Solutions Development Architect | Mumbai, India",
+    "notes": "refNum CISCISGLOBAL found in page HTML; page cookies fetched first. Global total 1318."
+  },
+  {
+    "company": "IBM",
+    "platform": "Custom (ibm.com/careers search on IBM search API; job details on careers.ibm.com)",
+    "endpoint": "POST https://www-api.ibm.com/search/api/v2 body {\"appId\":\"careers\",\"scopes\":[\"careers2\"],\"query\":{\"bool\":{\"must\":[]}},\"post_filter\":{\"term\":{\"field_keyword_05\":\"India\"}},\"size\":10,\"from\":0,\"sort\":[{\"_score\":\"desc\"}],\"lang\":\"zz\",\"localeSelector\":{},\"sm\":{\"query\":\"\",\"lang\":\"zz\"},\"_source\":[\"_id\",\"title\",\"url\",\"field_keyword_19\",\"field_keyword_05\"]}",
+    "works": "yes",
+    "india_jobs": 884,
+    "count_note": "API hits.total",
+    "sample": "Attorney | Bangalore, IN",
+    "notes": "Elasticsearch-style API; field_keyword_05 = country, field_keyword_19 = city. Sent Origin: https://www.ibm.com header."
+  },
+  {
+    "company": "Uber",
+    "platform": "Custom (jobs.uber.com; old www.uber.com/api/loadSearchJobsResults removed)",
+    "endpoint": null,
+    "works": "blocked",
+    "india_jobs": null,
+    "count_note": null,
+    "sample": null,
+    "notes": "uber.com/careers/list redirects to jobs.uber.com, which returns a Cloudflare 'Just a moment' challenge (403). Old RPC loadSearchJobsResults returns ERR_MISSING_HANDLER 404."
+  },
+  {
+    "company": "Atlassian",
+    "platform": "Custom (atlassian.com careers; apply via Lever/iCIMS-style backend)",
+    "endpoint": "GET https://www.atlassian.com/endpoint/careers/listings",
+    "works": "yes",
+    "india_jobs": 62,
+    "count_note": "full list (355 global) filtered client-side on locations containing 'India'",
+    "sample": "Account Executive, Mid Market | Bengaluru - India",
+    "notes": "Returns all postings in one JSON array; filter yourself. Many India roles also list 'Remote - India'."
+  },
+  {
+    "company": "Walmart Global Tech",
+    "platform": "Custom Next.js site (careers.walmart.com); Workday tenant walmart.wd5 exists",
+    "endpoint": null,
+    "works": "no",
+    "india_jobs": null,
+    "count_note": null,
+    "sample": null,
+    "notes": "Results page loads jobs client-side (likely via /api/graphql, not identified). walmart.wd5.myworkdayjobs.com/wday/cxs/walmart/WalmartExternal/jobs returns HTTP 422 (site name probably wrong/retired). Needs browser network inspection."
+  },
+  {
+    "company": "PayPal",
+    "platform": "Workday (paypal.wd1.myworkdayjobs.com/jobs); careers.pypl.com 403, paypal.eightfold.ai is employee SSO",
+    "endpoint": "POST https://paypal.wd1.myworkdayjobs.com/wday/cxs/paypal/jobs/jobs body {\"appliedFacets\":{\"locations\":[\"bcdc9518960a0115db738aaa2d241899\",\"bcdc9518960a01a46ac477aa2d240c99\"]},\"limit\":20,\"offset\":0,\"searchText\":\"\"}",
+    "works": "yes",
+    "india_jobs": 10,
+    "count_note": "API total (Bangalore 8 + Chennai 2 location facets)",
+    "sample": "Sr. Manager, Technical Programs | Bangalore, Karnataka, India",
+    "notes": "Global total 291. Location facet ids discovered from an unfiltered call's facets."
+  },
+  {
+    "company": "Intuit",
+    "platform": "Radancy / TalentBrew (jobs.intuit.com)",
+    "endpoint": "GET https://jobs.intuit.com/search-jobs/results?ActiveFacetID=0&CurrentPage=1&RecordsPerPage=100&Distance=50&RadiusUnitType=0&ShowRadius=False&IsPagination=False&FacetFilters[0].ID=1269750&FacetFilters[0].FacetType=2&FacetFilters[0].Count=28&FacetFilters[0].Display=India&FacetFilters[0].IsApplied=true&SearchResultsModuleName=Search+Results&SearchFiltersModuleName=Search+Filters&SortCriteria=0&SortDirection=0&SearchType=6 (header X-Requested-With: XMLHttpRequest)",
+    "works": "yes",
+    "india_jobs": 28,
+    "count_note": "data-total-results in returned HTML fragment",
+    "sample": "Filing Product Programmer 2 | Bangalore, India",
+    "notes": "JSON wraps an HTML fragment in 'results'; parse with regex/BS4. Simpler: GET https://jobs.intuit.com/location/india-jobs/27595/1269750/2. 1269750 = India geo id (same across Radancy sites)."
+  },
+  {
+    "company": "ServiceNow",
+    "platform": "SmartRecruiters (careers.servicenow.com is 403 to curl)",
+    "endpoint": "GET https://api.smartrecruiters.com/v1/companies/ServiceNow/postings?country=in&limit=10",
+    "works": "yes",
+    "india_jobs": 77,
+    "count_note": "API totalFound",
+    "sample": "Client Director | Mumbai, Maharashtra, India",
+    "notes": "Public SmartRecruiters API; paginate with offset."
+  },
+  {
+    "company": "Dell",
+    "platform": "Oracle Recruiting Cloud on custom domain (jobs.dell.com -> enterpriseplatform.dell.com/hcmUI/CandidateExperience, site CX_1001)",
+    "endpoint": "GET https://enterpriseplatform.dell.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList&finder=findReqs;siteNumber=CX_1001,facetsList=LOCATIONS,limit=25",
+    "works": "partial",
+    "india_jobs": 0,
+    "count_note": "API TotalJobsCount 381 globally, no India location facet; keyword=India only matched 1 Malaysia job",
+    "sample": "Dell Technologies Presales Academy - Inside Presales Solution Architect | Cyberjaya, Selangor, Malaysia",
+    "notes": "API works but currently shows no India jobs (Dell appears mid-migration from TalentBrew; web search still shows ~90 India jobs on old jobs.dell.com pages, which now redirect). Re-check later."
+  },
+  {
+    "company": "AMD",
+    "platform": "iCIMS via Jibe front-end (careers.amd.com)",
+    "endpoint": "GET https://careers.amd.com/api/jobs?location=India&page=1&limit=10",
+    "works": "yes",
+    "india_jobs": 205,
+    "count_note": "API totalCount",
+    "sample": "Senior Lead - Quality Platform Architect, GPU Software | Hyderabad, India",
+    "notes": "Jibe API, jobs[].data has title/full_location/country. amd.wd1 Workday not used."
+  },
+  {
+    "company": "Texas Instruments",
+    "platform": "Oracle Recruiting Cloud (careers.ti.com -> edbz.fa.us2.oraclecloud.com, site CX)",
+    "endpoint": "GET https://edbz.fa.us2.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations&finder=findReqs;siteNumber=CX,locationId=300000000361484,limit=25",
+    "works": "yes",
+    "india_jobs": 133,
+    "count_note": "API TotalJobsCount (locationId 300000000361484 = India)",
+    "sample": "Senior Digital Design Engineer | India",
+    "notes": "India locationId found via facetsList=LOCATIONS. keyword=India alone gives only 16 text matches, so use locationId."
+  },
+  {
+    "company": "Samsung (R&D India)",
+    "platform": "Workday (sec.wd3.myworkdayjobs.com/Samsung_Careers)",
+    "endpoint": "POST https://sec.wd3.myworkdayjobs.com/wday/cxs/sec/Samsung_Careers/jobs body {\"appliedFacets\":{\"Location_Country\":[\"c4f78be1a8f14da0ab49ce1162348a5e\"]},\"limit\":20,\"offset\":0,\"searchText\":\"\"}",
+    "works": "yes",
+    "india_jobs": 31,
+    "count_note": "API total (Location_Country = India)",
+    "sample": "Senior Staff Engineer | SSIR, Angkor West, Bangalore, India",
+    "notes": "Global total 661. hiringCompany facet 'Samsung R&D Institute India - Bangalore' (id 189767dd6c9201554f3e5312a7290a85) shows 44; searchText 'India' gives 48. Other Samsung India units (e.g. SRI-Noida/Delhi) may use other tenants."
+  },
+  {
+    "company": "Goldman Sachs",
+    "platform": "Custom front end (higher.gs.com, Next.js) on Oracle Recruiting Cloud backend (hdpc.fa.us2, site LateralHiring)",
+    "endpoint": "GET https://hdpc.fa.us2.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations&finder=findReqs;siteNumber=LateralHiring,locationId=300000000228786,limit=25,offset=0,sortBy=POSTING_DATES_DESC",
+    "works": "yes",
+    "india_jobs": 102,
+    "count_note": "API total (TotalJobsCount)",
+    "sample": "Engineering-L2-Bengaluru- Vice president-Software Engineering | Bengaluru, Karnataka, India",
+    "notes": "Oracle site found in higher.gs.com JS bundle; India locationId from facetsList=LOCATIONS. Campus programs may be a separate site."
+  },
+  {
+    "company": "JPMorgan Chase",
+    "platform": "Oracle Recruiting Cloud (jpmc.fa.oraclecloud.com, CX_1001)",
+    "endpoint": "GET https://jpmc.fa.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations&finder=findReqs;siteNumber=CX_1001,locationId=300000000289360,limit=25,offset=0,sortBy=POSTING_DATES_DESC",
+    "works": "yes",
+    "india_jobs": 313,
+    "count_note": "API total (TotalJobsCount)",
+    "sample": "Senior Lead Software Engineer - Java, Kafka, Cloud | Mumbai, Maharashtra, India",
+    "notes": "India locationId is tenant-specific (300000000289360); get via expand=locationsFacet&finder=findReqs;siteNumber=CX_1001,facetsList=LOCATIONS"
+  },
+  {
+    "company": "Morgan Stanley",
+    "platform": "Eightfold PCSX (morganstanley.eightfold.ai)",
+    "endpoint": "GET https://morganstanley.eightfold.ai/api/pcsx/search?domain=morganstanley.com&query=&location=India&start=0&sort_by=relevance (send cookies from GET https://morganstanley.eightfold.ai/careers?location=India, plus x-csrf-token header = <meta name=_csrf> from that page)",
+    "works": "yes",
+    "india_jobs": 118,
+    "count_note": "API total (data.count)",
+    "sample": "Corporate Treasury Desk Strategist, Associate, Quantitative Strategists | Mumbai, Maharashtra, India",
+    "notes": "Plain GET without session cookie returns 403; /api/apply/v2/jobs not available."
+  },
+  {
+    "company": "American Express",
+    "platform": "Oracle Recruiting Cloud (careers.americanexpress.com -> egug.fa.us2, CX_1)",
+    "endpoint": "GET https://egug.fa.us2.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList.secondaryLocations&finder=findReqs;siteNumber=CX_1,locationId=300000000228786,limit=25,offset=0,sortBy=POSTING_DATES_DESC",
+    "works": "yes",
+    "india_jobs": 49,
+    "count_note": "API total (TotalJobsCount)",
+    "sample": "Analyst-Control Managment | Gurugram, HR, India",
+    "notes": "Old aexp.eightfold.ai link on amex site is dead (404). careers.americanexpress.com/hcmRestApi redirects; call the oraclecloud host directly."
+  },
+  {
+    "company": "Visa",
+    "platform": "Workday (visa.wd5, site Visa)",
+    "endpoint": "POST https://visa.wd5.myworkdayjobs.com/wday/cxs/visa/Visa/jobs body {\"appliedFacets\":{\"locationCountry\":[\"c4f78be1a8f14da0ab49ce1162348a5e\"]},\"limit\":20,\"offset\":0,\"searchText\":\"\"}",
+    "works": "yes",
+    "india_jobs": 81,
+    "count_note": "API total with locationCountry=India facet",
+    "sample": "Sr. Manager, Finance Operations (Accounts Payable) | IN - Bengaluru, India",
+    "notes": "corporate.visa.com/en/jobs redirects to Workday."
+  },
+  {
+    "company": "Mastercard",
+    "platform": "Workday (mastercard.wd1, site CorporateCareers)",
+    "endpoint": "POST https://mastercard.wd1.myworkdayjobs.com/wday/cxs/mastercard/CorporateCareers/jobs body {\"appliedFacets\":{},\"limit\":20,\"offset\":0,\"searchText\":\"India\"}",
+    "works": "yes",
+    "india_jobs": 207,
+    "count_note": "sum of India city 'locations' facet counts (210 minus 3 'Remote - Indiana'); searchText=India total=216",
+    "sample": "Manager, Accounting | Pune, India",
+    "notes": "No locationCountry facet; filter by appliedFacets.locations with India city ids (Pune 155, Gurgaon 29, Navi Mumbai 11...)."
+  },
+  {
+    "company": "Deutsche Bank",
+    "platform": "Custom (careers.db.com) on Milch & Zucker BeeSite API",
+    "endpoint": "GET https://api-deutschebank.beesite.de/search/?data=<urlencoded {\"LanguageCode\":\"en\",\"SearchParameters\":{\"FirstItem\":1,\"CountItem\":2000,\"MatchedObjectDescriptor\":[\"PositionTitle\",\"PositionLocation.CityName\",\"PositionLocation.CountryCode\"]},\"SearchCriteria\":[]}>",
+    "works": "yes",
+    "india_jobs": 232,
+    "count_note": "all 1864 jobs fetched in one call, filtered client-side on CountryCode=IN",
+    "sample": "Sales Manager - Mortgage | New Delhi",
+    "notes": "Country SearchCriteria were ignored, so filter locally."
+  },
+  {
+    "company": "Expedia",
+    "platform": "Workday (expedia.wd108, site search) behind careers.expediagroup.com",
+    "endpoint": "POST https://expedia.wd108.myworkdayjobs.com/wday/cxs/expedia/search/jobs body {\"appliedFacets\":{\"locations\":[\"c553432013ba103bbc5b28efceb250b1\",\"c553432013ba103bbc5cc6e3faef5396\"]},\"limit\":20,\"offset\":0,\"searchText\":\"\"}",
+    "works": "yes",
+    "india_jobs": 30,
+    "count_note": "API total (Bangalore 6 + Gurgaon 24 location facets)",
+    "sample": "Senior Tax Analyst - Indirect Tax Operations | India - Bangalore",
+    "notes": "Whole board has only 164 jobs."
+  },
+  {
+    "company": "LinkedIn",
+    "platform": "LinkedIn itself (careers.linkedin.com links to linkedin.com/jobs, company id 1337)",
+    "endpoint": "GET https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_C=1337&location=India&start=<0,10,20..> (HTML cards, parse)",
+    "works": "partial",
+    "india_jobs": 50,
+    "count_note": "paged until empty (5 pages x 10); no total given, may be capped/rate-limited",
+    "sample": "Staff Software Engineer - Applications | Bengaluru, Karnataka, India",
+    "notes": "Unofficial guest endpoint returning HTML, not JSON; LinkedIn ToS discourages scraping, fragile."
+  },
+  {
+    "company": "Databricks",
+    "platform": "Greenhouse (databricks)",
+    "endpoint": "GET https://boards-api.greenhouse.io/v1/boards/databricks/jobs",
+    "works": "yes",
+    "india_jobs": 95,
+    "count_note": "all 887 jobs, filtered client-side on location name",
+    "sample": "Account Executive | Bengaluru, India; Mumbai, India",
+    "notes": "No server-side location filter; filter by location.name."
+  },
+  {
+    "company": "Zscaler",
+    "platform": "Greenhouse (zscaler)",
+    "endpoint": "GET https://boards-api.greenhouse.io/v1/boards/zscaler/jobs",
+    "works": "yes",
+    "india_jobs": 84,
+    "count_note": "all 364 jobs, filtered client-side on location name",
+    "sample": "Account Executive - Majors | Mumbai, IND",
+    "notes": "Locations use 'IND' as well as 'India'; match city names too."
+  },
+  {
+    "company": "UKG",
+    "platform": "Eightfold PCSX (apply.ukg.com, custom domain)",
+    "endpoint": "GET https://apply.ukg.com/api/pcsx/search?domain=ukg.com&query=&location=India&start=0&sort_by=relevance (send cookies from GET https://apply.ukg.com/careers?location=India, plus x-csrf-token header = <meta name=_csrf> from that page)",
+    "works": "yes",
+    "india_jobs": 81,
+    "count_note": "API total (data.count)",
+    "sample": "Lead Solution Consultant- WFM UKG Implementation | Noida,UP,India",
+    "notes": "www.ukg.com/careers returns 403 to curl; old ukg.wd5 Workday site is gone (422/500)."
+  },
+  {
+    "company": "Flipkart",
+    "platform": "TurboHire (flipkartcareers.com links to flipkart.turbohire.co)",
+    "endpoint": "POST https://api.turbohire.co/api/careerpagev2/filteredjobs?orgId=4d757ba0-3d57-448a-b82c-238ed87ac90f&pageType=0 body {} with header Authorization: Bearer <token from GET https://api.turbohire.co/api/token/noauth (send Origin+Referer of the flipkart.turbohire.co careerpage, else \"Invalid request\")>",
+    "works": "yes",
+    "india_jobs": 8,
+    "count_note": "API Total",
+    "sample": "AM for South-Hyper local and large formats | Hyderabad, Telangana, India",
+    "notes": "Anonymous no-auth token flow, same as public page. Only 8 jobs listed, Flipkart posts few roles externally."
+  },
+  {
+    "company": "Swiggy",
+    "platform": "MyNextHire (careers.swiggy.com Angular app)",
+    "endpoint": "POST https://swiggy.mynexthire.com/employer/careers/reqlist/get body {\"source\":\"careers\",\"code\":\"\",\"filterByBuId\":-1}",
+    "works": "yes",
+    "india_jobs": 78,
+    "count_note": "full list (reqDetailsBOList)",
+    "sample": "Sales Manager II | Kolkata",
+    "notes": "Rich fields incl. JD, exp range, location."
+  },
+  {
+    "company": "Zomato (Eternal)",
+    "platform": "Custom static site (eternal.com/careers, Astro); no job board found",
+    "endpoint": null,
+    "works": "no",
+    "india_jobs": null,
+    "count_note": null,
+    "sample": null,
+    "notes": "zomato.com/careers redirects to eternal.com/careers, which has no listings or API in HTML/JS. Lever 'eternal' is a different US company. Would need LinkedIn/aggregator."
+  },
+  {
+    "company": "PhonePe",
+    "platform": "SmartRecruiters (company id PHONEPELIMITED); custom page phonepe.com/careers/job-openings",
+    "endpoint": "GET https://api.smartrecruiters.com/v1/companies/PHONEPELIMITED/postings?limit=100 (also custom JSON GET https://www.phonepe.com/apollo/job-postings/latest.json, filter status=PUBLIC)",
+    "works": "yes",
+    "india_jobs": 90,
+    "count_note": "API totalFound (country=in: 90); latest.json has 176 incl. 86 non-public",
+    "sample": "Site Ops, Site-Ops | Mumbai, Maharashtra, India",
+    "notes": "Slug 'PhonePe' returns 0; use PHONEPELIMITED."
+  },
+  {
+    "company": "Paytm",
+    "platform": "Lever",
+    "endpoint": "GET https://api.lever.co/v0/postings/paytm?mode=json",
+    "works": "yes",
+    "india_jobs": 161,
+    "count_note": "full list 173, 161 India",
+    "sample": "Account Executive/ Director - AI Agentic Enterprise Sales | Dubai",
+    "notes": "Some UAE/other roles."
+  },
+  {
+    "company": "Razorpay",
+    "platform": "Greenhouse",
+    "endpoint": "GET https://boards-api.greenhouse.io/v1/boards/razorpaysoftwareprivatelimited/jobs",
+    "works": "yes",
+    "india_jobs": 21,
+    "count_note": "full list",
+    "sample": "Associate Manager, Mid Market Sales | Bengaluru",
+    "notes": "Verified."
+  },
+  {
+    "company": "Meesho",
+    "platform": "Lever",
+    "endpoint": "GET https://api.lever.co/v0/postings/meesho?mode=json",
+    "works": "yes",
+    "india_jobs": 56,
+    "count_note": "full list",
+    "sample": "AM/ Manager - Risk & Decision Science | Bangalore, Karnataka",
+    "notes": "Verified."
+  },
+  {
+    "company": "CRED",
+    "platform": "Lever",
+    "endpoint": "GET https://api.lever.co/v0/postings/cred?mode=json",
+    "works": "yes",
+    "india_jobs": 8,
+    "count_note": "full list",
+    "sample": "accounts payable manager | hyderabad",
+    "notes": "Verified. (Zeta also verified: lever 'zeta', 25 jobs, 23 India.)"
+  },
+  {
+    "company": "Zepto",
+    "platform": "Unknown (zeptonow.com/careers behind AWS WAF)",
+    "endpoint": null,
+    "works": "blocked",
+    "india_jobs": null,
+    "count_note": null,
+    "sample": null,
+    "notes": "HTTP 202 x-amzn-waf-action: challenge. No Lever/Greenhouse/Ashby board for zepto/zeptonow/kiranakart."
+  },
+  {
+    "company": "Freshworks",
+    "platform": "SmartRecruiters (careers.freshworks.com redirects to careers.smartrecruiters.com/Freshworks)",
+    "endpoint": "GET https://api.smartrecruiters.com/v1/companies/Freshworks/postings?country=in&limit=100",
+    "works": "yes",
+    "india_jobs": 31,
+    "count_note": "API totalFound for country=in (123 global)",
+    "sample": "Principal Engineer - Machine Learning | Hyderabad, TS, India",
+    "notes": "Paginate with offset; limit max 100."
+  },
+  {
+    "company": "Zoho",
+    "platform": "Zoho Recruit (careers.zohocorp.com/jobs/Careers)",
+    "endpoint": "GET https://careers.zohocorp.com/jobs/Careers then parse hidden <input value='[{...Job_Opening_Name...}]'> JSON (HTML-escaped)",
+    "works": "yes",
+    "india_jobs": 2,
+    "count_note": "all embedded jobs",
+    "sample": "Technical Support Engineers | India",
+    "notes": "Only 2 evergreen roles posted. RSS link in page returns an error page."
+  },
+  {
+    "company": "Myntra",
+    "platform": "Spire2Grow iExchange (jobs.myntra.com, Flutter web app)",
+    "endpoint": null,
+    "works": "no",
+    "india_jobs": null,
+    "count_note": null,
+    "sample": null,
+    "notes": "API base https://io.spire2grow.com/ies/v1/p/ (requisition, requisition/_count) returns 401 without a token (likely Firebase auth from the app). Not pursued."
+  },
+  {
+    "company": "Dream11",
+    "platform": "Lever link on dreamsports.group/careers, but board is gone",
+    "endpoint": null,
+    "works": "no",
+    "india_jobs": null,
+    "count_note": null,
+    "sample": null,
+    "notes": "Careers page links jobs.lever.co/dreamsports which 404s; Lever API 'Document not found' for dreamsports/dream11. No other ATS found."
+  },
+  {
+    "company": "Ola",
+    "platform": "TurboHire (olacabs.com/careers links to olacareers.turbohire.co)",
+    "endpoint": "POST https://api.turbohire.co/api/careerpagev2/filteredjobs?orgId=e0c1eb37-eb7a-4ca4-bcc5-d59ce4ce9212&pageType=0 body {} with header Authorization: Bearer <token from GET https://api.turbohire.co/api/token/noauth (send Origin+Referer of the olacareers.turbohire.co careerpage, else \"Invalid request\")>",
+    "works": "yes",
+    "india_jobs": 0,
+    "count_note": "API Total",
+    "sample": null,
+    "notes": "Endpoint works (200) but returns Total 0 right now. Ola Krutrim/Electric not checked (careers.olakrutrim.com timed out)."
+  },
+  {
+    "company": "Groww",
+    "platform": "Greenhouse",
+    "endpoint": "GET https://boards-api.greenhouse.io/v1/boards/groww/jobs",
+    "works": "yes",
+    "india_jobs": 7,
+    "count_note": "full list",
+    "sample": "Assistant Manager - Internal Audit | Bengaluru-VTP, India",
+    "notes": "Verified."
+  }
+]
