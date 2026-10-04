@@ -1,0 +1,5 @@
+# country,key,name,aliases
+# A metro groups several cities; cities.csv points to the key. Searching "NCR" expands to all its cities.
+IN,NCR,Delhi NCR,NCR|National Capital Region|Delhi/NCR|Delhi-NCR|NCR Delhi
+IN,MMR,Mumbai Metropolitan Region,MMR|Mumbai Metro
+US,SFBA,San Francisco Bay Area,Bay Area|SF Bay Area|Silicon Valley

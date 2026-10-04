@@ -1,0 +1,105 @@
+# country,region,name,aliases,priority,metro
+# region must match a name in subdivisions.csv (or be empty). priority: higher wins when a name is ambiguous.
+# Aliases may include well-known tech-park areas so "Whitefield" or "Hinjewadi" resolve to the city.
+# Avoid short aliases that are also state codes (LA = Louisiana, KL = Kerala): "Kochi, KL" must stay in India.
+# --- India ---
+IN,Karnataka,Bengaluru,Bangalore|BLR|Bengaluru Urban|Bangalore Urban|Whitefield|Electronic City|Koramangala|Bellandur|Marathahalli,100,
+IN,Telangana,Hyderabad,Secunderabad|HYD|Cyberabad|HITEC City|Gachibowli,100,
+IN,Maharashtra,Pune,Poona|Hinjewadi|Hinjawadi|Kharadi|Magarpatta|Viman Nagar,100,
+IN,Maharashtra,Mumbai,Bombay|Andheri|Powai|Bandra Kurla Complex|BKC|Goregaon|Malad|Lower Parel|Vikhroli,100,MMR
+IN,Maharashtra,Navi Mumbai,Airoli|Vashi|Belapur|Ghansoli,70,MMR
+IN,Maharashtra,Thane,,70,MMR
+IN,Tamil Nadu,Chennai,Madras|Sholinganallur|Guindy|Perungudi|Siruseri,100,
+IN,Delhi,Delhi,New Delhi,100,NCR
+IN,Uttar Pradesh,Noida,Greater Noida|Noida Extension,90,NCR
+IN,Haryana,Gurugram,Gurgaon|GGN,90,NCR
+IN,Uttar Pradesh,Ghaziabad,,60,NCR
+IN,Haryana,Faridabad,,60,NCR
+IN,West Bengal,Kolkata,Calcutta|Bidhannagar|New Town|Rajarhat,90,
+IN,Gujarat,Ahmedabad,Amdavad,80,
+IN,Gujarat,Gandhinagar,GIFT City,60,
+IN,Gujarat,Vadodara,Baroda,50,
+IN,Gujarat,Surat,,50,
+IN,Rajasthan,Jaipur,,70,
+IN,Kerala,Kochi,Cochin|Kakkanad|Infopark,70,
+IN,Kerala,Thiruvananthapuram,Trivandrum|Technopark,70,
+IN,Tamil Nadu,Coimbatore,,70,
+IN,Tamil Nadu,Madurai,,40,
+IN,Tamil Nadu,Tiruchirappalli,Trichy,40,
+IN,Punjab,Mohali,SAS Nagar|Sahibzada Ajit Singh Nagar,60,
+IN,Chandigarh,Chandigarh,,70,
+IN,Haryana,Panchkula,,30,
+IN,Madhya Pradesh,Indore,,60,
+IN,Madhya Pradesh,Bhopal,,40,
+IN,Odisha,Bhubaneswar,,60,
+IN,Karnataka,Mysuru,Mysore,60,
+IN,Karnataka,Mangaluru,Mangalore,50,
+IN,Karnataka,Hubballi,Hubli,40,
+IN,Maharashtra,Nagpur,,50,
+IN,Maharashtra,Nashik,,40,
+IN,Maharashtra,Aurangabad,Chhatrapati Sambhajinagar,30,
+IN,Uttar Pradesh,Lucknow,,50,
+IN,Andhra Pradesh,Visakhapatnam,Vizag|Vishakhapatnam,50,
+IN,Andhra Pradesh,Vijayawada,,40,
+IN,Andhra Pradesh,Tirupati,,30,
+IN,Goa,Panaji,Panjim,40,
+IN,Assam,Guwahati,,40,
+IN,Bihar,Patna,,40,
+IN,Jharkhand,Ranchi,,30,
+IN,Uttarakhand,Dehradun,,40,
+IN,Uttarakhand,Haldwani,,30,
+IN,Punjab,Ludhiana,,40,
+IN,Jammu and Kashmir,Srinagar,,30,
+# --- United States ---
+US,California,San Francisco,SF,90,SFBA
+US,California,San Jose,,80,SFBA
+US,California,Santa Clara,,70,SFBA
+US,California,Mountain View,,70,SFBA
+US,California,Sunnyvale,,70,SFBA
+US,California,Palo Alto,,70,SFBA
+US,California,Los Angeles,,80,
+US,Washington,Seattle,,90,
+US,Washington,Bellevue,,70,
+US,Washington,Redmond,,70,
+US,New York,New York City,NYC|New York|Manhattan|Brooklyn,90,
+US,Massachusetts,Boston,,80,
+US,Texas,Austin,,80,
+US,Texas,Dallas,,70,
+US,Illinois,Chicago,,80,
+US,Georgia,Atlanta,,70,
+US,Colorado,Denver,,70,
+US,North Carolina,Raleigh,,60,
+# --- Canada ---
+CA,Ontario,Toronto,,80,
+CA,British Columbia,Vancouver,,80,
+CA,Quebec,Montreal,Montréal,70,
+# --- Australia ---
+AU,New South Wales,Sydney,,80,
+AU,Victoria,Melbourne,,80,
+# --- Rest of world ---
+GB,,London,,90,
+GB,,Edinburgh,,60,
+IE,,Dublin,,80,
+DE,,Berlin,,80,
+DE,,Munich,München,80,
+FR,,Paris,,80,
+NL,,Amsterdam,,80,
+CH,,Zurich,Zürich,70,
+SE,,Stockholm,,70,
+PL,,Warsaw,Warszawa,70,
+ES,,Madrid,,70,
+ES,,Barcelona,,70,
+IL,,Tel Aviv,Tel Aviv-Yafo,70,
+AE,,Dubai,,80,
+AE,,Abu Dhabi,,60,
+SG,,Singapore,,90,
+JP,,Tokyo,,80,
+JP,,Osaka,Ōsaka|Ôsaka,60,
+KR,,Seoul,,70,
+CN,,Shanghai,,70,
+CN,,Beijing,,70,
+MY,,Kuala Lumpur,,60,
+PH,,Manila,Metro Manila,60,
+LK,,Colombo,,50,
+BR,,São Paulo,Sao Paulo,70,
+MX,,Mexico City,CDMX,70,

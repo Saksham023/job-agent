@@ -9,7 +9,24 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 Progress: Milestone 0 DONE (2026-10-04): DB `jobagent`, Flyway V1 (companies table, config jsonb) + V2
 (12 companies: greenhouse/lever/smartrecruiters/ashby), `company` package (Company record,
 CompanyRepository with JdbcClient + manual row mapper, CompanyController GET /admin/companies[/{slug}]).
-Next: Milestone 1, adapter interface + Greenhouse adapter.
+Milestone 1 in progress: V3 jobs table, `crawl` package (RawJob, RawLocation, JobBoardAdapter,
+CrawlHttpConfig shared RestClient, adapter/GreenhouseAdapter, CrawlService with adapter map, CrawlController
+GET /admin/crawl/{slug}/preview), Jsoup 1.23.2 added, `geo` package (Gazetteer over 4 CSVs: 249 countries,
+111 subdivision codes, 3 metros, 169 city names), ParsedLocation + LocationParser (country voting,
+multi-city segments, connector splitting) + LocationParserTest (27 green), HtmlToText (Jsoup),
+job/NormalizedJob, crawl/JobNormalizer (SHA-256 content hash), CrawlService preview with country filter
+(`jobagent.crawl.countries`, default IN) and unresolved-location report. First measured run (2026-10-04):
+Groww 7/7, Razorpay 17/21 (other 4 are Malaysia/Singapore, so the research "21 India" was wrong),
+Zscaler 82/364, Databricks 94/887, 0 unresolved jobs. Then: spaced " - " as part separator (28 tests),
+V4 (country_codes, places JSONB, GIN on cities + country_codes; query with `&&` / `@>`, not `= ANY`),
+job/JobRepository.upsert (ON CONFLICT, one seenAt per crawl, RETURNING -> INSERTED/UPDATED/UNCHANGED),
+CrawlService.crawl (fetch outside tx, upserts in one TransactionTemplate tx, per-job skip on errors),
+POST /admin/crawl/{slug} and POST /admin/crawl (all). First saved crawl: 200 India jobs (databricks 94,
+zscaler 82, razorpay 17, groww 7); re-crawl = all unchanged. Then LeverAdapter (country hint only for
+single-location postings), SmartRecruitersAdapter (server-side country=in, offset paging, one detail call
+per posting with 250 ms pause: PhonePe ~117 s), AshbyAdapter (postal address -> text). Milestone 1 core
+DONE 2026-10-05: 12/12 companies, 706 India jobs (lever 249, greenhouse 200, smartrecruiters 198,
+ashby 59). JsonFields refactor done (shared null-safe JSON helpers for adapters). Next: Milestone 2.
 
 ## 1. Why this project (context)
 
@@ -36,7 +53,7 @@ Next: Milestone 1, adapter interface + Greenhouse adapter.
 - Learning mode (decided 2026-10-04): the user builds step by step and types/pastes ALL code themselves.
   Claude NEVER writes code into the repo (no Java, SQL, YAML, pom edits). For a new file, Claude only
   creates it empty (touch) at the right path; the user pastes the contents after asking questions.
-  Claude may edit docs (CLAUDE.md, notes) itself.
+  Claude may edit docs (CLAUDE.md, notes) and data files (e.g. `src/main/resources/geo/*.csv`) itself.
 - Give WHOLE files, ONE file at a time. With each file: what it achieves and why it exists, a table of
   every function/method + a one-line purpose, and its shortcomings / known limitations / what a
   production version would do differently.
@@ -201,7 +218,22 @@ resume ──> embeddings ──> candidate shortlist (vector) ──> LLM re-ra
 1. Adapter framework + easy official APIs (Greenhouse, Lever, SmartRecruiters, Ashby): RestClient,
    per-host politeness, normalizer (cities, remote), upsert into `jobs`, manual trigger endpoint.
 2. Rule-based requirement extraction: years-of-experience regex, skill dictionary with aliases, primary
-   language, seniority; stored per job.
+   language, seniority, job family (tech vs non-tech: SOFTWARE_ENGINEERING, DATA_ML, INFRA_DEVOPS,
+   SECURITY, QA, ENG_MANAGEMENT, PRODUCT, DESIGN, SALES_ENGINEERING, SALES, MARKETING, FINANCE, HR, LEGAL,
+   OPERATIONS, SUPPORT, OTHER) + specialization (BACKEND, FRONTEND, ...), normalized employment type;
+   stored per job. Family rules: specific title patterns first ("Sales Engineer" before "Engineer"),
+   department/function as evidence (ignore "Business"/"Other"), unclassified report, labeled accuracy.
+   Family is DERIVED by us (platforms give only free-text department; SmartRecruiters adds a `function`,
+   often "Other"). Raw department names map to our taxonomy via a data file (Engineering/Technology/Tech/
+   R&D -> tech families), like city aliases. Titles are split into ROLE words (engineer, SDE, SWE, MTS,
+   data scientist, accountant: decide family) and LEVEL words (Analyst/Associate/VP at banks, SDE I/II/III,
+   AMTS/MTS/SMTS/LMTS/PMTS, Senior/Staff/Principal: decide seniority, never family). "Analyst"/"Associate"
+   alone carry no family (seen at Paytm/PhonePe/Zeta for support, legal, ops). Company-specific level
+   ladders via an optional `levelScheme` in companies.config ("bank": Analyst < Associate < VP < ED < MD).
+   Family decided by evidence voting (title role words > department/function > description skills),
+   low evidence = UNCLASSIFIED (reported), LLM fallback in M5.
+   End-goal search filters: family, specialization, city/metro/country/remote, years + seniority, skills,
+   employment type, company, freshness, keyword text (M3), fit score (M3/M5).
 3. Matching v1 (no LLM, no embeddings): profile record, experience hard filter, weighted skill score,
    score breakdown; REST endpoint to test it.
 4. MCP server (Spring AI MCP server starter): match_jobs, get_job, new_jobs_since, list_companies + a
@@ -223,6 +255,15 @@ Decided (2026-10-04):
   Data access: plain `JdbcClient` (JDBC API starter), no JPA / Spring Data JDBC / Spring Batch.
   Schema via Flyway (`src/main/resources/db/migration`). DB: database `jobagent` in `rag-postgres`.
   Spring AI deps (MCP server, pgvector, embeddings) are added by hand to the pom when needed.
+- Location handling (decided 2026-10-04, from real Greenhouse strings): adapters emit
+  `RawLocation(text, city, region, countryCode, remote)` with structured parts when the platform has them;
+  a gazetteer-based `LocationParser` (data files in `src/main/resources/geo/`: country aliases on top of
+  JDK `Locale` ISO lists, subdivisions, cities with aliases) resolves the rest: split on `;`/`|`/` / `,
+  strip remote prefixes, split components on `,`, resolve right to left, whole-component matches only
+  (Indiana != India), bare 2-letter codes from free text never trusted as countries, ambiguous = marked.
+  Jobs store `country_codes TEXT[]` + parsed `places JSONB`; "India only" is a filter (`'IN' = ANY`), not
+  parser logic. Unresolved strings are kept, reported (top unresolved), and measured per company
+  (% resolved = health metric); LLM fallback per distinct string later (Milestone 5), cached.
 - Company registry seed: curated SQL migrations per milestone (the research JSON is free text, not
   machine-importable); per-platform settings live in a `config jsonb` column.
 - LLM access without an API key: (a) background jobs (job requirement extraction, digests) call headless

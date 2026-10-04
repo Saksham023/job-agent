@@ -1,0 +1,39 @@
+# alias,iso2
+# Official English country names and ISO alpha-3 codes come from java.util.Locale; list only extra names here.
+# Entries here are curated, so short ones like US and UK are trusted (generic 2-letter ISO codes are not).
+US,US
+U.S.,US
+U.S.A.,US
+United States of America,US
+America,US
+UK,GB
+U.K.,GB
+Great Britain,GB
+Britain,GB
+England,GB
+Scotland,GB
+Wales,GB
+Northern Ireland,GB
+UAE,AE
+U.A.E.,AE
+Bharat,IN
+Holland,NL
+The Netherlands,NL
+Korea,KR
+Republic of Korea,KR
+South Korea,KR
+Czech Republic,CZ
+Turkey,TR
+Hong Kong,HK
+Macau,MO
+Taiwan,TW
+Vietnam,VN
+KSA,SA
+Saudi,SA
+Burma,MM
+Myanmar,MM
+Ivory Coast,CI
+Bosnia and Herzegovina,BA
+Trinidad and Tobago,TT
+Democratic Republic of the Congo,CD
+Republic of the Congo,CG

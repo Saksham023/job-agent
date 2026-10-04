@@ -31,3 +31,16 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### macOS ###
+.DS_Store
+
+### Local secrets and overrides (never commit) ###
+.env
+.env.*
+application-local.yaml
+application-local.yml
+
+### Logs ###
+*.log
+logs/
