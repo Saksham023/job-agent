@@ -84,12 +84,22 @@ their own labels ("Opus is right") -> frozen `eval/reference/saksham.csv`. A 529
 ~100 s, our run records the failure, re-running retries only failed jobs. 160 unit tests.
 Baseline (rules ranking vs reference): P@10 APPLY 0.6 of max 0.7, APPLY+MAYBE 0.9, nDCG@10 0.89, 7/7 APPLY in top 25.
 
-**EXACT NEXT STEP (agree with the user):** (a) cheaper judges with the same harness: Haiku first (`model=haiku`),
-then local models (ask before downloads); measure agreement with the reference + cost/latency; (b) reference sets
-for 2-3 other profiles (Python data engineer, frontend dev, fresher) so ranking is not tuned to one user; (c)
-ranking fixes the baseline shows: the one-year-above-window MAYBE jobs are filtered out (consider window +2 with a
-score penalty, measured), Zscaler 188 (APPLY) ranks #12 vs its twin 187 at #2; then the model re-rank of a wider
-shortlist, embeddings.
+**Target architecture at scale (agreed 2026-10-05, for when Workday etc. bring thousands of jobs):** per job offline:
+extracted facts + an embedding of title + requirements section (no boilerplate) in pgvector. Per resume: (1) hard SQL
+filters = the ONLY way a job may disappear; (2) cheap score for EVERY eligible job (rules + vector similarity, hybrid);
+(3) a cheap model classifies APPLY/MAYBE/NO in score order up to a configurable budget, answers cached per
+(profile, job, rubric); (4) APPLY then MAYBE, sorted by score, paginated, exportable as company + title + link
+(the user wants hundreds of apply-worthy jobs). Robust candidate picking, to do THEN (user: not needed at 287 jobs):
+recall@K check against answer keys as an automated regression test; soft filters (stretch zone one year above the
+window with a penalty; neighbouring families with a penalty); union of several retrieval methods (rules, vectors,
+title keywords); adaptive stop (judge until N consecutive NO) instead of a fixed top-K; spot-check a random sample
+below the cut to measure the real miss rate; answer keys for more profiles and companies. Vectors are blind to
+seniority and to required-vs-plus, so they never replace filters/rules/model; adopt them only if the answer keys
+show a recall gain. The user accepted today's misses (4 MAYBE one year above the window, Jira Admin in INFRA).
+
+**EXACT NEXT STEP:** cheap judge test: same harness with `model=haiku` on the same 287 jobs, compare with
+`eval/reference/saksham.csv` (agreement, APPLY recall, cost, latency); then Milestone 6 (Workday, Eightfold, Oracle)
+with the generalization check, where the scale plan above starts to matter. Local models later (ask before downloads).
 NOTE: Claude Code loads this file into EVERY session in this folder, including sessions where the user USES
 the job-agent tools. Keep it current (a stale "not built yet" here made a demo session work around a feature
 that existed), and remember a product session may take the user's profile from §1 instead of the resume.
