@@ -6,7 +6,89 @@ sites), ranks them against the user's resume with embeddings + an LLM, and helps
 tailored notes, outreach drafts, tracking, reminders). The human always clicks "apply".
 
 This file holds everything decided so far (planned 2026-10-01..04 in the `python learning` session).
-Progress: Milestone 0 DONE (2026-10-04): DB `jobagent`, Flyway V1 (companies table, config jsonb) + V2
+
+## 0. RESUME HERE (read first after a context compaction)
+
+**State (2026-10-05):** Milestones 0-3 DONE and committed (`c517f86` M0, `627fd80` M1, `a562604` M2,
+`2a3baa1` M3; working tree clean). 12 companies on 4 platforms, 706 India jobs, all with requirements
+(extractor v2), matching works via `POST /admin/match`. 99 unit tests green. **Now starting Milestone 4
+(MCP server), going SLOWLY: the user is new to Spring AI and wants every annotation/term explained briefly.**
+
+**How we work (user preferences, keep following them):**
+- User types/pastes all NEW code; Claude creates the empty file first (`touch`), then gives the whole file
+  with: purpose, a short table of methods, new concepts, shortcomings. Keep explanations SHORT and precise.
+- Claude MAY edit existing code itself when the user asks for fixes/cleanups/refactors, and may write data
+  files (CSV) and docs. Never push. Ask before commits unless the user said "commit".
+- Before handing over code, Claude verifies it in the session scratchpad: compile with JDK 25
+  (`/Users/saksham/Library/Java/JavaVirtualMachines/openjdk-25.0.2/Contents/Home`) against jars in
+  `~/.m2`, run against real data (read-only `psql` export or JDBC SELECT), and run JUnit tests. Before a
+  refactor, dump a baseline of results for all jobs and diff after.
+- Never use em-dashes in writing.
+- Testing the RUNNING app while building (curl against localhost endpoints, hand-made MCP calls): do NOT run
+  it yourself; give the user the curl commands with what each one shows, and the user runs them and pastes
+  results (decided 2026-10-05). Scratch compilation / offline checks are still fine. This does NOT apply
+  when the user asks Claude a question that it answers through the job-agent MCP tools: that is the product
+  being used, so just call the tools.
+
+**Run / check:**
+- App: IntelliJ run `JobagentApplication`, or `export JAVA_HOME=<jdk25 above>; ./mvnw spring-boot:run`.
+- Unit tests (no DB needed): `./mvnw -q test -Dtest='*Test'` (`JobagentApplicationTests` boots Spring and
+  would migrate the real DB, so it is excluded by this pattern).
+- DB: `docker exec -it rag-postgres psql -U postgres -d jobagent` (Docker Desktop must be running).
+- Endpoints: `GET /admin/companies[/{slug}]`, `GET /admin/crawl/{slug}/preview?limit&full`,
+  `POST /admin/crawl/{slug}`, `POST /admin/crawl` (all), `POST /admin/requirements/rebuild[?all=true]`,
+  `GET /admin/requirements/coverage`, `POST /admin/match?limit=` with a Profile JSON body.
+
+**Code map:** `company` (registry) · `crawl` (+ `crawl.adapter`: Greenhouse/Lever/SmartRecruiters/Ashby,
+JsonFields) · `geo` (Gazetteer, LocationParser) · `job` (NormalizedJob, JobRepository upsert) ·
+`requirements` (ExperienceExtractor, JobClassifier/JobFamily, DescriptionSections, SkillExtractor,
+Requirements{Repository,Service,Controller}) · `matching` (Profile, MatchCandidateRepository, MatchScorer,
+MatchService, MatchController) · `common` (CsvResource). Data: `resources/geo/*.csv`, `resources/classify/*.csv`.
+DB: Flyway V1-V7 (companies, jobs, job_requirements, function column).
+
+**Milestone 4 plan (MCP server), versions checked on Maven Central 2026-10-05:** Spring AI **2.0.1** (latest
+GA; built against Spring Boot 4.1.1; uses the MCP Java SDK 2.0.0). Use the Spring AI BOM
+(`org.springframework.ai:spring-ai-bom:2.0.1`, import scope) and the starter
+`spring-ai-starter-mcp-server-webmvc` (HTTP transport on our existing Tomcat; the plain
+`spring-ai-starter-mcp-server` is the stdio variant). Steps, one at a time, explained slowly:
+1. pom: BOM + starter (DONE 2026-10-05, jars downloaded) and `spring.ai.mcp.server.*` properties.
+   Finding: with no properties the server starts on the DEPRECATED SSE transport (`GET /sse` answers,
+   `/mcp` is 404), although the metadata claims `protocol=streamable`; the auto-config conditions check
+   `spring.ai.mcp.server.protocol` = SSE (the effective default) / STREAMABLE / STATELESS. So set
+   `protocol: STREAMABLE` explicitly. Annotations (package `org.springframework.ai.mcp.annotation`):
+   @McpTool, @McpToolParam, @McpPrompt, @McpArg, @McpResource (+ advanced: @McpProgress, @McpLogging,
+   @McpElicitation, @McpSampling, @McpComplete). `@Tool`/`@ToolParam` in spring-ai-model are for tools an
+   in-app LLM calls, not for MCP. Defaults: endpoint `/mcp`, type `sync`, annotation scanner enabled.
+   DONE: `application.yaml` has `spring.ai.mcp.server` name job-agent, version 0.1.0, protocol STREAMABLE,
+   instructions (incl. "never guess location, ask"). Handshake verified by hand with curl (JSON-RPC:
+   initialize -> Mcp-Session-Id header -> notifications/initialized -> tools/list -> tools/call; answers as
+   SSE `event:message` / `data:`).
+2. First tool: `list_companies` (smallest possible), connect Claude Code, call it. DONE 2026-10-05:
+   `mcp/CompanyTools` (@Component, @McpTool name/description/annotations hints, returns CompanySummary
+   records). Client config: `.mcp.json` in repo root (project scope, `{"type":"http","url":
+   "http://localhost:8080/mcp"}`), approved once via `claude` in the folder; `claude mcp list` shows
+   Connected. Works in new Claude Code sessions (desktop app Code tab or terminal) opened in this folder; the
+   desktop Settings > Connectors screen never lists project servers. Tomcat logs harmless macOS
+   "Error setting socket options ... setSoLinger ... Invalid argument" when clients drop connections early.
+3. `match_jobs(profile)`: tool + parameter descriptions; the description must tell Claude to ASK the user
+   for location preference, never infer it from the resume. DONE 2026-10-05: `mcp/JobTools.matchJobs` with
+   FLAT parameters (user chose option B): yearsOfExperience, skills (only required one), primaryLanguages,
+   preferredLocations, openToRemote, families (List<JobFamily> -> enum in the schema), limit (default 10,
+   max 25); builds a Profile and calls MatchService. Schema generated by Spring AI's McpJsonSchemaGenerator
+   (needs `-parameters`, which the Boot parent sets). A thrown IllegalArgumentException becomes an MCP tool
+   error (isError true, message duplicated by Spring AI). Verified over curl: 52 eligible, Paytm on top.
+   FIRST END-TO-END DEMO PASSED 2026-10-05 (new Claude Code session, desktop app): Claude ASKED for location
+   (choice UI) before calling match_jobs, sent 3 yrs / Java / 10 skills (all recognized), got 52 eligible,
+   and grouped results into strong fits (Paytm Backend TL/STL 81, Zscaler Sr. SDE 78), worth a look, and skip
+   (security/SIEM/Jira roles that only score from Java/AWS). Findings: (1) non-backend tech roles rank too
+   high for a backend profile (default families = all TECH); tune in M5 (families hint, specialization);
+   (2) Claude offered to "open the full description" -> needs get_job (step 4).
+4. `get_job(id)`: full description + extracted requirements; 5. `new_jobs_since(date, profile)`.
+6. `find-jobs` MCP prompt (read resume -> fill profile -> ask location -> call match_jobs -> explain).
+7. End-to-end demo with the user's resume.
+
+## 0b. Progress log
+Milestone 0 DONE (2026-10-04): DB `jobagent`, Flyway V1 (companies table, config jsonb) + V2
 (12 companies: greenhouse/lever/smartrecruiters/ashby), `company` package (Company record,
 CompanyRepository with JdbcClient + manual row mapper, CompanyController GET /admin/companies[/{slug}]).
 Milestone 1 in progress: V3 jobs table, `crawl` package (RawJob, RawLocation, JobBoardAdapter,

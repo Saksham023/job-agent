@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "job-agent": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}

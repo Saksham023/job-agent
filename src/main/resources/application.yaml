@@ -1,6 +1,15 @@
 spring:
   application:
     name: jobagent
+  ai:
+    mcp:
+      server:
+        name: job-agent
+        version: 0.1.0
+        protocol: STREAMABLE
+        instructions: >
+          Searches live job postings crawled from company careers sites in India and ranks them against
+          a candidate's profile. Never guess the candidate's location preference from their resume: ask.
 
   datasource:
     url: jdbc:postgresql://localhost:5433/jobagent
