@@ -96,6 +96,9 @@ public class ClaudeCliChatModel implements ChatModel {
                 "--strict-mcp-config",               // no MCP servers (none are passed)
                 "--disable-slash-commands",          // no skills
                 "--no-session-persistence"));        // do not save a session per call
+        if (!properties.thinking()) {
+            command.addAll(List.of("--settings", "{\"alwaysThinkingEnabled\":false}"));
+        }
         if (!system.isBlank()) {
             command.addAll(List.of("--system-prompt", system));
         }

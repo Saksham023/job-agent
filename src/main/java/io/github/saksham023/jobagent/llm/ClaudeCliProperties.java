@@ -14,13 +14,17 @@ import java.time.Duration;
  * @param timeout      how long one call may take before the process is killed
  * @param workDir      where the CLI runs; empty = a folder under the system temp dir. It must hold no CLAUDE.md
  *                     or .claude settings: the CLI reads those from its working directory
+ * @param thinking     let the model "think" (hidden reasoning) before answering. Off by default: Haiku thinks on
+ *                     its own otherwise, writing thousands of extra tokens per call (2-120 s instead of ~3 s) for
+ *                     short structured answers whose reasoning is already spelled out in the prompt
  */
 @ConfigurationProperties("jobagent.llm.claude-cli")
 public record ClaudeCliProperties(
         @DefaultValue("claude") String command,
         @DefaultValue("opus") String defaultModel,
         @DefaultValue("5m") Duration timeout,
-        @DefaultValue("") String workDir) {
+        @DefaultValue("") String workDir,
+        @DefaultValue("false") boolean thinking) {
 
     public Path workDirPath() {
         return workDir.isBlank()

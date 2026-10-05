@@ -36,7 +36,7 @@ class ClaudeCliChatModelTest {
                 + scriptBody + "\n");
         script.toFile().setExecutable(true);
         return new ClaudeCliChatModel(new ClaudeCliProperties(script.toString(), "opus", timeout,
-                dir.resolve("work").toString()), JsonMapper.builder().build());
+                dir.resolve("work").toString(), false), JsonMapper.builder().build());
     }
 
     @Test
@@ -93,7 +93,7 @@ class ClaudeCliChatModelTest {
     @Test
     void aMissingExecutableIsReportedClearly() {
         ClaudeCliChatModel model = new ClaudeCliChatModel(new ClaudeCliProperties(dir.resolve("nope").toString(),
-                "opus", Duration.ofSeconds(5), dir.toString()), JsonMapper.builder().build());
+                "opus", Duration.ofSeconds(5), dir.toString(), false), JsonMapper.builder().build());
 
         assertThatThrownBy(() -> model.call(new Prompt("hi")))
                 .isInstanceOf(ClaudeCliException.class)
@@ -121,5 +121,16 @@ class ClaudeCliChatModelTest {
         List<String> args = Files.readAllLines(dir.resolve("args.txt"));
         String sent = args.get(args.indexOf("--json-schema") + 1);
         assertThat(sent).doesNotContain("$schema").contains("\"enum\":[\"APPLY\",\"NO\"]");
+    }
+
+    @Test
+    void thinkingIsSwitchedOffUnlessConfigured() throws IOException {
+        ClaudeCliChatModel model = modelRunning("echo '{\"is_error\":false,\"result\":\"ok\"}'", Duration.ofSeconds(10));
+
+        model.call(new Prompt("hi"));
+
+        assertThat(Files.readAllLines(dir.resolve("args.txt"))).containsSubsequence("--settings", "{\"alwaysThinkingEnabled\":false}");
+        assertThat(new ClaudeCliChatModel(new ClaudeCliProperties("claude", "opus", Duration.ofSeconds(5), "", true),
+                JsonMapper.builder().build()).command("opus", "", null)).doesNotContain("--settings");
     }
 }

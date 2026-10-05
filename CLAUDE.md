@@ -97,9 +97,25 @@ below the cut to measure the real miss rate; answer keys for more profiles and c
 seniority and to required-vs-plus, so they never replace filters/rules/model; adopt them only if the answer keys
 show a recall gain. The user accepted today's misses (4 MAYBE one year above the window, Jira Admin in INFRA).
 
-**EXACT NEXT STEP:** cheap judge test: same harness with `model=haiku` on the same 287 jobs, compare with
-`eval/reference/saksham.csv` (agreement, APPLY recall, cost, latency); then Milestone 6 (Workday, Eightfold, Oracle)
-with the generalization check, where the scale plan above starts to matter. Local models later (ask before downloads).
+**Cheap-judge test DONE, then PARKED (2026-10-05, user's call):** Haiku with thinking ON (Claude Code default)
+wrote thousands of hidden tokens (20-120 s per job), so `ClaudeCliProperties.thinking` (default false) passes
+`--settings {"alwaysThinkingEnabled":false}`. Haiku no-thinking: 287 jobs, ~9 s/job, $2.0, agreement 95%, kappa 0.46,
+only 1/7 APPLY exact and 2 APPLY -> NO, because it botches the experience arithmetic (forgets 1.6 -> 2, the window);
+with thinking (180 jobs) kappa 0.85. Fix for later: compute window/overlap in code and put it in the prompt
+(models judge, code does math). Runs kept in eval/runs/*haiku*. Production latency plan (later): rules list shown
+instantly, top 10 judged first and updated live, Anthropic API instead of the CLI (no process start, high
+parallelism), verdict cache per (profile, job, rubric), optionally several jobs per call.
+
+**DECISION (2026-10-05, user):** use OPUS (ClaudeCliChatModel) for everything for now: the job judge AND filling
+extraction gaps the rules miss (years NONE/LOW, UNCLASSIFIED family, missing main language, skills). No local
+models or cheap-model testing until a working END-TO-END demo exists; single user, so scale/cost is fine even at
+8-10k jobs. Do not loop on evaluation; build the product.
+
+**EXACT NEXT STEP: the end-to-end demo.** (1) Judge inside the search: match_jobs -> rules shortlist (filters +
+score, configurable size) -> Opus verdicts, cached per (profile, job, rubric) in a DB table -> APPLY then MAYBE,
+each by rule score; plus a plain list export (company, title, link), paginated. (2) Opus extraction fallback in
+the requirements pipeline for the gaps above, storing the source (rules vs claude). (3) Then Milestone 6 (Workday,
+Eightfold, Oracle) for real volume. Agree the design of (1) with the user first.
 NOTE: Claude Code loads this file into EVERY session in this folder, including sessions where the user USES
 the job-agent tools. Keep it current (a stale "not built yet" here made a demo session work around a feature
 that existed), and remember a product session may take the user's profile from §1 instead of the resume.
