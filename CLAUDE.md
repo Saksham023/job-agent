@@ -69,12 +69,27 @@ Claude skipped the "confirm job families" step once (prompt guidance is not enfo
   look, 77 not for me); the pool was skewed to 5+ year roles (top 60 chosen without the years filter). User does NOT
   want more manual labeling. Baseline on these labels (SWE, v5 data): 4 of 6 "would apply" at ranks 1-4.
 
-**EXACT NEXT STEP:** model judge for a reference set (agreed direction, user's idea): a fixed rubric prompt via
-`claude -p` (ClaudeCliChatModel or a small runner) labels EVERY tech job for 3-4 different profiles (user, a Python
-data engineer, a frontend dev, a fresher) so ranking is not tailored to one user; validate the judge against the
-user's 100 labels (agreement, review disagreements once), freeze as reference, then compare Haiku and local models
-(ask before downloads) with the same harness; the best cheap one becomes the M5 re-ranker. Ask before the
-~290 claude -p calls per profile. Then: wider shortlist + re-rank, embeddings, extraction cascade.
+**Model judge DONE (2026-10-05, commit "Milestone 5 (part 2)"):** `llm/ClaudeCliChatModel` (Spring AI ChatModel over
+`claude -p`: empty work dir so no CLAUDE.md leaks in, tools/MCP/skills off, system prompt via --system-prompt, user
+text via stdin, schema via --json-schema with the `$schema` draft line REMOVED (the CLI's validator rejects draft
+2020-12), reads structured_output/result, usage -> DefaultUsage + costUsd; 3 virtual threads per call for the pipes),
+`eval/*` (Rubric, JudgeProfile, Judgment record = schema via BeanOutputConverter, JobJudge -> Result with tokens/cost,
+JudgeRunner: background run, Semaphore parallelism 1-4, one JSONL line per job, resumable, stops after 3 failures
+with no success; EvalReport: agreement, Cohen's kappa, table, disagreements, usage; EvalController
+`POST /admin/eval/judge?profile&model&limit&parallelism`, `GET /admin/eval/judge/status`, `GET /admin/eval/report?run`).
+App env (IntelliJ run config, never in git): `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`, also in ~/.zshrc)
+and `JOBAGENT_LLM_CLAUDECLI_COMMAND=/Users/saksham/.local/bin/claude`. Opus judged all 287 tech jobs for the user:
+7 APPLY / 9 MAYBE / 271 NO, ~$0.026 and ~4.8 s per job; user confirmed every APPLY/MAYBE and all 20 disagreements with
+their own labels ("Opus is right") -> frozen `eval/reference/saksham.csv`. A 529 Overloaded can happen: the CLI retries
+~100 s, our run records the failure, re-running retries only failed jobs. 160 unit tests.
+Baseline (rules ranking vs reference): P@10 APPLY 0.6 of max 0.7, APPLY+MAYBE 0.9, nDCG@10 0.89, 7/7 APPLY in top 25.
+
+**EXACT NEXT STEP (agree with the user):** (a) cheaper judges with the same harness: Haiku first (`model=haiku`),
+then local models (ask before downloads); measure agreement with the reference + cost/latency; (b) reference sets
+for 2-3 other profiles (Python data engineer, frontend dev, fresher) so ranking is not tuned to one user; (c)
+ranking fixes the baseline shows: the one-year-above-window MAYBE jobs are filtered out (consider window +2 with a
+score penalty, measured), Zscaler 188 (APPLY) ranks #12 vs its twin 187 at #2; then the model re-rank of a wider
+shortlist, embeddings.
 NOTE: Claude Code loads this file into EVERY session in this folder, including sessions where the user USES
 the job-agent tools. Keep it current (a stale "not built yet" here made a demo session work around a feature
 that existed), and remember a product session may take the user's profile from §1 instead of the resume.

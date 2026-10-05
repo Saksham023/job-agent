@@ -23,3 +23,21 @@ to validate that judge, not as the whole reference.
 Planned metrics: precision@10 (label 2 = relevant, and 1+ = relevant), nDCG@10 with gains 2/1/0, recall of
 label-2 jobs within the top 25, all for the same profile. Because the pool mixes top-ranked and random jobs,
 a new ranking that surfaces unlabeled jobs reports how many of its top 10 are unlabeled (label them, then re-score).
+
+## Model judge and reference set (2026-10-05)
+
+| File | What it is |
+|---|---|
+| `judge-rubric.md` | The judge's fixed instructions (rubric v2): role type, experience window (years -2..+1, one year above = MAYBE, more = NO), stack (no language preference). The text after `---` is the system prompt. |
+| `judge-profiles.json` | Candidates as the judge sees them (plain resume facts). Only `saksham` so far; add others to avoid tuning to one person. |
+| `runs/<date>-<model>-<profile>/judgments.jsonl` | One line per judged job: verdict, three sub-fits, reason, time, tokens, cost. Written by `POST /admin/eval/judge`, resumable. |
+| `reference/saksham.csv` | The frozen reference: Opus (rubric v2) on all 287 open tech + sales-engineering jobs, confirmed by the user (all APPLY/MAYBE and all 20 disagreements with labels.csv reviewed: Opus right). 7 APPLY, 9 MAYBE, 271 NO. |
+
+Judge vs the user's 100 blind labels: 80% agreement, kappa 0.29; 16 of the 20 differences were 5+ year roles the user
+had marked "worth a look" before deciding that 5+ years is a no, and the user confirmed Opus on all 20. Opus run:
+~4.8 s and ~$0.026 (API-equivalent) per job, 287 jobs in ~7.5 min at parallelism 3, $7.2 total.
+
+Baseline of the rule-based ranking against `reference/saksham.csv` (profile.json, families SOFTWARE_ENGINEERING, data
+extractor v7): P@10 APPLY 0.6 (0.7 is the maximum: only 7 APPLY exist), P@10 APPLY+MAYBE 0.9, nDCG@10 0.89, all 7
+APPLY in the top 25 (one at #12), 11 of 16 APPLY+MAYBE in the top 25; the 5 missing MAYBE jobs are filtered out by
+the experience window (they ask one year above it) or by family (Jira Administrator is INFRA_DEVOPS).

@@ -1,0 +1,13 @@
+[
+  {
+    "id": "saksham",
+    "description": "The user's own profile, from their resume (no name or contact details).",
+    "years": 1.6,
+    "mainLanguages": ["Java"],
+    "otherSkills": ["Python", "C#", ".NET", "Spring Boot", "Spring AI", "REST APIs", "Microservices", "Concurrency",
+                    "Distributed Systems", "Event-Driven Architecture", "Kafka", "AWS SQS", "Redis", "PostgreSQL",
+                    "pgvector", "DynamoDB", "MongoDB", "Cassandra", "Elasticsearch", "AWS S3", "CDC", "AI Agents",
+                    "MCP", "RAG", "JWT"],
+    "wants": "Backend, full-stack, or AI engineering roles (building LLM applications, agents, MCP servers, RAG). Open to anywhere in India and to remote roles."
+  }
+]

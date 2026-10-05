@@ -1,0 +1,291 @@
+# Reference labels for profile 'saksham' (eval/judge-profiles.json): every open tech + sales-engineering job
+# (287 on 2026-10-05), judged by Opus with rubric v2 (run eval/runs/2026-10-05-opus-saksham) and confirmed by
+# the user: all APPLY/MAYBE verdicts and all 20 disagreements with eval/labels.csv were reviewed, Opus was right.
+job_id,verdict,company,title
+187,APPLY,Zscaler,Sr. Software Development Engineer
+188,APPLY,Zscaler,Sr. Software Development Engineer
+701,APPLY,ServiceNow,Software Engineer (Cybersecurity Integrations) - Armis
+702,APPLY,ServiceNow,Software Engineer (Cybersecurity Integrations) - Armis
+822,APPLY,PhonePe,System Integrator
+1026,APPLY,Sarvam AI,"Backend Engineer, Chanakya"
+1069,APPLY,Sarvam AI,Agent Engineer
+153,MAYBE,Zscaler,Jira Administrator (Migration/Scripting/Integration)
+394,MAYBE,Paytm,Backend - Senior Software Engineer
+395,MAYBE,Paytm,Backend - TL/STL
+396,MAYBE,Paytm,Backend- Technical Lead
+710,MAYBE,ServiceNow,Software Engineer
+716,MAYBE,ServiceNow,Senior Applications Dev Engineer
+1035,MAYBE,Sarvam AI,"Strategic Deployment Engineer, Chanakya"
+1052,MAYBE,Sarvam AI,Backend Engineer - Studio Media Platform
+1063,MAYBE,Sarvam AI,Developer Relations Engineer - Developer Advocate
+16,NO,Databricks,AI Engineer - FDE (Forward Deployed Engineer)
+17,NO,Databricks,"AI Engineer, FDE (Forward Deployed Engineer)"
+19,NO,Databricks,Delivery Solutions Architect
+20,NO,Databricks,Deployment Strategist
+21,NO,Databricks,Deployment Strategist
+22,NO,Databricks,Director of Engineering
+23,NO,Databricks,Director of Engineering (Data Infrastructure)
+24,NO,Databricks,Engineering Manager - Backend
+25,NO,Databricks,Engineering Manager - Core Experiences
+26,NO,Databricks,Engineering Manager (Ingestion)
+30,NO,Databricks,"IT Software Engineer, Infrastructure"
+31,NO,Databricks,"Manager, Forward Deployed Engineering"
+37,NO,Databricks,SAP Functional SME
+38,NO,Databricks,Senior Engineering Manager - Backend
+40,NO,Databricks,Senior Forward Deployed Engineer
+43,NO,Databricks,Senior ML & AI Technical Solutions Engineer
+45,NO,Databricks,Senior SAP Developer
+46,NO,Databricks,Senior Software Engineer (App-Framework)
+47,NO,Databricks,Senior Software Engineer (App-Framework)
+48,NO,Databricks,Senior Software Engineer - Backend
+49,NO,Databricks,Senior Software Engineer (Backend)
+50,NO,Databricks,Senior Software Engineer - Data + AI Observability
+51,NO,Databricks,Senior Software Engineer - Data Platform
+52,NO,Databricks,Senior Software Engineer (Data Platform)
+53,NO,Databricks,Senior Software Engineer (Infra)
+54,NO,Databricks,Senior Software Engineer - Ingestion
+55,NO,Databricks,Senior Software Engineer (Money)
+56,NO,Databricks,Senior Software Engineer - Multi Cloud Efficiency
+57,NO,Databricks,Senior Software Engineer- Networking
+58,NO,Databricks,Senior Software Engineer - Observability
+59,NO,Databricks,Senior Software Engineer - Partner Ecosystem
+60,NO,Databricks,Senior Software Engineer - Search
+61,NO,Databricks,Senior Solutions Architect
+62,NO,Databricks,Senior Solutions Architect
+63,NO,Databricks,Senior Solutions Architect
+64,NO,Databricks,Senior Solutions Architect (Lakebase)
+65,NO,Databricks,Senior Solutions Engineer
+66,NO,Databricks,Senior Staff Software Engineer - Backend
+67,NO,Databricks,Senior Staff Software Engineer (Backend)
+68,NO,Databricks,Senior Staff Software Engineer (Backend)
+69,NO,Databricks,Senior Staff Software Engineer- Networking
+70,NO,Databricks,Senior Staff Software Engineer- Search Quality
+71,NO,Databricks,Solutions Architect
+72,NO,Databricks,Solutions Architect
+73,NO,Databricks,Solutions Architect - Core FSI
+74,NO,Databricks,Solutions Architect (Genie)
+75,NO,Databricks,Solutions Architect - Public Sector
+76,NO,Databricks,Specialist Solutions Architect - AI/ML
+77,NO,Databricks,Specialist Solutions Architect - AI/ML
+78,NO,Databricks,Sr Full Stack Developer (AI Agents)
+79,NO,Databricks,"Sr. Manager, AI Forward Deployed Engineering"
+80,NO,Databricks,"Sr. Manager -  BFSI, Field Engineering"
+82,NO,Databricks,"Sr. Recruiter, GTM – Field Engineering (Contract)"
+83,NO,Databricks,Sr Software Engineer - Backend
+84,NO,Databricks,Sr. Software Engineer - Observability
+85,NO,Databricks,Sr. Solutions Architect
+86,NO,Databricks,Sr Staff Software Engineer (Backend)
+87,NO,Databricks,Sr.Staff Software Engineer- Network Platform
+89,NO,Databricks,Staff Forward Deployed Engineer
+90,NO,Databricks,Staff Software Engineer
+91,NO,Databricks,Staff Software Engineer - Backend
+92,NO,Databricks,Staff Software Engineer (Core Experiences)
+93,NO,Databricks,Staff Software Engineer - Databases
+94,NO,Databricks,Staff Software Engineer - Data Platform
+95,NO,Databricks,Staff Software Engineer (Data Platform)
+96,NO,Databricks,Staff Software Engineer - Fullstack
+97,NO,Databricks,Staff Software Engineer (Infrastructure)
+98,NO,Databricks,Staff Software Engineer - Ingestion
+99,NO,Databricks,Staff Software Engineer - Ingestion
+100,NO,Databricks,Staff Software Engineer - Machine Learning (Search)
+101,NO,Databricks,Staff Software Engineer (Money)
+102,NO,Databricks,Staff Software Engineer - Multi Cloud Efficiency
+103,NO,Databricks,Staff Software Engineer- Networking
+104,NO,Databricks,Staff Software Engineer  - Partner Ecosystem
+105,NO,Databricks,Staff Software Engineer - Search Platform
+106,NO,Databricks,Staff Software Engineer- Search Quality
+107,NO,Databricks,Staff Software Engineer  (Search Ranking)
+118,NO,Razorpay,Engineering Manager
+119,NO,Razorpay,"Group Manager, Banking Solutions"
+123,NO,Razorpay,"Manager, Banking Solutions"
+130,NO,Razorpay,Senior Solutions Consultant
+132,NO,Razorpay,Technical Account Manager
+137,NO,Zscaler,"Deputy Manager, AI & Platform Engineer"
+141,NO,Zscaler,"Director, Professional Services & Consulting"
+143,NO,Zscaler,"Director, Site Reliability Engineering (Production Engineering)"
+156,NO,Zscaler,Principal Product Specialist (Browser Security/Web Security)
+157,NO,Zscaler,Principal Sales Engineer
+158,NO,Zscaler,Principal Software Development Engineer
+159,NO,Zscaler,Principal Software Development Engineer - Agentic Systems
+160,NO,Zscaler,Principal Software Development Engineer - Golang/Python + Networking
+161,NO,Zscaler,Principal Software Development Engineer - Rust
+162,NO,Zscaler,Principal Vulnerability Management Engineer
+166,NO,Zscaler,Sales Engineer - Enterprise
+169,NO,Zscaler,Senior Detection Engineer
+170,NO,Zscaler,Senior LMS Administrator
+172,NO,Zscaler,"Senior Manager, Software Development Engineering"
+173,NO,Zscaler,"Senior Manager, Software Development Engineering (Backend - Java)"
+174,NO,Zscaler,Senior Professional Services Consultant
+177,NO,Zscaler,Senior Sales Engineer - Enterprise
+178,NO,Zscaler,Senior Sales Engineer - Public Sector
+179,NO,Zscaler,Senior Sales Engineer - Public Sector
+180,NO,Zscaler,Senior Staff Platform Engineer
+181,NO,Zscaler,Senior Staff Site Reliability Engineer- Golang
+182,NO,Zscaler,Senior Staff Software Development Engineer
+183,NO,Zscaler,Senior Staff Software Engineer - C and IPSec
+189,NO,Zscaler,Sr. Software Development Engineer (Backend Dev - C/C++)
+190,NO,Zscaler,Sr. Software Development Engineer - Python Automation / Kubernetes / Networking
+191,NO,Zscaler,Sr. Staff Integration Engineer (Security Platform and Data Pipelines)
+192,NO,Zscaler,Sr. Staff Software Development Engineer
+193,NO,Zscaler,Sr. Staff Software Development Engineer (Backend Dev - C/C++)
+194,NO,Zscaler,Sr. Staff Software Development Engineer - Golang + Control Plane
+195,NO,Zscaler,Sr. Staff Software Development Engineer - Java/Go + Distributed Systems
+197,NO,Zscaler,Staff Information Systems Engineer
+198,NO,Zscaler,Staff Site Reliability Engineer (Linux/Network troubleshooting/Scripting)
+199,NO,Zscaler,Staff Software Applications Engineer
+200,NO,Zscaler,Staff Software Development Engineer
+201,NO,Zscaler,Staff Software Development Engineer
+202,NO,Zscaler,Staff Software Development Engineer
+203,NO,Zscaler,Staff Software Development Engineer
+204,NO,Zscaler,Staff Software Development Engineer
+205,NO,Zscaler,Staff Software Development Engineer
+206,NO,Zscaler,Staff Software Development Engineer - AI Engineer
+207,NO,Zscaler,Staff Software Development Engineer (Backend - Java/API)
+208,NO,Zscaler,Staff Software Development Engineer (Browser Extension/React)
+209,NO,Zscaler,Staff Software Development Engineer - Java + Distributed Systems
+210,NO,Zscaler,Staff Software Development Engineer - Java/Go + Distributed Systems
+211,NO,Zscaler,Staff Software Development Engineer - Python Automation + Networking
+212,NO,Zscaler,Staff Threat Researcher
+331,NO,Meesho,Associate Director - Commerce Platform
+332,NO,Meesho,Cluster Head  ( Security & Investigation)
+333,NO,Meesho,Cluster Head  ( Security & Investigation)
+338,NO,Meesho,Data Scientist III
+346,NO,Meesho,Director Data Science
+348,NO,Meesho,Engineering Manager -Backend
+349,NO,Meesho,Engineering Manager – AI Engineering
+350,NO,Meesho,Engineering Manager- Platform
+362,NO,Meesho,Principal Data Scientist
+366,NO,Meesho,Security Architect - AI-Powered Security Engineering
+369,NO,Meesho,Senior Manager - Commerce Platform
+377,NO,Meesho,Software Development Engineer III Data
+378,NO,Meesho,Software Development Engineer III DevOps
+475,NO,Paytm,Pre Sales - AI Solution Architect
+561,NO,Zeta,Cloud Network Engineer II
+564,NO,Zeta,"Director – Enterprise Applications, Integration, AI & IT Infrastructure"
+568,NO,Zeta,Lead / Manager Data Reliability Engineering
+569,NO,Zeta,Lead Site Reliability Engineer
+570,NO,Zeta,Lead Site Reliability Engineer
+574,NO,Zeta,Manager Site Reliability Engineer
+578,NO,Zeta,Product Security Engineer II
+579,NO,Zeta,SIEM & SecOps Engineer II
+664,NO,Freshworks,Principal Engineer - Machine Learning
+665,NO,Freshworks,Principal Engineer - Machine Learning
+666,NO,Freshworks,Staff Engineer - Machine Learning
+671,NO,Freshworks,Lead Software Engineer - Site Reliability
+672,NO,Freshworks,Principal Engineer - Systems
+673,NO,Freshworks,Senior Staff Engineer - Systems
+675,NO,Freshworks,Lead Software Engineer - Full Stack
+676,NO,Freshworks,Principal - Solution Engineering
+677,NO,Freshworks,Principal - Solution Engineering
+680,NO,Freshworks,"Senior Director, Engineering - AI Studio (CX & EX)"
+681,NO,Freshworks,Lead - Solution Engineer
+682,NO,Freshworks,Lead - Solution Engineer
+683,NO,Freshworks,Lead - Solution Engineer
+684,NO,Freshworks,Lead - Solution Engineer
+685,NO,Freshworks,Senior Analyst - Cybersecurity
+687,NO,Freshworks,Lead - Data Platform Engineering
+688,NO,Freshworks,Solution Architect
+690,NO,Freshworks,Senior Analyst - Cybersecurity Risk & Compliance
+693,NO,Freshworks,Lead Software Engineer - Full Stack
+694,NO,Freshworks,Staff Engineer - Full Stack
+696,NO,ServiceNow,Sr Platform Architect
+700,NO,ServiceNow,Sr Software Engineer - Cybersecurity Integrations (Armis)
+705,NO,ServiceNow,Senior Software Engineer- Full Stack
+706,NO,ServiceNow,Staff Software Engineer- Fullstack
+707,NO,ServiceNow,"Senior Software Engineer, DevOps - Moveworks (DevSecOps)"
+708,NO,ServiceNow,Principal Software Engineer - UI
+711,NO,ServiceNow,"Senior Research Scientist, Agent Evaluation"
+712,NO,ServiceNow,Staff Software Engineer
+714,NO,ServiceNow,"Staff Software Engineer  (GoLang, Kubernetes Operators, CRD)"
+715,NO,ServiceNow,Senior Research Engineer/Scientist
+717,NO,ServiceNow,Senior Workday Integration Developer
+718,NO,ServiceNow,Sr Staff Software Engineer
+719,NO,ServiceNow,Sr Staff Software Engineer
+721,NO,ServiceNow,Principal Software Engineer - AI Native UX
+722,NO,ServiceNow,Sr Staff Software Engineer
+723,NO,ServiceNow,"Dir, Software Engrg Mgmt"
+725,NO,ServiceNow,Advisory Solution Consultant
+727,NO,ServiceNow,"Staff Product Security Engineer, PSIRT"
+728,NO,ServiceNow,Sr Staff Software Engineer
+729,NO,ServiceNow,Principal Software Engineer
+730,NO,ServiceNow,Senior Staff Data Platform Software Engineer (Java Distributed Systems & Kafka)
+731,NO,ServiceNow,Sr Staff Software Engineer
+732,NO,ServiceNow,Principal Platform Architect
+734,NO,ServiceNow,Sr Software Engineer - Cloud Platform—Kubernetes Development
+735,NO,ServiceNow,Sr Staff Software Engineer
+736,NO,ServiceNow,Staff Software Engineer
+737,NO,ServiceNow,Senior Software AIML Engineer
+738,NO,ServiceNow,Staff Software AIML Engineer
+739,NO,ServiceNow,Staff Software Engineer
+740,NO,ServiceNow,Sr Staff Software Engineer
+741,NO,ServiceNow,"Sr Mgr, Systems Engrg Mgmt"
+743,NO,ServiceNow,Principal Software Engineer - Moveworks
+745,NO,ServiceNow,Sr Software Engineer - Kubernetes
+747,NO,ServiceNow,"Senior Staff Software Engineer, Moveworks"
+748,NO,ServiceNow,Staff Software Engineer (Armis)
+749,NO,ServiceNow,"Senior Manager, Product Security Testing"
+750,NO,ServiceNow,"Staff Software Engineer - Infrastructure,Kubernetes"
+752,NO,ServiceNow,Principal Platform Architect
+753,NO,ServiceNow,Principal Platform Architect
+757,NO,ServiceNow,Staff Data Engineer
+760,NO,ServiceNow,Senior DevOps Engineer
+761,NO,ServiceNow,Staff Data Engineer
+762,NO,ServiceNow,"Senior Technical Consultant (Technical Architect), Core Business Workflows"
+763,NO,ServiceNow,Sr Staff Software Engineer
+764,NO,ServiceNow,"Senior Technical Consultant (Technical Architect), Core Business Workflows"
+765,NO,ServiceNow,Advisory Solution Consultant
+766,NO,ServiceNow,Principal Platform Architect
+767,NO,ServiceNow,"Mgr, Software Engrg Mgmt"
+768,NO,ServiceNow,Advisory AI Foundry Architect
+769,NO,ServiceNow,Sr Staff Software Engineer - Moveworks
+770,NO,ServiceNow,Advisory Solution Consultant
+771,NO,ServiceNow,Advisory AI Foundry Architect
+779,NO,PhonePe,Product Solution Engineer (1 - 3 years)
+788,NO,PhonePe,Software Engineer (5-7) Lending
+793,NO,PhonePe,"Engineering Manager, Backend - Payments"
+794,NO,PhonePe,Site Reliability Engineer - On-Prem (1 to 4 Years)
+795,NO,PhonePe,"Engineering Manager, Backend - Lending"
+799,NO,PhonePe,"Engineering Manager, Backend - Central Platforms"
+830,NO,PhonePe,Software Engineer - React Native
+833,NO,PhonePe,"Engineering Manager, Backend - Insurance"
+834,NO,PhonePe,Site Reliability Engineer - AWS (4 to 8 Years)
+835,NO,PhonePe,Site Reliability Engineer - AWS (7 to 12 Years)
+836,NO,PhonePe,Site Reliability Engineer - On-Prem (4 to 8 Years)
+837,NO,PhonePe,Site Reliability Engineer - On-Prem (4 to 8 Years)
+838,NO,PhonePe,Software Engineer - SRE (Rust)
+839,NO,PhonePe,Site Reliability Engineer - On-Prem (4 to 8 Years)
+840,NO,PhonePe,Site Reliability Engineer - On-Prem (4 to 12 Years)
+849,NO,PhonePe,Site Reliability Engineer - Big Data (4 to 12 Years)
+852,NO,PhonePe,Head of Engineering - Backend
+853,NO,PhonePe,"Engineering Manager, Backend - Pune"
+855,NO,PhonePe,Engineering Manager - Platforms
+1024,NO,Sarvam AI,Solution Specialist
+1027,NO,Sarvam AI,"Data Scientist - Evaluations, Chanakya"
+1028,NO,Sarvam AI,"Embedded Data Scientist, Chanakya"
+1029,NO,Sarvam AI,"Embedded Infrastructure Engineer, Chanakya"
+1032,NO,Sarvam AI,Principal Security Engineer
+1034,NO,Sarvam AI,"Researcher, Vision"
+1036,NO,Sarvam AI,"ML Ops Engineer, Chanakya"
+1038,NO,Sarvam AI,"Frontend Engineer, Chanakya"
+1041,NO,Sarvam AI,Staff Data Engineer
+1042,NO,Sarvam AI,Solution Architect
+1043,NO,Sarvam AI,Principal Solution Architect
+1046,NO,Sarvam AI,"Staff Engineer, Product Infrastructure"
+1047,NO,Sarvam AI,"ML Researcher, Foundational Models"
+1048,NO,Sarvam AI,"ML Engineer (Data), Foundational Models"
+1049,NO,Sarvam AI,"Staff Engineer, API Platform"
+1054,NO,Sarvam AI,"Senior Performance Engineer, Intel Stack"
+1055,NO,Sarvam AI,"Performance Engineer, On-Device Inference"
+1056,NO,Sarvam AI,IT Lead
+1057,NO,Sarvam AI,Infrastructure SRE - HPC
+1058,NO,Sarvam AI,Platform Engineer - AI Infrastructure
+1060,NO,Sarvam AI,"Senior Backend Engineer, Vision"
+1061,NO,Sarvam AI,"Frontend Engineer, Vision"
+1064,NO,Sarvam AI,"Performance Engineer, Kernels"
+1065,NO,Sarvam AI,"Performance Engineer, Inference"
+1066,NO,Sarvam AI,Senior Frontend Engineer - Arya
+1067,NO,Sarvam AI,DevOps Engineer
+1068,NO,Sarvam AI,Deployment Strategist
+1070,NO,Sarvam AI,Technical Partner Enablement Manager
+1074,NO,Sarvam AI,"Staff Engineer - Mobile, Desktop & KMP"
+1081,NO,Sarvam AI,Staff Software Engineer - Frontend
