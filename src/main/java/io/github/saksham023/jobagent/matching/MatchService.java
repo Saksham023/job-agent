@@ -10,6 +10,7 @@ import io.github.saksham023.jobagent.requirements.SkillExtractor;
 import io.github.saksham023.jobagent.requirements.SkillExtractor.SkillName;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -32,10 +33,11 @@ public class MatchService {
      * @param profile          what the input was understood as (canonical names), so the caller can check it
      * @param unknownSkills    profile skills the dictionary does not know (ignored for scoring)
      * @param unknownLocations profile places the gazetteer does not know (ignored for filtering)
+     * @param postedSince      the "posted since" filter that was applied, or null
      * @param eligible         jobs that passed the hard filters, before ranking
      */
     public record MatchResponse(ResolvedProfile profile, List<String> unknownSkills, List<String> unknownLocations,
-                                int eligible, List<Match> matches) {
+                                Instant postedSince, int eligible, List<Match> matches) {
     }
 
     private final MatchCandidateRepository repository;
@@ -54,6 +56,11 @@ public class MatchService {
     }
 
     public MatchResponse match(Profile profile, int limit) {
+        return match(profile, limit, null);
+    }
+
+    /** @param postedSince only jobs posted at or after this instant ("what is new"), or null for all open jobs */
+    public MatchResponse match(Profile profile, int limit, Instant postedSince) {
         List<String> unknownSkills = new ArrayList<>();
         List<String> unknownLocations = new ArrayList<>();
 
@@ -90,7 +97,7 @@ public class MatchService {
 
         List<Candidate> candidates = repository.find(new Criteria(COUNTRY,
                 profile.families().stream().map(JobFamily::name).toList(), List.copyOf(cities),
-                profile.openToRemote(), profile.yearsOfExperience(), UNDERQUALIFIED_BY, OVERQUALIFIED_BY));
+                profile.openToRemote(), profile.yearsOfExperience(), UNDERQUALIFIED_BY, OVERQUALIFIED_BY, postedSince));
 
         List<Match> ranked = candidates.stream()
                 .map(candidate -> scorer.score(candidate, resolved))
@@ -98,7 +105,7 @@ public class MatchService {
                 .limit(limit)
                 .toList();
 
-        return new MatchResponse(resolved, List.copyOf(unknownSkills), List.copyOf(unknownLocations),
+        return new MatchResponse(resolved, List.copyOf(unknownSkills), List.copyOf(unknownLocations), postedSince,
                 candidates.size(), ranked);
     }
 

@@ -6,6 +6,10 @@ import org.springframework.stereotype.Repository;
 import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 
@@ -15,9 +19,12 @@ import java.util.List;
 @Repository
 public class MatchCandidateRepository {
 
-    /** One eligible job: the fields shown to the user plus the extracted requirements. */
+    /**
+     * One eligible job: the fields shown to the user plus the extracted requirements. postedAt is the platform's
+     * publish date, or when our crawler first saw the job if the platform gives none.
+     */
     public record Candidate(long jobId, String company, String title, String url, List<String> cities,
-                            boolean remote, Integer minYears, Integer maxYears, String family,
+                            boolean remote, Instant postedAt, Integer minYears, Integer maxYears, String family,
                             List<String> secondaryFamilies, List<String> requiredSkills, List<String> preferredSkills, List<String> primaryLanguages) {
     }
 
@@ -26,17 +33,20 @@ public class MatchCandidateRepository {
      * @param years              the candidate's years of experience, or null to skip the experience filter
      * @param underqualifiedBy   how many years below a job's minimum still count as eligible
      * @param overqualifiedBy    how many years above a job's maximum still count as eligible
+     * @param postedSince        only jobs posted at or after this instant, or null for all open jobs
      */
     public record Criteria(String countryCode, List<String> families, List<String> cities, boolean openToRemote,
-                           Integer years, int underqualifiedBy, int overqualifiedBy) {
+                           Integer years, int underqualifiedBy, int overqualifiedBy, Instant postedSince) {
     }
 
     /**
      * Open jobs in the country whose primary OR secondary family is one asked for (recall first); in one of the cities, or remote (when acceptable), or
-     * with no city at all ("India" only); and whose years range fits. Unknown years never exclude a job.
+     * with no city at all ("India" only); whose years range fits; and, when asked, posted since a date.
+     * Unknown years never exclude a job.
      */
     private static final String SELECT_CANDIDATES = """
             SELECT j.id, c.name AS company, j.title, j.url, j.cities, j.remote,
+                   coalesce(j.posted_at, j.first_seen_at) AS posted_at,
                    r.min_years, r.max_years, r.family, r.secondary_families, r.required_skills, r.preferred_skills, r.primary_languages
             FROM jobs j
             JOIN companies c ON c.id = j.company_id
@@ -51,6 +61,8 @@ public class MatchCandidateRepository {
               AND (CAST(:years AS integer) IS NULL
                    OR ((r.min_years IS NULL OR CAST(:years AS integer) >= r.min_years - :under)
                        AND (r.max_years IS NULL OR CAST(:years AS integer) <= r.max_years + :over)))
+              AND (CAST(:postedSince AS timestamptz) IS NULL
+                   OR coalesce(j.posted_at, j.first_seen_at) >= CAST(:postedSince AS timestamptz))
             """;
 
     private final JdbcClient jdbc;
@@ -69,6 +81,8 @@ public class MatchCandidateRepository {
                 .param("years", criteria.years())
                 .param("under", criteria.underqualifiedBy())
                 .param("over", criteria.overqualifiedBy())
+                .param("postedSince", criteria.postedSince() == null ? null
+                        : OffsetDateTime.ofInstant(criteria.postedSince(), ZoneOffset.UTC))
                 .query(this::mapRow)
                 .list();
     }
@@ -81,6 +95,7 @@ public class MatchCandidateRepository {
                 rs.getString("url"),
                 strings(rs.getArray("cities")),
                 rs.getBoolean("remote"),
+                instant(rs.getTimestamp("posted_at")),
                 rs.getObject("min_years", Integer.class),
                 rs.getObject("max_years", Integer.class),
                 rs.getString("family"),
@@ -88,6 +103,10 @@ public class MatchCandidateRepository {
                 strings(rs.getArray("required_skills")),
                 strings(rs.getArray("preferred_skills")),
                 strings(rs.getArray("primary_languages")));
+    }
+
+    private static Instant instant(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toInstant();
     }
 
     /** A Postgres text[] as a Java list (never null). */

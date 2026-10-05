@@ -9,7 +9,7 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
-**State (2026-10-05):** Milestones 0-3 DONE; Milestone 4 steps 1-4 and 6 DONE (+ skills and classifier passes). Commits:
+**State (2026-10-05):** Milestones 0-4 DONE (M4 incl. skills dictionary, implications, recall-first classifier). Commits:
 `c517f86` M0, `627fd80` M1, `a562604` M2, `2a3baa1` M3, `ac70084` M4 part 1 (MCP server, list_companies,
 match_jobs), then M4 part 2 (get_job). 12 companies on 4 platforms, 706 India jobs, all with requirements
 (extractor v2). MCP server live at `http://localhost:8080/mcp` with 3 tools: `list_companies`,
@@ -39,10 +39,26 @@ Specialization AI_ENGINEERING (LLM apps, agents) vs ML_AI (models; research scie
 MIN_SKILLS_COUNTED = 4. EXTRACTOR_VERSION=5; 706 rebuilt, 56 jobs with secondaries. User's search: 17 -> 23
 eligible, Jira/IT support gone, top 4 unchanged, ServiceNow Armis (SECURITY also SWE) found. 125 unit tests.
 
-**EXACT NEXT STEP:** M4 step 5 `new_jobs_since(date, profile)`: match_jobs restricted to jobs first seen after
-a date (jobs.first_seen_at, index jobs_open_first_seen_idx exists). Then M4 wrap-up (final demo in a fresh
-session, docs), then Milestone 5 (labeled set, wider shortlist + model re-rank incl. "allow 50", embeddings,
-extraction cascade). Rules ideas left: dedup of identical postings (ServiceNow Armis pair) is M7.
+**M4 step 5 DONE (2026-10-05) as a PARAMETER, not a separate tool:** `match_jobs` has optional `postedSince`
+(YYYY-MM-DD, India time; `JobTools.startOfDayInIndia`) and every result carries `postedAt` = the platform's
+publish date (Greenhouse first_published, Lever createdAt, Ashby publishedAt, SmartRecruiters releasedDate),
+falling back to `first_seen_at` (which is the first crawl, Oct 4-5, for all current jobs, so useless for "new").
+Admin: `POST /admin/match?postedSince=`. Real data (user's profile): 23 eligible, 7 since Sep 1, 2 since Oct 1.
+
+**MILESTONE 4 DONE (2026-10-05).** Final demo in a clean folder (`~/job-search`, server added with
+`claude mcp add --transport http --scope user job-agent http://localhost:8080/mcp`): /mcp__job-agent__find-jobs
+-> resume read (1.6 yrs, Java primary, full skill list) -> asked location + remote -> match_jobs -> Paytm TL 82,
+Zscaler SDE 69, Paytm SSE 68, Sarvam Backend 73; Claude flagged July-2025 postings as possibly stale (postedAt).
+Claude skipped the "confirm job families" step once (prompt guidance is not enforcement). 128 unit tests.
+
+**EXACT NEXT STEP:** Milestone 5 (quality). Plan to agree with the user first, in this order: (1) labeled
+set: user marks ~100 jobs fit / not fit (spread across companies, oversample MEDIUM/LOW/UNCLASSIFIED) to get
+precision@10 for every ranking change; (2) wider shortlist (~50) + model re-rank, user sees top N, allow >25 on
+request; (3) embeddings for fuzzy skill/role similarity (ask before downloading any model); (4) extraction
+cascade (rules -> local model -> Claude) with the bake-off. Use product sessions from ~/job-search, not this repo.
+NOTE: Claude Code loads this file into EVERY session in this folder, including sessions where the user USES
+the job-agent tools. Keep it current (a stale "not built yet" here made a demo session work around a feature
+that existed), and remember a product session may take the user's profile from §1 instead of the resume.
 
 **How we work (user preferences, keep following them):**
 - User types/pastes all NEW code; Claude creates the empty file first (`touch`), then gives the whole file
@@ -417,8 +433,8 @@ resume ──> embeddings ──> candidate shortlist (vector) ──> LLM re-ra
    exclude a job. The `seniority` column in job_requirements stays unused (nullable).
 3. Matching v1 (no LLM, no embeddings): profile record, experience hard filter, weighted skill score,
    score breakdown; REST endpoint to test it.
-4. MCP server (Spring AI MCP server starter): match_jobs, get_job, new_jobs_since, list_companies + a
-   `find-jobs` prompt. Connect Claude Code. FIRST END-TO-END DEMO.
+4. MCP server (Spring AI MCP server starter): match_jobs (with postedSince), get_job, list_companies + a
+   `find-jobs` prompt. Connect Claude Code. FIRST END-TO-END DEMO. DONE 2026-10-05.
 5. Quality: ClaudeCliChatModel (custom Spring AI ChatModel over `claude -p`) for extraction leftovers,
    local embeddings + PgVectorStore (ask before download), labeled eval set, keyword vs hybrid numbers.
    Build the extraction cascade (see §8 "Extraction cascade"), including the local-model bake-off.

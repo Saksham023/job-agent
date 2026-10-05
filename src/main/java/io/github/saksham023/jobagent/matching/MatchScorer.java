@@ -4,6 +4,7 @@ import io.github.saksham023.jobagent.matching.MatchCandidateRepository.Candidate
 import io.github.saksham023.jobagent.matching.SkillImplications.Implied;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -72,7 +73,7 @@ public class MatchScorer {
 
     /** One ranked job with everything needed to explain it. */
     public record Match(long jobId, int score, String company, String title, String url, List<String> cities,
-                        boolean remote, Integer minYears, Integer maxYears, String family,
+                        boolean remote, Instant postedAt, Integer minYears, Integer maxYears, String family,
                         List<String> secondaryFamilies, List<String> matchedRequired, List<String> missingRequired, List<String> matchedPreferred,
                         List<String> reasons) {
     }
@@ -99,6 +100,7 @@ public class MatchScorer {
                 + EXPERIENCE_WEIGHT * experience);
 
         return new Match(job.jobId(), score, job.company(), job.title(), job.url(), job.cities(), job.remote(),
+                job.postedAt(),
                 job.minYears(), job.maxYears(), job.family(), job.secondaryFamilies(), matchedRequired, missingRequired, matchedPreferred,
                 List.copyOf(reasons));
     }

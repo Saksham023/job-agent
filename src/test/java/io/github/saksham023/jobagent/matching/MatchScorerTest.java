@@ -25,7 +25,7 @@ class MatchScorerTest {
 
     private static Candidate job(List<String> required, List<String> preferred, List<String> languages,
                                  Integer minYears, Integer maxYears, List<String> cities, boolean remote) {
-        return new Candidate(1, "Acme", "Backend Engineer", "https://example.com/1", cities, remote,
+        return new Candidate(1, "Acme", "Backend Engineer", "https://example.com/1", cities, remote, null,
                 minYears, maxYears, "SOFTWARE_ENGINEERING", List.of(), required, preferred, languages);
     }
 

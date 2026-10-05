@@ -10,6 +10,10 @@ import org.springframework.ai.mcp.annotation.McpTool;
 import org.springframework.ai.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 /**
@@ -24,6 +28,9 @@ public class JobTools {
 
     /** Some postings are ~20,000 characters; tool output goes straight into Claude's context. */
     static final int MAX_DESCRIPTION_CHARS = 12_000;
+
+    /** Dates from the user ("since Monday") mean Indian days. */
+    static final ZoneId INDIA = ZoneId.of("Asia/Kolkata");
 
     /** get_job's answer: the stored job, with the description cut to MAX_DESCRIPTION_CHARS if needed. */
     public record JobView(JobDetails job, boolean descriptionTruncated) {
@@ -44,7 +51,8 @@ public class JobTools {
                     skills and short reasons for each job. Fill the arguments from the candidate's resume \
                     (experience, skills, languages). Do NOT fill preferredLocations from the resume's address: \
                     first ask the candidate whether they have a location preference. Explain the top results \
-                    using matchedRequired, missingRequired and reasons, and share each job's url.""",
+                    using matchedRequired, missingRequired and reasons, and share each job's url. For "what is \
+                    new since <date>" questions, pass postedSince; each job's postedAt tells how fresh it is.""",
             annotations = @McpTool.McpAnnotations(title = "Match jobs", readOnlyHint = true,
                     destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public MatchResponse matchJobs(
@@ -66,7 +74,10 @@ public class JobTools {
                     + "SOFTWARE_ENGINEERING). Default: all engineering families.")
             List<JobFamily> families,
             @McpToolParam(required = false, description = "How many ranked jobs to return, 1 to 25. Default 10.")
-            Integer limit) {
+            Integer limit,
+            @McpToolParam(required = false, description = "Only jobs posted on or after this date, YYYY-MM-DD "
+                    + "(India time), e.g. for \"what is new since Monday\". Omit for all open jobs.")
+            String postedSince) {
 
         if (yearsOfExperience != null && (yearsOfExperience < 0 || yearsOfExperience > 50)) {
             throw new IllegalArgumentException("yearsOfExperience must be between 0 and 50");
@@ -74,7 +85,19 @@ public class JobTools {
         Profile profile = new Profile(yearsOfExperience, skills, primaryLanguages, preferredLocations,
                 openToRemote, families);
         int size = limit == null ? DEFAULT_LIMIT : Math.min(Math.max(limit, 1), MAX_LIMIT);
-        return matchService.match(profile, size);
+        return matchService.match(profile, size, startOfDayInIndia(postedSince));
+    }
+
+    /** "2026-10-01" -> midnight of that day in India; null or blank -> null (no date filter). */
+    static Instant startOfDayInIndia(String date) {
+        if (date == null || date.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(date.strip()).atStartOfDay(INDIA).toInstant();
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("postedSince must be a date like 2026-10-01, got: " + date);
+        }
     }
 
     @McpTool(
