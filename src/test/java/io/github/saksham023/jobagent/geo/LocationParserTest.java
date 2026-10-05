@@ -211,6 +211,14 @@ class LocationParserTest {
     }
 
     @Test
+    void virtualMeansRemote() {
+        ParsedLocation location = single("Virtual India");
+
+        assertThat(location.remote()).isTrue();
+        assertThat(location.countryCode()).isEqualTo("IN");
+    }
+
+    @Test
     void remoteAloneIsUnresolvedButRemote() {
         ParsedLocation location = single("Remote");
 

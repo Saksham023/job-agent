@@ -44,6 +44,14 @@ public class RequirementsRepository {
             ORDER BY j.id
             """;
 
+    /** Every open posting of one company, for finding its boilerplate lines. */
+    private static final String SELECT_COMPANY_POSTINGS = """
+            SELECT j.title, j.description
+            FROM jobs j
+            JOIN companies c ON c.id = j.company_id
+            WHERE j.closed_at IS NULL AND c.name = :company
+            """;
+
     private static final String UPSERT = """
             INSERT INTO job_requirements (job_id, extractor_version,
                                           min_years, max_years, preferred_min_years, years_evidence, years_confidence,
@@ -96,6 +104,13 @@ public class RequirementsRepository {
                         rs.getString("description"),
                         rs.getString("employment_type"),
                         rs.getString("company_name")))
+                .list();
+    }
+
+    public List<CompanyBoilerplate.Posting> companyPostings(String companyName) {
+        return jdbc.sql(SELECT_COMPANY_POSTINGS)
+                .param("company", companyName)
+                .query((rs, rowNum) -> new CompanyBoilerplate.Posting(rs.getString("title"), rs.getString("description")))
                 .list();
     }
 

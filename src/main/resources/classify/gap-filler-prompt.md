@@ -1,8 +1,9 @@
-# Requirements gap filler: prompt v1
+# Requirements gap filler: prompt v2
 
 Read by GapFillPrompt. Everything after the "---" line is the system prompt sent to the model with every job;
-the part above explains the file to people. Bump the version in the title whenever the instructions change:
-jobs filled with an older version are asked again on the next fill run. Every JobFamily and Specialization
+the part above explains the file to people. Bump the version in the title whenever the instructions change; it is
+stored with every fill. Jobs already answered are NOT asked again automatically (only a changed posting is).
+v2: HARDWARE_ENGINEERING added. Every JobFamily and Specialization
 value and every LANGUAGE in skills.csv must appear below (GapFillPromptTest checks it).
 
 ---
@@ -27,6 +28,8 @@ the posting. Never guess, never use outside knowledge about the company.
 - INFRA_DEVOPS: cloud, DevOps, SRE, platform, networks, database administration, IT infrastructure.
 - SECURITY: security engineering, application security, security operations, security research.
 - QA: software testing and test automation.
+- HARDWARE_ENGINEERING: chip and board design: ASIC, RTL, design verification, physical design, analog, DFT,
+  post-silicon validation, layout, PCB.
 - ENG_MANAGEMENT: managers and directors who lead engineering teams.
 - SALES_ENGINEERING: technical pre-sales and customer-facing engineers: sales / solutions engineers, solution
   architects and consultants who support selling or rolling out a product, technical account managers.

@@ -32,6 +32,10 @@ jobagent:
     years-below: 2        # default experience window: a job's range must reach down to years - 2 ...
     years-above: 1        # ... and start at most years + 1 (2 years -> jobs overlapping 0 to 3)
     round-up-from: 0.5    # 1.5 years -> 2, 1.4 -> 1
+  gap-fill:
+    # Opus fills missing fields (years, family, main language) only for jobs in these families (primary or
+    # secondary). Every job is still crawled and run through the rules; other families just keep their gaps.
+    families: [SOFTWARE_ENGINEERING, DATA_ML, INFRA_DEVOPS, UNCLASSIFIED]
 
 server:
   port: 8080

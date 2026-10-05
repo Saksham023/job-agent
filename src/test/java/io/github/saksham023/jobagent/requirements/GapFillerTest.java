@@ -152,7 +152,7 @@ class GapFillerTest {
     @Test
     void promptNamesEveryFamilySpecializationAndLanguage() {
         GapFillPrompt prompt = GapFillPrompt.load();
-        assertThat(prompt.version()).isEqualTo("v1");
+        assertThat(prompt.version()).isEqualTo("v2");
         assertThat(prompt.instructions()).doesNotContain("GapFillPromptTest");      // the header is not sent
         for (JobFamily family : JobFamily.values()) {
             assertThat(prompt.instructions()).contains("- " + family.name() + ":");

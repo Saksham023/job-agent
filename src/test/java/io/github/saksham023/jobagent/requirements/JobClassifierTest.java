@@ -32,6 +32,40 @@ class JobClassifierTest {
     }
 
     @Test
+    void chipDesignIsHardwareNotSoftware() {
+        assertThat(classify("ASIC Design and STA Engineer", "Engineering").family()).isEqualTo(JobFamily.HARDWARE_ENGINEERING);
+        assertThat(classify("Senior Verification Engineer, PCIE", "Engineering").family()).isEqualTo(JobFamily.HARDWARE_ENGINEERING);
+        assertThat(classify("SRAM QA Engineer", "R&D (JFG)").family()).isEqualTo(JobFamily.HARDWARE_ENGINEERING);
+        assertThat(classify("ASIC Methodology, Flow and Integration Engineer", "Engineering").family())
+                .isEqualTo(JobFamily.HARDWARE_ENGINEERING);
+        assertThat(classify("Memory Layout Manager", "Silicon Hardware Engineering").family())
+                .isEqualTo(JobFamily.HARDWARE_ENGINEERING);
+    }
+
+    @Test
+    void softwareJobsThatMentionHardwareStaySoftware() {
+        assertThat(classify("Senior System Software Engineer - GPU and SOC", "Engineering").family())
+                .isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(classify("Software Verification Engineer", "Engineering").family())
+                .isNotEqualTo(JobFamily.HARDWARE_ENGINEERING);
+        assertThat(classify("Sr. SW Engineer - Software & Hardware QA Automation", "Engineering & Technology").family())
+                .isNotEqualTo(JobFamily.HARDWARE_ENGINEERING);
+    }
+
+    @Test
+    void hardwareIsNotATechFamilyAndGetsNoSoftwareFromTheDepartment() {
+        Classification asic = classify("ASIC Verification Engineer", "Engineering");
+        assertThat(JobFamily.HARDWARE_ENGINEERING.isTech()).isFalse();          // not in default software searches
+        assertThat(asic.secondaryFamilies()).doesNotContain(JobFamily.SOFTWARE_ENGINEERING);
+    }
+
+    @Test
+    void technicalConsultingIsSalesEngineering() {
+        assertThat(classify("Manager, Technical Consulting-Health Domain", "Customer Success").family())
+                .isEqualTo(JobFamily.SALES_ENGINEERING);
+    }
+
+    @Test
     void specificEngineeringRolesBeatTheGenericWordEngineer() {
         assertThat(classify("Solutions Architect (Genie)", "Field Engineering - Other").family())
                 .isEqualTo(JobFamily.SALES_ENGINEERING);

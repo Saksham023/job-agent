@@ -38,6 +38,14 @@ class ExperienceExtractorTest {
     }
 
     @Test
+    void rangeWithYearsOnBothNumbers() {
+        Experience e = fromDescription("Required Experience (8 years to 18 years):");
+
+        assertThat(e.minYears()).isEqualTo(8);
+        assertThat(e.maxYears()).isEqualTo(18);
+    }
+
+    @Test
     void lowerBoundWords() {
         assertThat(fromDescription("- Minimum 4 years of auditing source code").minYears()).isEqualTo(4);
         assertThat(fromDescription("- At least 3 years of experience with Java").minYears()).isEqualTo(3);

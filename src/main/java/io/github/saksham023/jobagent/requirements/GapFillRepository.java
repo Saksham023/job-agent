@@ -24,8 +24,8 @@ public class GapFillRepository {
     }
 
     /**
-     * Open jobs in the scope families (or UNCLASSIFIED) that have a gap and no stored answer for this version of
-     * the posting and of the prompt.
+     * Open jobs whose family or a secondary family is in scope, that have a gap and no stored answer for this
+     * version of the posting. A newer prompt version does not re-ask: delete the rows to ask again.
      */
     private static final String SELECT_JOBS_WITH_GAPS = """
             SELECT j.id, j.title, j.department, j.function, j.description, j.employment_type,
@@ -36,14 +36,11 @@ public class GapFillRepository {
             FROM jobs j
             JOIN companies c ON c.id = j.company_id
             JOIN job_requirements r ON r.job_id = j.id
-            LEFT JOIN job_gap_fills f ON f.job_id = j.id
-                                     AND f.content_hash = j.content_hash
-                                     AND f.prompt_version = :promptVersion
+            LEFT JOIN job_gap_fills f ON f.job_id = j.id AND f.content_hash = j.content_hash
             WHERE j.closed_at IS NULL
               AND j.country_codes @> ARRAY[CAST(:country AS text)]
               AND f.job_id IS NULL
-              AND (r.family = ANY(:families) OR r.secondary_families && CAST(:families AS text[])
-                   OR r.family = 'UNCLASSIFIED')
+              AND (r.family = ANY(:families) OR r.secondary_families && CAST(:families AS text[]))
               AND (r.years_confidence IN ('NONE', 'LOW') OR r.family = 'UNCLASSIFIED'
                    OR cardinality(r.primary_languages) = 0)
             ORDER BY j.id
@@ -106,10 +103,9 @@ public class GapFillRepository {
         this.jsonMapper = jsonMapper;
     }
 
-    /** @param families the job families in scope (names), besides UNCLASSIFIED */
-    public List<GapJob> findJobsWithGaps(String promptVersion, String country, String[] families) {
+    /** @param families the job families in scope (names; include UNCLASSIFIED to ask about unclassified jobs) */
+    public List<GapJob> findJobsWithGaps(String country, String[] families) {
         return jdbc.sql(SELECT_JOBS_WITH_GAPS)
-                .param("promptVersion", promptVersion)
                 .param("country", country)
                 .param("families", families)
                 .query((rs, rowNum) -> new GapJob(

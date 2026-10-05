@@ -8,12 +8,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Runs the three rule-based extractors (experience, family, skills) over jobs and stores the results.
+ * Runs the three rule-based extractors (experience, family, skills) over jobs and stores the results. Each
+ * company's boilerplate lines (CompanyBoilerplate: intro, benefits, legal text) are removed first.
  * Bump EXTRACTOR_VERSION whenever a rule or data file changes, so the next rebuild re-extracts every job.
  * Gaps the rules leave are filled by a model in a separate run (GapFillRunner); a rebuild re-applies those stored
  * fills, so it never costs a model call.
@@ -26,8 +29,9 @@ public class RequirementsService {
     /**
      * 1 = the rules and dictionaries of Milestone 2 (2026-10-05).
      * 2 = shared section detection (intro sections skipped for experience), skills after a slash ("Python/Java").
+     * 8 = company boilerplate lines skipped, HARDWARE_ENGINEERING family, "8 years to 18 years" ranges (Workday).
      */
-    public static final int EXTRACTOR_VERSION = 7;
+    public static final int EXTRACTOR_VERSION = 8;
 
     private static final Pattern INTERN = Pattern.compile("(?i)\\b(?:intern(?:ship)?|trainee|apprentice)\\b");
     private static final Pattern CONTRACT = Pattern.compile("(?i)\\b(?:contract|contractor|temporary|freelance)\\b");
@@ -62,9 +66,12 @@ public class RequirementsService {
 
         int extracted = 0;
         int skipped = 0;
+        Map<String, CompanyBoilerplate> boilerplateByCompany = new HashMap<>();
         for (JobText job : jobs) {
             try {
-                extract(job);
+                CompanyBoilerplate boilerplate = boilerplateByCompany.computeIfAbsent(job.companyName(),
+                        company -> CompanyBoilerplate.of(repository.companyPostings(company)));
+                extract(job, boilerplate);
                 extracted++;
             } catch (RuntimeException e) {
                 skipped++;
@@ -77,10 +84,12 @@ public class RequirementsService {
         return new RebuildResult(extracted, skipped, elapsedMs);
     }
 
-    private void extract(JobText job) {
-        Experience experience = experienceExtractor.extract(job.title(), job.description(), job.employmentType());
-        Classification classification = jobClassifier.classify(job.title(), job.department(), job.function(), job.description());
-        Skills skills = skillExtractor.extract(job.title(), job.description(), job.companyName());
+    /** @param boilerplate the company's repeated lines, skipped by every extractor */
+    private void extract(JobText job, CompanyBoilerplate boilerplate) {
+        String description = boilerplate.strip(job.description());
+        Experience experience = experienceExtractor.extract(job.title(), description, job.employmentType());
+        Classification classification = jobClassifier.classify(job.title(), job.department(), job.function(), description);
+        Skills skills = skillExtractor.extract(job.title(), description, job.companyName());
         repository.upsert(job.jobId(), EXTRACTOR_VERSION, experience, classification, skills,
                 employmentType(job.employmentType(), job.title()));
         gapFills.reapply(job.jobId());              // the rules reset the model's fills; put them back (no new call)

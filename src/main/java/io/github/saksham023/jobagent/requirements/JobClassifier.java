@@ -136,10 +136,13 @@ public class JobClassifier {
                                                      Optional<Hit<JobFamily>> department,
                                                      Optional<Hit<JobFamily>> description,
                                                      List<KeywordCount> keywordCounts, List<String> reasons) {
-        if (!family.isTech() && family != JobFamily.SALES_ENGINEERING && family != JobFamily.UNCLASSIFIED) {
+        if (!family.isTech() && family != JobFamily.SALES_ENGINEERING && family != JobFamily.HARDWARE_ENGINEERING
+                && family != JobFamily.UNCLASSIFIED) {
             return List.of();
         }
-        JobFamily generic = family.isTech() ? family : JobFamily.SOFTWARE_ENGINEERING;
+        // generic TECH evidence ("Engineering" department) means software for a sales engineer, nothing for a chip
+        // designer: a hardware job becomes findable by software searches only through specific software evidence
+        JobFamily generic = family.isTech() || family == JobFamily.HARDWARE_ENGINEERING ? family : JobFamily.SOFTWARE_ENGINEERING;
         Set<JobFamily> secondary = new LinkedHashSet<>();
         List<String> why = new ArrayList<>();
         for (Hit<JobFamily> hit : titleHits) {

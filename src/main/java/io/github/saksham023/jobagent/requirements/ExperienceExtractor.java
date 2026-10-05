@@ -46,14 +46,14 @@ public class ExperienceExtractor {
             "\\d{1,2}(?:\\.\\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen";
 
     /**
-     * "5+ years", "3-5 yrs", "3 – 5 years", "8 to 12 years", "minimum 4 years", "up to ~2 years". "ears" is a typo
+     * "5+ years", "3-5 yrs", "3 – 5 years", "8 to 12 years", "8 years to 18 years", "minimum 4 years", "up to ~2 years". "ears" is a typo
      * seen in a real posting ("4 to 6 ears of hands-on backend engineering experience"); it only counts right after
      * a number and, like every mention, only on a line about experience.
      */
     private static final Pattern MENTION = Pattern.compile(
             "(?i)(?<qualifier>\\b(?:minimum(?:\\s+of)?|min\\.?|at\\s+least|more\\s+than|over|up\\s*to)\\s+~?\\s*)?"
                     + "\\b(?<low>" + NUMBER + ")\\s*\\+?\\s*"
-                    + "(?:(?:-|\\u2013|\\u2014|to)\\s*(?<high>" + NUMBER + ")\\s*)?"
+                    + "(?:(?:(?:years?|yrs?)\\s+)?(?:-|\\u2013|\\u2014|to)\\s*(?<high>" + NUMBER + ")\\s*)?"
                     + "\\+?\\s*(?:years?|yrs?|ears?)\\b");
 
     /** Words that make a mention about a person's experience. */

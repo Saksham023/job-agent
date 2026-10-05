@@ -84,6 +84,24 @@ loop on evaluation; build. Keep this roadmap updated when a milestone finishes.
   later automatically after each crawl. Reuse `ClaudeCliChatModel` (thinking off, Opus).
 - Check: show the user ~15 fills with evidence (optional quick review), report coverage before/after.
 
+### M7 status (2026-10-06): Workday adapter + 9 companies crawled (837 jobs); rules pass v8 READY, not yet applied
+- WorkdayAdapter (user pasted) discovers the country filter from facets; V10 seeds 9 tenants; crawl done by the user.
+- Generalization check: chip jobs labelled SWE (~160), PayPal intro "for more than 25 years" read as 25+ on 11 jobs,
+  Samsung "8 years to 18 years" -> 18+, Salesforce "Technical Consulting" -> SUPPORT. Rules pass v8 (verified on all
+  1,543 jobs, 188 tests): HARDWARE_ENGINEERING (TECH_ADJACENT, user's option a), CompanyBoilerplate (lines under >50% of
+  a company's distinct titles skipped; generic, not per company), range fix, technical consulting rule; Opus gap fill
+  families configurable (`jobagent.gap-fill.families`, default SWE, DATA_ML, INFRA_DEVOPS, UNCLASSIFIED; ~208 jobs
+  ~$5); prompt v2 no longer re-asks answered jobs. CompanyBoilerplate, GapFillProperties, CompanyBoilerplateTest were
+  filled by Claude at the user's request (one-off; the new-file rule still stands). 188 tests green. Next: user
+  restarts, `POST /admin/requirements/rebuild?all=true`, coverage, then `POST /admin/requirements/fill-gaps`.
+- User questioned the boilerplate fix as "hard-coded" and asked to test a LOCAL model on the year lines instead
+  (2026-10-06): Ollama (already installed via brew, server started by Claude) + qwen2.5:3b and qwen3:4b (think off),
+  input = lines matching the years regex + title, JSON schema answer, 152 jobs (124 with year lines). Results vs my
+  reading of every disagreement: rules v8 ~119/124 right; qwen3:4b ~108/124 (0.75 s/job; ignores company-history
+  lines well, but picks the smaller sub-requirement: "14-18 years CRM with a minimum of 10 on Salesforce" -> 10, gives
+  max < min); qwen2.5:3b far worse (56/124 same as rules; puts N+ into maxYears). DECISION (user): rules first, Opus
+  for uncertain cases, local models scrapped for now; both models deleted and the Ollama server stopped.
+
 ### M7 design: Workday (then Eightfold, Oracle)
 - Recipes in section 3.2 (facet discovery for the India filter, never searchText "India"; detail endpoint per job).
   Tenants: Nvidia 244, Mastercard 207, Salesforce 111, Visa 81, Adobe 79, Intel 58, Samsung 31, Expedia 30, PayPal 10.

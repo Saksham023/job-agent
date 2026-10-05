@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -23,9 +22,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.DoubleAdder;
 
 /**
- * Fills extraction gaps with a model, in the background: every open tech or sales-engineering job (or
- * UNCLASSIFIED one) whose experience is NONE / LOW, whose family is UNCLASSIFIED, or that has no main language,
- * and that has no stored answer for its current content and the current prompt version. One call per job. Each
+ * Fills extraction gaps with a model, in the background: every open job whose family or a secondary family is in
+ * jobagent.gap-fill.families (GapFillProperties; other families are never sent, even with gaps) and whose experience
+ * is NONE / LOW, whose family is UNCLASSIFIED, or that has no main language, and that has no stored answer for its
+ * current content (a new prompt version does not re-ask jobs already answered). One call per job. Each
  * answer is stored and applied as soon as it arrives, so a stopped run loses nothing and the next run only asks
  * for the rest. Jobs go in a fixed shuffled order, so `limit=15` is a varied sample. One run at a time.
  */
@@ -48,12 +48,15 @@ public class GapFillRunner {
     private final GapFiller filler;
     private final GapFillRepository repository;
     private final MatchingProperties matching;
+    private final GapFillProperties properties;
     private final AtomicReference<Run> current = new AtomicReference<>();
 
-    public GapFillRunner(GapFiller filler, GapFillRepository repository, MatchingProperties matching) {
+    public GapFillRunner(GapFiller filler, GapFillRepository repository, MatchingProperties matching,
+                         GapFillProperties properties) {
         this.filler = filler;
         this.repository = repository;
         this.matching = matching;
+        this.properties = properties;
     }
 
     /**
@@ -71,7 +74,8 @@ public class GapFillRunner {
             throw new IllegalStateException("A gap fill run is still going; wait for it to finish");
         }
         GapFillPrompt prompt = GapFillPrompt.load();
-        List<GapJob> todo = new ArrayList<>(repository.findJobsWithGaps(prompt.version(), matching.country(), scope()));
+        String[] families = properties.families().stream().map(Enum::name).toArray(String[]::new);
+        List<GapJob> todo = new ArrayList<>(repository.findJobsWithGaps(matching.country(), families));
         Collections.shuffle(todo, new Random(42));
         if (limit != null) {
             todo = todo.subList(0, Math.min(limit, todo.size()));
@@ -81,20 +85,13 @@ public class GapFillRunner {
         current.set(run);
         List<GapJob> jobs = List.copyOf(todo);
         Thread.ofVirtual().name("gap-fill").start(() -> run.execute(jobs, parallelism));
-        log.info("Gap fill started: {} jobs, model {}, prompt {}, parallelism {}", jobs.size(), model, prompt.version(), parallelism);
+        log.info("Gap fill started: {} jobs (families {}), model {}, prompt {}, parallelism {}", jobs.size(),
+                properties.families(), model, prompt.version(), parallelism);
         return run.status();
     }
 
     public Optional<RunStatus> status() {
         return Optional.ofNullable(current.get()).map(Run::status);
-    }
-
-    /** Tech families and sales engineering, as in the judge; UNCLASSIFIED is added by the query itself. */
-    private static String[] scope() {
-        return Arrays.stream(JobFamily.values())
-                .filter(f -> f.isTech() || f == JobFamily.SALES_ENGINEERING)
-                .map(Enum::name)
-                .toArray(String[]::new);
     }
 
     /** The mutable state of a run; counters are atomic because several virtual threads update them. */

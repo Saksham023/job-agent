@@ -3,7 +3,8 @@ package io.github.saksham023.jobagent.requirements;
 /**
  * Our own job taxonomy. Platforms have no shared one, so every job is mapped onto these values.
  * The group tells how technical a family is: TECH families are what a software engineer searches in,
- * TECH_ADJACENT ones (sales engineering, product, design...) are separate so the user can opt in to them.
+ * TECH_ADJACENT ones (sales engineering, hardware engineering, product, design...) are separate so the user can opt
+ * in to them: a software search does not fill up with ASIC jobs unless asked.
  */
 public enum JobFamily {
     SOFTWARE_ENGINEERING(Group.TECH),
@@ -13,6 +14,7 @@ public enum JobFamily {
     QA(Group.TECH),
     ENG_MANAGEMENT(Group.TECH),
     SALES_ENGINEERING(Group.TECH_ADJACENT),
+    HARDWARE_ENGINEERING(Group.TECH_ADJACENT),     // chips and boards (ASIC, verification, physical design)
     PRODUCT(Group.TECH_ADJACENT),
     DESIGN(Group.TECH_ADJACENT),
     PROGRAM_MANAGEMENT(Group.TECH_ADJACENT),

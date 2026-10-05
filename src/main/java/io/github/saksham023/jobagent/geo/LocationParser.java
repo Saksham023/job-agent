@@ -35,7 +35,8 @@ public class LocationParser {
     /** Inside a part: "Bangalore or Pune", "Pune and Mumbai", "Pune & Mumbai", "Bangalore/Pune". */
     private static final Pattern CONNECTOR = Pattern.compile("(?i)\\s+(?:or|and)\\s+|\\s*[&/]\\s*");
 
-    private static final Pattern REMOTE = Pattern.compile("(?i)\\b(?:remote|work from home|wfh|anywhere)\\b");
+    /** "Virtual India" is Intel's Workday name for remote work in India. */
+    private static final Pattern REMOTE = Pattern.compile("(?i)\\b(?:remote|virtual|work from home|wfh|anywhere)\\b");
     private static final Pattern HYBRID = Pattern.compile("(?i)\\b(?:hybrid|on-?site|in-?office)\\b");
 
     /** Leftover dashes, colons, & and / at the edges of a part, e.g. " - Indiana" -> "Indiana". */
