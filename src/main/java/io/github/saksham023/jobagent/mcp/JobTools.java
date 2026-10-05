@@ -1,5 +1,7 @@
 package io.github.saksham023.jobagent.mcp;
 
+import io.github.saksham023.jobagent.job.JobQueryRepository;
+import io.github.saksham023.jobagent.job.JobQueryRepository.JobDetails;
 import io.github.saksham023.jobagent.matching.MatchService;
 import io.github.saksham023.jobagent.matching.MatchService.MatchResponse;
 import io.github.saksham023.jobagent.matching.Profile;
@@ -20,10 +22,19 @@ public class JobTools {
     static final int DEFAULT_LIMIT = 10;
     static final int MAX_LIMIT = 25;
 
-    private final MatchService matchService;
+    /** Some postings are ~20,000 characters; tool output goes straight into Claude's context. */
+    static final int MAX_DESCRIPTION_CHARS = 12_000;
 
-    public JobTools(MatchService matchService) {
+    /** get_job's answer: the stored job, with the description cut to MAX_DESCRIPTION_CHARS if needed. */
+    public record JobView(JobDetails job, boolean descriptionTruncated) {
+    }
+
+    private final MatchService matchService;
+    private final JobQueryRepository jobQueryRepository;
+
+    public JobTools(MatchService matchService, JobQueryRepository jobQueryRepository) {
         this.matchService = matchService;
+        this.jobQueryRepository = jobQueryRepository;
     }
 
     @McpTool(
@@ -62,5 +73,32 @@ public class JobTools {
                 openToRemote, families);
         int size = limit == null ? DEFAULT_LIMIT : Math.min(Math.max(limit, 1), MAX_LIMIT);
         return matchService.match(profile, size);
+    }
+
+    @McpTool(
+            name = "get_job",
+            description = """
+                    Returns one job in full: company, title, url, locations, the complete description (cut at \
+                    12,000 characters), and what was extracted from it (years of experience, required and \
+                    preferred skills, primary languages, job family). Use it when the candidate wants details \
+                    about a job from match_jobs; pass that job's jobId.""",
+            annotations = @McpTool.McpAnnotations(title = "Get job", readOnlyHint = true,
+                    destructiveHint = false, idempotentHint = true, openWorldHint = false))
+    public JobView getJob(
+            @McpToolParam(description = "The jobId of a job returned by match_jobs.")
+            long jobId) {
+
+        JobDetails job = jobQueryRepository.findDetails(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("No job with id " + jobId));
+        String description = job.description();
+        if (description == null || description.length() <= MAX_DESCRIPTION_CHARS) {
+            return new JobView(job, false);
+        }
+        JobDetails shortened = new JobDetails(job.jobId(), job.company(), job.title(), job.url(), job.department(),
+                job.locations(), job.cities(), job.remote(), job.employmentType(), job.postedAt(),
+                job.firstSeenAt(), job.open(), job.minYears(), job.maxYears(), job.yearsEvidence(), job.family(),
+                job.specialization(), job.requiredSkills(), job.preferredSkills(), job.primaryLanguages(),
+                description.substring(0, MAX_DESCRIPTION_CHARS));
+        return new JobView(shortened, true);
     }
 }

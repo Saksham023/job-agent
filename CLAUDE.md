@@ -9,10 +9,25 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
-**State (2026-10-05):** Milestones 0-3 DONE and committed (`c517f86` M0, `627fd80` M1, `a562604` M2,
-`2a3baa1` M3; working tree clean). 12 companies on 4 platforms, 706 India jobs, all with requirements
-(extractor v2), matching works via `POST /admin/match`. 99 unit tests green. **Now starting Milestone 4
-(MCP server), going SLOWLY: the user is new to Spring AI and wants every annotation/term explained briefly.**
+**State (2026-10-05, end of session 1):** Milestones 0-3 DONE; Milestone 4 steps 1-4 DONE. Commits:
+`c517f86` M0, `627fd80` M1, `a562604` M2, `2a3baa1` M3, `ac70084` M4 part 1 (MCP server, list_companies,
+match_jobs), then M4 part 2 (get_job). 12 companies on 4 platforms, 706 India jobs, all with requirements
+(extractor v2). MCP server live at `http://localhost:8080/mcp` with 3 tools: `list_companies`,
+`match_jobs`, `get_job`; Claude Code connects via `.mcp.json` (already approved). End-to-end demos passed.
+99 unit tests green. **M4 goes SLOWLY: the user is new to Spring AI; explain every annotation/term briefly.**
+
+**EXACT NEXT STEP:** M4 step 6 first (user agreed "proceed as you want"; Claude chose 6 before 5): the
+`find-jobs` MCP PROMPT with `@McpPrompt` / `@McpArg` (new concept: prompts = user-selectable workflow
+templates). Workflow text: read the resume -> fill the profile (years, skills, primary languages) -> ASK
+the candidate about location preference and remote (never infer from resume) -> optionally ask which job
+families -> call match_jobs -> explain strong fits / worth a look / skip with matched/missing skills and
+urls -> offer get_job for details. Before writing it, inspect `@McpPrompt`/`@McpArg` attributes and the
+required return type in `spring-ai-mcp-annotations-2.0.1.jar` with javap (as done for @McpTool), draft in
+scratch, compile against `target/classes` + the classpath from `./mvnw dependency:build-classpath`, then
+hand over. Test via a new Claude Code session (prompts appear as slash commands, likely
+`/mcp__job-agent__find-jobs`) or MCP `prompts/list` + `prompts/get` with curl (give the user the commands).
+Then step 5 `new_jobs_since(date, profile)` (match_jobs restricted to first_seen_at > date; date param in
+the schema), then wrap-up (commit, CLAUDE.md), then Milestone 5.
 
 **How we work (user preferences, keep following them):**
 - User types/pastes all NEW code; Claude creates the empty file first (`touch`), then gives the whole file
@@ -83,9 +98,44 @@ GA; built against Spring Boot 4.1.1; uses the MCP Java SDK 2.0.0). Use the Sprin
    (security/SIEM/Jira roles that only score from Java/AWS). Findings: (1) non-backend tech roles rank too
    high for a backend profile (default families = all TECH); tune in M5 (families hint, specialization);
    (2) Claude offered to "open the full description" -> needs get_job (step 4).
-4. `get_job(id)`: full description + extracted requirements; 5. `new_jobs_since(date, profile)`.
+4. `get_job(id)`: full description + extracted requirements. DONE 2026-10-05: `job/JobQueryRepository`
+   (read side; JobDetails record; LEFT JOIN job_requirements) + `JobTools.getJob(long jobId)` returning
+   JobView(job, descriptionTruncated) with the description cut at 12,000 chars; unknown id -> tool error.
+   Demo: Claude chained match_jobs -> get_job(395) and compared requirements line by line, used postedAt
+   (posting 16 months old), and chose families itself (SOFTWARE_ENGINEERING + INFRA_DEVOPS). Found a
+   classifier gap: Zeta "Executive - IT Support" -> SOFTWARE_ENGINEERING (add an "it support" SUPPORT title
+   rule + bump EXTRACTOR_VERSION in the next rules pass). Possible improvement: when cutting long
+   descriptions, drop INTRO sections first (DescriptionSections).
+5. `new_jobs_since(date, profile)`.
 6. `find-jobs` MCP prompt (read resume -> fill profile -> ask location -> call match_jobs -> explain).
 7. End-to-end demo with the user's resume.
+
+**MCP know-how learned (Spring AI 2.0.1):** tools = `@Component` bean + `@McpTool(name, description,
+annotations = @McpTool.McpAnnotations(title, readOnlyHint, destructiveHint (defaults TRUE, set false),
+idempotentHint, openWorldHint))`; params = `@McpToolParam(description, required)` (default required=true);
+schema built by `McpJsonSchemaGenerator` from parameter names/types (enum -> allowed values); return value
+is serialized to a text content block; a thrown exception becomes `isError: true` (message shown twice).
+Protocol over curl: initialize (save `Mcp-Session-Id`) -> notifications/initialized (202) -> tools/list ->
+tools/call; replies come as SSE (`event:message`, `data:{...}`); JSON-RPC ids match replies to requests.
+`type: sync` = blocking tool methods (vs async Mono/Flux). Logs: `McpAsyncServer : Client initialize request`
+per connection; harmless macOS Tomcat "setSoLinger Invalid argument" errors.
+
+**Backlog (noted, not done; pick up in M5 or a rules pass):**
+- Classifier: "Executive - IT Support" (Zeta) -> SOFTWARE_ENGINEERING; add an "it support" SUPPORT title rule;
+  bump EXTRACTOR_VERSION after any rule/CSV change and run `POST /admin/requirements/rebuild`.
+- Primary-language quirk: "Jira Administrator" looks Java-primary from "Java/Python scripting".
+- Non-backend tech roles (security, SIEM) rank high for a backend profile: consider specialization (BACKEND)
+  in scoring and category weights for skills (LANGUAGE/FRAMEWORK/DATASTORE above TOOL/CONCEPT).
+- get_job: when cutting long descriptions, drop INTRO sections first.
+- Company boilerplate lines (same line in >50% of a company's postings) should be ignored by extractors.
+- Duplicate postings per city (Freshworks/ServiceNow "Armis" pairs) -> dedup (M7).
+- SmartRecruiters fetches every detail each crawl (~117 s PhonePe) -> fetch only new/changed (M7).
+- Closed-job detection, scheduler with per-host virtual threads, crawl_runs, health alerts (M7).
+- Faster skill matching (Aho-Corasick / pre-filter) before 8,000 jobs; full rebuild is 17.6 s for 706.
+- Constants to config: country IN and years tolerance (-1/+3) in MatchService.
+- M5: gold set (user labels ~100 jobs, spread across companies), local-model bake-off, cascade, embeddings.
+- M6: Workday/Eightfold/Oracle with the generalization check (expect hardware roles -> HARDWARE family,
+  bank level ladders via levelScheme).
 
 ## 0b. Progress log
 Milestone 0 DONE (2026-10-04): DB `jobagent`, Flyway V1 (companies table, config jsonb) + V2
