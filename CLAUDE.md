@@ -9,6 +9,183 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
+**State (2026-10-05, end of the long session):** Milestones 0-5 DONE (see the roadmap). Last commits: `e16566c` M5 part 1,
+`e1bb4ec` M5 part 2 (model judge + reference set), `7d573b8` notes, `f28c9ed` thinking switch + Haiku runs + Opus
+decision, then the roadmap commit. 12 companies on 4 platforms (Greenhouse, Lever, SmartRecruiters, Ashby), 706 India
+jobs, extractor v7. MCP server `http://localhost:8080/mcp`: `list_companies`, `match_jobs` (decimal years, optional
+`postedSince`, `jobYearsFrom/To`), `get_job`, prompt `find-jobs`. Opus judge + answer key in `eval/`. 161 unit tests.
+Full detail of everything done: section 0c. Plain-language history: section 0b.
+
+### ROADMAP (agreed 2026-10-05; work strictly in this order, one milestone at a time)
+| # | Milestone | Status |
+|---|---|---|
+| 0-3 | Skeleton, 4 adapters, rule extraction, rule matching | DONE |
+| 4 | MCP server (tools, find-jobs prompt, postedSince) | DONE |
+| 5 | Quality foundation: answer key (Opus judge, user-confirmed `eval/reference/saksham.csv`), baseline nDCG@10 0.89, experience window, bullet/typo extraction fixes, `ClaudeCliChatModel` | DONE |
+| **6** | **Opus extraction-gap filler** (design below) | **NEXT** |
+| 7 | Workday adapter (then Eightfold, Oracle) with the generalization check (design below) | planned |
+| 8 | Search with the Opus judge: first batch fast, background judging, `more_jobs`, export (design below) = the END-TO-END DEMO | planned |
+| 9 | Operations: scheduler (per-host virtual threads), change tracking + closed jobs, dedup, health alerts, SmartRecruiters incremental details | planned |
+| 10 | Custom adapters by value: Amazon, IBM, Cisco, Google, Apple, then the rest (section 3) | planned |
+| 11 | Cost and scale: Anthropic API instead of the CLI, cheaper/local judges (code computes the experience window), embeddings + hybrid retrieval, recall@K regression tests, answer keys for more profiles | later |
+| 12 | Extras: digests, tracker, outreach drafts, README with measured numbers, web UI | later |
+User priorities: Workday is eagerly wanted (lots more jobs); the gap filler must come first because new connectors bring
+many unextractable postings. Use OPUS for every model call until M11 (single user; cost fine even at 8-10k jobs). Do not
+loop on evaluation; build. Keep this roadmap updated when a milestone finishes.
+
+### M6 design: Opus extraction-gap filler (agreed direction; confirm details with the user before coding)
+- Goal: when the rules give no answer, Opus reads the posting and fills it. Gaps today: years NONE 61 + LOW 53, family
+  UNCLASSIFIED 29, tech jobs without a main language 78 (~200 jobs, ~$6 of Opus, one-time; then only new/changed jobs).
+- Order: rules always run first; Opus only fills fields the rules left empty or LOW. Never overwrite a HIGH/MEDIUM rule
+  value. One Opus call per job returning JSON for all its gaps (years min/max, family + specialization, main
+  languages) plus a short EVIDENCE quote per field.
+- Guard: grounding check (the evidence quote must literally occur in the posting, else discard), enum/schema check
+  (BeanOutputConverter record, as in the judge), sane ranges (years 0-30, min <= max).
+- Storage: per-field source (`rules` / `claude:opus`) and evidence, so fills are explainable and re-runnable; a fill is
+  redone only when the job's content hash changes or the filler prompt version bumps; a rules rebuild keeps fills.
+- Run: background like the judge (Semaphore parallelism, resumable), endpoint e.g. `POST /admin/requirements/fill-gaps`,
+  later automatically after each crawl. Reuse `ClaudeCliChatModel` (thinking off, Opus).
+- Check: show the user ~15 fills with evidence (optional quick review), report coverage before/after.
+
+### M7 design: Workday (then Eightfold, Oracle)
+- Recipes in section 3.2 (facet discovery for the India filter, never searchText "India"; detail endpoint per job).
+  Tenants: Nvidia 244, Mastercard 207, Salesforce 111, Visa 81, Adobe 79, Intel 58, Samsung 31, Expedia 30, PayPal 10.
+- Generalization check (section 8): crawl, run rule extraction BEFORE editing any rule, measure abstain rates
+  (NONE/LOW/UNCLASSIFIED/unresolved locations) and accuracy on ~50 random new jobs; then the M6 filler covers gaps;
+  then fix rules/data (expect a HARDWARE_ENGINEERING family for Nvidia/Intel/Samsung, bank level ladders later).
+- Politeness: low rate per host, delays; Workday details may need incremental fetching (like SmartRecruiters).
+
+### M8 design: search with the Opus judge (AGREED with the user 2026-10-05: "this design is perfect")
+```
+1,000 jobs --SQL hard filters (open, India, locations/remote, family primary|secondary, experience window overlap;
+             the ONLY step that may drop a job)--> ~120 candidates --code: rule score for ALL, sort (ms)-->
+sorted list (saved as the search, ~hours) --Opus judges in score order: FIRST 10 in parallel (~15 s with the CLI),
+then the rest in the BACKGROUND--> verdicts saved forever per (profile hash, job, rubric version, job content hash)
+```
+- `match_jobs` returns the first APPLY batch (~8-9 of the top 10) plus a `searchId`; background judging continues.
+- New tool `more_jobs(searchId, count)`: default 10, or the number asked; returns the next APPLY not yet shown; if fewer
+  are judged yet, returns what is ready plus "N more being judged, ~X min". MAYBE only after all APPLY are exhausted
+  (everything judged, no unseen APPLY left). NO never shown. Later APPLY have lower rule scores, so pages only append.
+- Storage in Postgres (no Redis for now): `judgments` table (durable: verdicts cost money) and a search table (sorted
+  candidate list + how far each list has been shown). The same search started twice reuses the running job.
+- Export: all APPLY so far as company, title, apply link (the user wants hundreds of apply-worthy jobs later).
+- Later (M11): Anthropic API (no process start, high parallelism -> first batch ~5 s), prefetch, several jobs per call,
+  stop rule (a full batch with no APPLY/MAYBE), spot checks below the cut, recall@K tests.
+
+### Agreed rules for evaluation (from M5)
+Rubric `eval/judge-rubric.md` v2 (role type wanted = asked for OR shown by the skills; experience window = rounded years
+-2..+1, one year above = at most MAYBE, more = NO; stack has no language preference). Answer key
+`eval/reference/saksham.csv` (Opus, user-confirmed: "Opus is right" on every disagreement). Haiku without thinking
+fails the experience arithmetic (kappa 0.46); with thinking 0.85; fix later by computing the window in code.
+
+**How we work (user preferences, keep following them):**
+- Claude makes ALL code changes itself (new and existing files) and reports per file what changed and why, SHORT and
+  precise. Exception: when the user says they want to learn a part (as for the judge's Spring AI classes), create the
+  empty files, hand over whole files with purpose, method table, new concepts, shortcomings, and wait for the paste.
+- Keep answers SHORT, simple and to the point (user complaint 2026-10-05: long answers with lots of information are
+  hard to follow). Explain with small concrete examples. Never use em-dashes.
+- Verify before handing over or claiming done: compile with JDK 25
+  (`/Users/saksham/Library/Java/JavaVirtualMachines/openjdk-25.0.2/Contents/Home`) against `~/.m2` jars, run against
+  real data (read-only SELECTs), run the unit tests; before a rules change dump a baseline for all jobs and diff after.
+- Testing the RUNNING app: give the user the curl commands; the user runs them and pastes results (Claude may read
+  result FILES like `eval/runs/*` directly). Using the product through the job-agent MCP tools is fine for Claude.
+- Ask before commits unless the user said "commit" (they have generally approved committing finished work). Never push.
+  Ask before downloading anything (models, packages). Keep CLAUDE.md section 0 current: the user compacts often and
+  wants zero context loss.
+
+**Run / check:**
+- App: IntelliJ run `JobagentApplication`. Its run configuration must have env vars `CLAUDE_CODE_OAUTH_TOKEN` (value
+  from `claude setup-token`, also exported in ~/.zshrc; never in git or chat) and
+  `JOBAGENT_LLM_CLAUDECLI_COMMAND=/Users/saksham/.local/bin/claude`. Or `./mvnw spring-boot:run` from a terminal.
+- Unit tests (no DB): `./mvnw -q test -Dtest='*Test'` (161 green). `JobagentApplicationTests` would migrate the real DB.
+- DB: `docker exec -it rag-postgres psql -U postgres -d jobagent` (Docker Desktop must run). Flyway V1-V8.
+- Endpoints: `GET /admin/companies[/{slug}]`, `GET /admin/crawl/{slug}/preview?limit&full`, `POST /admin/crawl[/{slug}]`,
+  `POST /admin/requirements/rebuild[?all=true]` (after any EXTRACTOR_VERSION bump), `GET /admin/requirements/coverage`,
+  `POST /admin/match?limit&postedSince` (Profile JSON body), `POST /admin/eval/judge?profile&model&limit&parallelism`
+  (1-4), `GET /admin/eval/judge/status`, `GET /admin/eval/report?run=<date>-<model>-<profile>`.
+- Using the product: from a clean folder (`~/job-search`; server added with `claude mcp add --transport http --scope user
+  job-agent http://localhost:8080/mcp`), not from this repo (this CLAUDE.md would leak into the session).
+
+**Code map:** `company` (registry) · `crawl` (+ `crawl.adapter`: Greenhouse/Lever/SmartRecruiters/Ashby, JsonFields) ·
+`geo` (Gazetteer, LocationParser) · `job` (NormalizedJob, JobRepository upsert, JobQueryRepository read side) ·
+`requirements` (ExperienceExtractor, JobClassifier/JobFamily with secondary families, DescriptionSections incl.
+`isBullet`, SkillExtractor, Requirements{Repository,Service,Controller}, EXTRACTOR_VERSION=7) · `matching` (Profile with
+decimal years + jobYearsFrom/To, ExperienceWindow, MatchingProperties `jobagent.matching.*`, SkillImplications,
+MatchCandidateRepository, MatchScorer, MatchService, MatchController) · `mcp` (CompanyTools, JobTools, JobSearchPrompts) ·
+`llm` (ClaudeCliChatModel, ClaudeCliProperties `jobagent.llm.claude-cli.*` incl. thinking=false, ClaudeCliException) ·
+`eval` (Rubric, JudgeProfile, Judgment, JobJudge, JudgmentLine, JudgeRunner, EvalReport, EvalController,
+EvalProperties `jobagent.eval.dir`) · `common` (CsvResource). Data: `resources/geo/*.csv`, `resources/classify/*.csv`
+(skills, skill-implications, title-families, title-fallback, department-families, description-keywords,
+description-secondary-keywords, specializations). Eval files: `eval/` (README explains each).
+
+**Backlog (not on the roadmap yet; pull in when relevant):**
+- Ranking: specialization boost (backend over frontend); skill category weights; Zscaler job 188 (APPLY) ranks #12 while
+  its twin 187 is #2 (likely an extraction difference, investigate); "Jira Administrator" looks Java-primary.
+- Accepted for now (user): MAYBE jobs one year above the window are filtered out; Jira Admin is INFRA_DEVOPS.
+- get_job: when cutting long descriptions, drop INTRO sections first.
+- Company boilerplate lines (same line in >50% of a company's postings) should be ignored by extractors.
+- Faster skill matching (Aho-Corasick / pre-filter) before ~8,000 jobs (full rebuild 17.6 s for 706).
+- Retry with backoff for 529 Overloaded when runs become unattended (now: re-run retries failed jobs).
+- Raise JudgeRunner.MAX_PARALLELISM (4) if needed for big runs.
+
+## 0b. Progress log
+Milestone 0 DONE (2026-10-04): DB `jobagent`, Flyway V1 (companies table, config jsonb) + V2
+(12 companies: greenhouse/lever/smartrecruiters/ashby), `company` package (Company record,
+CompanyRepository with JdbcClient + manual row mapper, CompanyController GET /admin/companies[/{slug}]).
+Milestone 1 in progress: V3 jobs table, `crawl` package (RawJob, RawLocation, JobBoardAdapter,
+CrawlHttpConfig shared RestClient, adapter/GreenhouseAdapter, CrawlService with adapter map, CrawlController
+GET /admin/crawl/{slug}/preview), Jsoup 1.23.2 added, `geo` package (Gazetteer over 4 CSVs: 249 countries,
+111 subdivision codes, 3 metros, 169 city names), ParsedLocation + LocationParser (country voting,
+multi-city segments, connector splitting) + LocationParserTest (27 green), HtmlToText (Jsoup),
+job/NormalizedJob, crawl/JobNormalizer (SHA-256 content hash), CrawlService preview with country filter
+(`jobagent.crawl.countries`, default IN) and unresolved-location report. First measured run (2026-10-04):
+Groww 7/7, Razorpay 17/21 (other 4 are Malaysia/Singapore, so the research "21 India" was wrong),
+Zscaler 82/364, Databricks 94/887, 0 unresolved jobs. Then: spaced " - " as part separator (28 tests),
+V4 (country_codes, places JSONB, GIN on cities + country_codes; query with `&&` / `@>`, not `= ANY`),
+job/JobRepository.upsert (ON CONFLICT, one seenAt per crawl, RETURNING -> INSERTED/UPDATED/UNCHANGED),
+CrawlService.crawl (fetch outside tx, upserts in one TransactionTemplate tx, per-job skip on errors),
+POST /admin/crawl/{slug} and POST /admin/crawl (all). First saved crawl: 200 India jobs (databricks 94,
+zscaler 82, razorpay 17, groww 7); re-crawl = all unchanged. Then LeverAdapter (country hint only for
+single-location postings), SmartRecruitersAdapter (server-side country=in, offset paging, one detail call
+per posting with 250 ms pause: PhonePe ~117 s), AshbyAdapter (postal address -> text). Milestone 1 core
+DONE 2026-10-05: 12/12 companies, 706 India jobs (lever 249, greenhouse 200, smartrecruiters 198,
+ashby 59). JsonFields refactor done (shared null-safe JSON helpers for adapters).
+Milestone 2 core DONE 2026-10-05: `requirements` package: ExperienceExtractor (+ title estimate fallback,
+23 tests), JobFamily + JobClassifier (evidence voting, TECH umbrella, 14 tests), DescriptionSections,
+SkillExtractor (127-skill dictionary, ambiguous aliases, 16 tests), RequirementsRepository/Service/Controller
+(V5 job_requirements, V6 years_confidence, EXTRACTOR_VERSION=1, POST /admin/requirements/rebuild[?all],
+GET /admin/requirements/coverage); data files in src/main/resources/classify/. First full run: 706 jobs in
+17.6 s; years HIGH 447 / MEDIUM 136 / LOW 53 / NONE 70; 29 UNCLASSIFIED; 392 with required skills, 205 with
+a primary language; re-run extracts 0. Leftovers fixed by Claude on request (2026-10-05): common/CsvResource
+(one CSV reader), ExperienceExtractor uses DescriptionSections (intro sections skipped), skills after a slash
+count ("Python/Java", "Java/Go"), `~ML` is ambiguous (Zscaler appends "AI/ML" boilerplate to every job),
+jobs.function column (V7, backfilled) filled by adapters, CrawlService runs incremental extraction after a
+crawl that inserted/updated jobs (CrawlReport.extracted). EXTRACTOR_VERSION=2. 90 unit tests green.
+Future idea: detect company boilerplate lines (same line in >50% of a company's postings) and skip them.
+Concurrency plan (decided 2026-10-05): crawling is network-bound, so in M7 the scheduler crawls companies
+grouped BY HOST in parallel (one virtual thread per host, sequential + polite within a host); extraction is
+CPU-bound and incremental, so it stays single-threaded (optimize regex matching before adding threads).
+Milestone 3 DONE 2026-10-05: `matching` package: Profile (preferredLocations = explicit filter only),
+MatchCandidateRepository (hard filters in SQL: open, IN, family, location/remote/no-city, years -1/+3,
+unknown years pass), MatchScorer (skills 65 capped at 8 required, primary language 20, experience 15,
+neutral 0.5 for missing data, human-readable reasons; 9 tests), MatchService (canonical skills via
+SkillExtractor.canonical, places via Gazetteer, unknownSkills/unknownLocations reported), MatchController
+POST /admin/match. Fixed Gazetteer.citiesInMetro key bug. Real run (3-yr Java backend profile): 52 eligible
+across India, Paytm Java backend roles on top; NCR filter -> 8 eligible. Known quirk: "Jira Administrator"
+looks Java-primary from "Java/Python scripting". Next: Milestone 4 (MCP server).
+
+Milestone 4 DONE 2026-10-05: Spring AI 2.0.1 MCP server (streamable HTTP at /mcp), tools list_companies, match_jobs,
+get_job, prompt find-jobs; skills dictionary grown from real job text plus candidate-side skill implications;
+recall-first classification with secondary families; postedSince filter. Demo in a clean folder passed.
+Milestone 5 DONE 2026-10-05: eval set (user's 100 labels), extraction fixes found while labeling (typed and numbered
+bullets, "ears" typo), configurable experience window (decimal years rounded by the server, window -2..+1, overlap),
+order-independent language score, ClaudeCliChatModel (Spring AI ChatModel over claude -p), Opus judge with a fixed
+rubric, answer key for the user's profile (7 APPLY / 9 MAYBE / 271 NO, user-confirmed), baseline nDCG@10 0.89, Haiku
+tested and parked. Then the roadmap was reordered: M6 Opus gap filler, M7 Workday, M8 search with the judge.
+
+## 0c. Detailed record of the 2026-10-05 session (moved here from section 0; nothing deleted)
+
+
 **State (2026-10-05):** Milestones 0-4 DONE (M4 incl. skills dictionary, implications, recall-first classifier). Commits:
 `c517f86` M0, `627fd80` M1, `a562604` M2, `2a3baa1` M3, `ac70084` M4 part 1 (MCP server, list_companies,
 match_jobs), then M4 part 2 (get_job). 12 companies on 4 platforms, 706 India jobs, all with requirements
@@ -120,38 +297,6 @@ NOTE: Claude Code loads this file into EVERY session in this folder, including s
 the job-agent tools. Keep it current (a stale "not built yet" here made a demo session work around a feature
 that existed), and remember a product session may take the user's profile from §1 instead of the resume.
 
-**How we work (user preferences, keep following them):**
-- User types/pastes all NEW code; Claude creates the empty file first (`touch`), then gives the whole file
-  with: purpose, a short table of methods, new concepts, shortcomings. Keep explanations SHORT and precise.
-- Since Milestone 5 (2026-10-05) Claude makes ALL changes itself, NEW files included (user: "I don't want the
-  code and I don't want to copy paste it"); report per file what changed and why. Still verify before claiming done.
-  Claude may write data files (CSV) and docs. Never push. Ask before commits unless the user said "commit".
-- Before handing over code, Claude verifies it in the session scratchpad: compile with JDK 25
-  (`/Users/saksham/Library/Java/JavaVirtualMachines/openjdk-25.0.2/Contents/Home`) against jars in
-  `~/.m2`, run against real data (read-only `psql` export or JDBC SELECT), and run JUnit tests. Before a
-  refactor, dump a baseline of results for all jobs and diff after.
-- Never use em-dashes in writing.
-- Testing the RUNNING app while building (curl against localhost endpoints, hand-made MCP calls): do NOT run
-  it yourself; give the user the curl commands with what each one shows, and the user runs them and pastes
-  results (decided 2026-10-05). Scratch compilation / offline checks are still fine. This does NOT apply
-  when the user asks Claude a question that it answers through the job-agent MCP tools: that is the product
-  being used, so just call the tools.
-
-**Run / check:**
-- App: IntelliJ run `JobagentApplication`, or `export JAVA_HOME=<jdk25 above>; ./mvnw spring-boot:run`.
-- Unit tests (no DB needed): `./mvnw -q test -Dtest='*Test'` (`JobagentApplicationTests` boots Spring and
-  would migrate the real DB, so it is excluded by this pattern).
-- DB: `docker exec -it rag-postgres psql -U postgres -d jobagent` (Docker Desktop must be running).
-- Endpoints: `GET /admin/companies[/{slug}]`, `GET /admin/crawl/{slug}/preview?limit&full`,
-  `POST /admin/crawl/{slug}`, `POST /admin/crawl` (all), `POST /admin/requirements/rebuild[?all=true]`,
-  `GET /admin/requirements/coverage`, `POST /admin/match?limit=` with a Profile JSON body.
-
-**Code map:** `company` (registry) · `crawl` (+ `crawl.adapter`: Greenhouse/Lever/SmartRecruiters/Ashby,
-JsonFields) · `geo` (Gazetteer, LocationParser) · `job` (NormalizedJob, JobRepository upsert) ·
-`requirements` (ExperienceExtractor, JobClassifier/JobFamily, DescriptionSections, SkillExtractor,
-Requirements{Repository,Service,Controller}) · `matching` (Profile, MatchCandidateRepository, MatchScorer,
-MatchService, MatchController) · `common` (CsvResource). Data: `resources/geo/*.csv`, `resources/classify/*.csv`.
-DB: Flyway V1-V7 (companies, jobs, job_requirements, function column).
 
 **Milestone 4 plan (MCP server), versions checked on Maven Central 2026-10-05:** Spring AI **2.0.1** (latest
 GA; built against Spring Boot 4.1.1; uses the MCP Java SDK 2.0.0). Use the Spring AI BOM
@@ -212,71 +357,6 @@ tools/call; replies come as SSE (`event:message`, `data:{...}`); JSON-RPC ids ma
 `type: sync` = blocking tool methods (vs async Mono/Flux). Logs: `McpAsyncServer : Client initialize request`
 per connection; harmless macOS Tomcat "setSoLinger Invalid argument" errors.
 
-**Backlog (noted, not done; pick up in M5 or a rules pass):**
-- Result size: keep max 25 now, but allow the user to ask for more (e.g. 50) later; account for token/LLM cost
-  then (user, 2026-10-05). M5: scorer builds a wider shortlist, a model re-ranks it, user sees the top N.
-- Ranking boost when the job's specialization matches the profile's (backend over frontend), tuned on the
-  labeled set in M5.
-- Classifier: "Executive - IT Support" (Zeta) -> SOFTWARE_ENGINEERING; add an "it support" SUPPORT title rule;
-  bump EXTRACTOR_VERSION after any rule/CSV change and run `POST /admin/requirements/rebuild`.
-- Primary-language quirk: "Jira Administrator" looks Java-primary from "Java/Python scripting".
-- Non-backend tech roles (security, SIEM) rank high for a backend profile: consider specialization (BACKEND)
-  in scoring and category weights for skills (LANGUAGE/FRAMEWORK/DATASTORE above TOOL/CONCEPT).
-- get_job: when cutting long descriptions, drop INTRO sections first.
-- Company boilerplate lines (same line in >50% of a company's postings) should be ignored by extractors.
-- Duplicate postings per city (Freshworks/ServiceNow "Armis" pairs) -> dedup (M7).
-- SmartRecruiters fetches every detail each crawl (~117 s PhonePe) -> fetch only new/changed (M7).
-- Closed-job detection, scheduler with per-host virtual threads, crawl_runs, health alerts (M7).
-- Faster skill matching (Aho-Corasick / pre-filter) before 8,000 jobs; full rebuild is 17.6 s for 706.
-- M5: gold set (user labels ~100 jobs, spread across companies), local-model bake-off, cascade, embeddings.
-- M6: Workday/Eightfold/Oracle with the generalization check (expect hardware roles -> HARDWARE family,
-  bank level ladders via levelScheme).
-
-## 0b. Progress log
-Milestone 0 DONE (2026-10-04): DB `jobagent`, Flyway V1 (companies table, config jsonb) + V2
-(12 companies: greenhouse/lever/smartrecruiters/ashby), `company` package (Company record,
-CompanyRepository with JdbcClient + manual row mapper, CompanyController GET /admin/companies[/{slug}]).
-Milestone 1 in progress: V3 jobs table, `crawl` package (RawJob, RawLocation, JobBoardAdapter,
-CrawlHttpConfig shared RestClient, adapter/GreenhouseAdapter, CrawlService with adapter map, CrawlController
-GET /admin/crawl/{slug}/preview), Jsoup 1.23.2 added, `geo` package (Gazetteer over 4 CSVs: 249 countries,
-111 subdivision codes, 3 metros, 169 city names), ParsedLocation + LocationParser (country voting,
-multi-city segments, connector splitting) + LocationParserTest (27 green), HtmlToText (Jsoup),
-job/NormalizedJob, crawl/JobNormalizer (SHA-256 content hash), CrawlService preview with country filter
-(`jobagent.crawl.countries`, default IN) and unresolved-location report. First measured run (2026-10-04):
-Groww 7/7, Razorpay 17/21 (other 4 are Malaysia/Singapore, so the research "21 India" was wrong),
-Zscaler 82/364, Databricks 94/887, 0 unresolved jobs. Then: spaced " - " as part separator (28 tests),
-V4 (country_codes, places JSONB, GIN on cities + country_codes; query with `&&` / `@>`, not `= ANY`),
-job/JobRepository.upsert (ON CONFLICT, one seenAt per crawl, RETURNING -> INSERTED/UPDATED/UNCHANGED),
-CrawlService.crawl (fetch outside tx, upserts in one TransactionTemplate tx, per-job skip on errors),
-POST /admin/crawl/{slug} and POST /admin/crawl (all). First saved crawl: 200 India jobs (databricks 94,
-zscaler 82, razorpay 17, groww 7); re-crawl = all unchanged. Then LeverAdapter (country hint only for
-single-location postings), SmartRecruitersAdapter (server-side country=in, offset paging, one detail call
-per posting with 250 ms pause: PhonePe ~117 s), AshbyAdapter (postal address -> text). Milestone 1 core
-DONE 2026-10-05: 12/12 companies, 706 India jobs (lever 249, greenhouse 200, smartrecruiters 198,
-ashby 59). JsonFields refactor done (shared null-safe JSON helpers for adapters).
-Milestone 2 core DONE 2026-10-05: `requirements` package: ExperienceExtractor (+ title estimate fallback,
-23 tests), JobFamily + JobClassifier (evidence voting, TECH umbrella, 14 tests), DescriptionSections,
-SkillExtractor (127-skill dictionary, ambiguous aliases, 16 tests), RequirementsRepository/Service/Controller
-(V5 job_requirements, V6 years_confidence, EXTRACTOR_VERSION=1, POST /admin/requirements/rebuild[?all],
-GET /admin/requirements/coverage); data files in src/main/resources/classify/. First full run: 706 jobs in
-17.6 s; years HIGH 447 / MEDIUM 136 / LOW 53 / NONE 70; 29 UNCLASSIFIED; 392 with required skills, 205 with
-a primary language; re-run extracts 0. Leftovers fixed by Claude on request (2026-10-05): common/CsvResource
-(one CSV reader), ExperienceExtractor uses DescriptionSections (intro sections skipped), skills after a slash
-count ("Python/Java", "Java/Go"), `~ML` is ambiguous (Zscaler appends "AI/ML" boilerplate to every job),
-jobs.function column (V7, backfilled) filled by adapters, CrawlService runs incremental extraction after a
-crawl that inserted/updated jobs (CrawlReport.extracted). EXTRACTOR_VERSION=2. 90 unit tests green.
-Future idea: detect company boilerplate lines (same line in >50% of a company's postings) and skip them.
-Concurrency plan (decided 2026-10-05): crawling is network-bound, so in M7 the scheduler crawls companies
-grouped BY HOST in parallel (one virtual thread per host, sequential + polite within a host); extraction is
-CPU-bound and incremental, so it stays single-threaded (optimize regex matching before adding threads).
-Milestone 3 DONE 2026-10-05: `matching` package: Profile (preferredLocations = explicit filter only),
-MatchCandidateRepository (hard filters in SQL: open, IN, family, location/remote/no-city, years -1/+3,
-unknown years pass), MatchScorer (skills 65 capped at 8 required, primary language 20, experience 15,
-neutral 0.5 for missing data, human-readable reasons; 9 tests), MatchService (canonical skills via
-SkillExtractor.canonical, places via Gazetteer, unknownSkills/unknownLocations reported), MatchController
-POST /admin/match. Fixed Gazetteer.citiesInMetro key bug. Real run (3-yr Java backend profile): 52 eligible
-across India, Paytm Java backend roles on top; NCR filter -> 8 eligible. Known quirk: "Jira Administrator"
-looks Java-primary from "Java/Python scripting". Next: Milestone 4 (MCP server).
 
 ## 1. Why this project (context)
 
@@ -300,10 +380,9 @@ looks Java-primary from "Java/Python scripting". Next: Milestone 4 (MCP server).
 ## 2. Working agreement (user preferences)
 
 - Explain concepts briefly with concrete examples, then code. Short answers for small questions.
-- Learning mode (decided 2026-10-04): the user builds step by step and types/pastes ALL code themselves.
-  Claude NEVER writes code into the repo (no Java, SQL, YAML, pom edits). For a new file, Claude only
-  creates it empty (touch) at the right path; the user pastes the contents after asking questions.
-  Claude may edit docs (CLAUDE.md, notes) and data files (e.g. `src/main/resources/geo/*.csv`) itself.
+- Learning mode history: 2026-10-04 the user pasted ALL code; from M4 Claude edits EXISTING files; from M5 Claude
+  makes ALL changes (new files too) unless the user explicitly asks to paste and learn (they did for the judge's
+  Spring AI classes). Current rule: section 0 "How we work". Claude may always edit docs and data files.
 - Give WHOLE files, ONE file at a time. With each file: what it achieves and why it exists, a table of
   every function/method + a one-line purpose, and its shortcomings / known limitations / what a
   production version would do differently.
@@ -461,7 +540,10 @@ resume ──> embeddings ──> candidate shortlist (vector) ──> LLM re-ra
 - Placeholder numbers are allowed only in sample resumes shared with friends; real resume numbers come
   from measurements.
 
-## 7. Milestones (decided 2026-10-04; vertical slice first, then widen)
+## 7. Milestones
+
+The original plan of 2026-10-04 was reordered on 2026-10-05; the CURRENT roadmap is the table in section 0.
+Original list for reference:
 
 0. Skeleton: Spring Initializr project, own database `jobagent` in `rag-postgres`, Flyway schema
    (companies, jobs, crawl_runs), import the company registry from `research/sources_2026-10-04.json`.
