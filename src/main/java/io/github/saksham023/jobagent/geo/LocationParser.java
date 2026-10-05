@@ -42,8 +42,14 @@ public class LocationParser {
     /** Leftover dashes, colons, & and / at the edges of a part, e.g. " - Indiana" -> "Indiana". */
     private static final Pattern EDGE_JUNK = Pattern.compile("^[\\s\\-\\u2013\\u2014:&/]+|[\\s\\-\\u2013\\u2014:&/]+$");
 
-    /** Between parts of one location: commas, and a dash with spaces around it ("USA - Update Location"). */
-    private static final Pattern PART_SEPARATOR = Pattern.compile(",|\\s+[-\\u2013\\u2014]\\s+");
+    /**
+     * Between parts of one location: commas, a dash with spaces around it ("USA - Update Location"), and a dash
+     * right after a word with a space after it ("Remote- India- Gurugram"; "Bengaluru-VTP" stays one part).
+     */
+    private static final Pattern PART_SEPARATOR = Pattern.compile(",|\\s+[-\\u2013\\u2014]\\s+|(?<=\\p{L})[-\\u2013\\u2014]\\s+");
+
+    /** Workday location codes with dots: "IND.Pune", "IND.BLR.Home Office" (country code first). */
+    private static final Pattern DOTTED_CODE = Pattern.compile("^[A-Z]{2,3}\\.(?=\\S)");
 
     /** Word boundaries for the prefix fallback: "Bengaluru-VTP" -> ["Bengaluru", "VTP"]. */
     private static final Pattern WORD_SPLIT = Pattern.compile("[\\s\\-/]+");
@@ -113,6 +119,9 @@ public class LocationParser {
         String cleaned = REMOTE.matcher(segment).replaceAll(" ");
         cleaned = HYBRID.matcher(cleaned).replaceAll(" ");
         cleaned = cleaned.replace('(', ' ').replace(')', ' ');
+        if (DOTTED_CODE.matcher(cleaned.strip()).lookingAt()) {
+            cleaned = cleaned.replace('.', ',');                      // "IND.Pune" -> "IND,Pune"
+        }
 
         List<String> parts = new ArrayList<>();
         for (String part : PART_SEPARATOR.split(cleaned)) {

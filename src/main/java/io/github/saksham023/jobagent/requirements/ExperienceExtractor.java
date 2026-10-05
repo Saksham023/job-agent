@@ -4,9 +4,11 @@ import io.github.saksham023.jobagent.requirements.DescriptionSections.Line;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -66,6 +68,16 @@ public class ExperienceExtractor {
             "(?i)\\bfounded\\b|\\bago\\b|\\byears? old\\b|warranty|anniversar|\\bnext\\s+\\d"
                     + "|\\bwithin\\s+(?:the\\s+)?(?:first|next|\\d)|\\bper year\\b"
                     + "|\\bsince\\s+(?:19|20)\\d\\d|\\bhistory\\b|\\blegacy\\b|\\bour\\s+\\d|\\bfor over\\b");
+
+    /**
+     * A level label right before a requirement: "- Senior Engineer: 3-5 years", "Staff Engineer - 8-12 years".
+     * Several such lines with DIFFERENT labels form a level ladder (one posting for several levels, as Qualcomm
+     * writes them): the job is open from the lowest level, so the ladder counts as its smallest requirement.
+     */
+    private static final Pattern LEVEL_LABEL = Pattern.compile(
+            "(?i)^[\\s\\-\\u2022\\u25CF*\\u00B7]*(?<label>[a-z][a-z0-9 /&.()+]{0,40}?\\b(?:engineer|developer|"
+                    + "architect|manager|lead|senior|junior|staff|principal|associate|intern|sde|level|grade|ic\\d|l\\d))"
+                    + "\\s*[:\\u2013\\u2014-]\\s*$");
 
     /** Alternatives inside one line: "5+ years with a BS or 3+ years with an MS". */
     private static final Pattern ALTERNATIVE = Pattern.compile("(?i)\\bor\\b[^;,.]{0,25}$");
@@ -218,12 +230,39 @@ public class ExperienceExtractor {
 
     // ---------------------------------------------------------------- combine
 
+    /**
+     * The mentions that form a level ladder: each alone on a line right after a level label, with at least two
+     * different labels. Empty when there is no ladder.
+     */
+    private static List<Mention> levelLadder(List<Mention> required) {
+        List<Mention> labeled = new ArrayList<>();
+        Set<String> labels = new HashSet<>();
+        for (List<Mention> line : groupByLine(required)) {
+            Mention only = line.getFirst();
+            if (line.size() != 1 || only.low() == null) {
+                continue;
+            }
+            Matcher label = LEVEL_LABEL.matcher(only.lineText().substring(0, only.start()));
+            if (label.matches()) {
+                labeled.add(only);
+                labels.add(label.group("label").strip().toLowerCase(Locale.ROOT));
+            }
+        }
+        return labels.size() >= 2 ? List.copyOf(labeled) : List.of();
+    }
+
     private static Experience combine(List<Mention> required, Integer preferred) {
         List<Integer> lowerBounds = new ArrayList<>();
         boolean sawAlternatives = false;
 
+        // a level ladder counts once, as its smallest requirement; its lines then take no further part
+        List<Mention> ladder = levelLadder(required);
+        if (!ladder.isEmpty()) {
+            lowerBounds.add(ladder.stream().map(Mention::low).min(Integer::compare).orElseThrow());
+        }
+
         // per line: alternatives joined by "or" count as their smallest lower bound; otherwise each counts
-        for (List<Mention> line : groupByLine(required)) {
+        for (List<Mention> line : groupByLine(required.stream().filter(m -> !ladder.contains(m)).toList())) {
             List<Integer> lows = line.stream().map(Mention::low).filter(v -> v != null).toList();
             if (lows.size() > 1 && hasOrBetween(line)) {
                 sawAlternatives = true;
@@ -234,7 +273,10 @@ public class ExperienceExtractor {
         }
 
         Integer min = lowerBounds.stream().max(Integer::compare).orElse(null);
-        Mention source = required.stream()
+        boolean ladderDecides = !ladder.isEmpty()
+                && min.equals(ladder.stream().map(Mention::low).min(Integer::compare).orElseThrow());
+        List<Mention> sources = ladderDecides ? ladder : required;
+        Mention source = sources.stream()
                 .filter(m -> min == null ? m.upToOnly() : min.equals(m.low()))
                 .findFirst()
                 .orElse(required.getFirst());

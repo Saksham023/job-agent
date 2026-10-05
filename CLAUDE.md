@@ -16,6 +16,56 @@ jobs, extractor v7. MCP server `http://localhost:8080/mcp`: `list_companies`, `m
 `postedSince`, `jobYearsFrom/To`), `get_job`, prompt `find-jobs`. Opus judge + answer key in `eval/`. 171 unit tests (M6 code added, see M6 status).
 Full detail of everything done: section 0c. Plain-language history: section 0b.
 
+### M8 status (2026-10-06): code written + verified in the scratchpad (205 tests, SQL on temp tables); user pasting
+- New package `search` (user pastes, in order): V14 (judgments + searches incl. candidate_scores; was V13, renumbered
+  because V13 became add_family_guessed), SearchProperties
+  (jobagent.search.*: first-batch 10, ready-target 30, stop-after-nos 20, parallelism 4, page-size 10, max 25, opus),
+  SearchRepository (state computed from the tables: unnest(candidate_ids, candidate_scores) WITH ORDINALITY + LEFT JOIN
+  judgments on current content_hash), SearchService (start / more / export; worker per search: Set<UUID> running,
+  re-check in finally; failed job ids skipped; pauses after 3 failures in a row), SearchController
+  (POST /admin/search?wants&postedSince&pageSize body Profile; GET /admin/search/{id}/more?count; GET .../export),
+  SearchServiceTest. Claude edited: JobTools (match_jobs -> SearchService.start, new `wants`; new more_jobs,
+  export_jobs; searchId parsing), JudgeProfile.years Double (null = "not stated" in JobJudge), application.yaml,
+  JobToolsTest, JobJudgeTest. SET ASIDE 2026-10-06 so the user could restart after the Qualcomm crawl: the repo is
+  back at the committed versions; ALL M8 files (new + edited) are kept in `.m8-wip/` (same paths, git-ignored via
+  .git/info/exclude). Resume: hand over the 6 new files for pasting (V14 first), copy the 6 edited files from
+  .m8-wip into place, run the tests, restart.
+- Live test after the restart (needs V12 + V13): curl POST /admin/search with the user's profile.
+
+### Rules v9 (2026-10-06, after crawling Qualcomm 584 + Sprinklr/BlackRock/Wells Fargo/Autodesk/Workday/Ciena 213)
+- Claude edited (all existing files, 203 tests): JobClassifier: a generic "engineer" title (title-fallback.csv) is
+  ignored when the department names a specific technical/tech-adjacent family (it then decides; the job keeps
+  SOFTWARE_ENGINEERING as a secondary unless it is HARDWARE); business departments do not overrule it.
+  department-families: ASICS -> hardware; title-families: dv, synthesis engineer -> hardware. ExperienceExtractor:
+  level ladders ("Senior Engineer: 3-5 years ... Principal Engineer: 18+") count as their lowest level.
+  LocationParser: "IND.Pune" dotted codes, "Remote- India- Gurugram" dash-space separator. EXTRACTOR_VERSION=9.
+- Before/after on all 2,340 jobs: 71 SWE -> HARDWARE (Qualcomm/Intel hardware departments), 8 to their specific family
+  with SWE kept as secondary, 4 Qualcomm years fixed (18+ -> 3-5), 4 location strings fixed, nothing else changed.
+- Next: user restarts, rebuild ?all=true, re-crawl workday + ciena (cities), gap fill (~40 jobs).
+
+### Family guessed (2026-10-06, user chose "the mix"): extractor v10
+- Rules keep the catch-all guess (title only "engineer"/"engineering"/"architect" -> SOFTWARE_ENGINEERING) but mark it
+  `job_requirements.family_guessed` (V13__add_family_guessed.sql, user pastes). The gap filler treats a guessed family
+  like UNCLASSIFIED (only for jobagent.gap-fill.families); applying a model family clears the flag and keeps the
+  guessed SOFTWARE_ENGINEERING as a secondary family (not for HARDWARE). reapply() fills a guessed family from an
+  earlier stored answer (the model always answers the family) with no new call. Claude edited JobClassifier
+  (Classification.familyGuessed), RequirementsRepository, GapFillRepository, RequirementsService (v10), tests (204).
+- Counts: 295 guessed (Qualcomm 164), 64 reuse earlier answers, next gap fill ~287 calls ~$7.50.
+- DONE 2026-10-06: user ran V13, rebuild v10, re-crawl workday+ciena (cities fixed), gap fill at parallelism 10
+  (GapFillRunner.MAX_PARALLELISM raised 4 -> 10 at the user's request): 287 jobs in ~3 min, 0 failed, $8.09.
+  Guessed families 0, UNCLASSIFIED 0, 367 families set/confirmed by Opus (this run: SWE confirmed 132, HARDWARE 34,
+  DATA_ML 27, QA 19, SALES_ENG 9...). Spot check of 14 changes: all sensible. Next: commit, then resume M8.
+
+### PENDING ACTIONS (remind the user; do not drop)
+1. DONE 2026-10-06 (Qualcomm crawled, V12 companies crawled). Was: when the Qualcomm crawl is over, restart the app
+   (Flyway V12 adds sprinklr, blackrock, wells-fargo, autodesk, workday, ciena; V12 is already pasted), then run
+   `for c in sprinklr blackrock wells-fargo autodesk workday ciena; do curl -s -X POST http://localhost:8080/admin/crawl/$c; echo; done`
+   (~214 jobs, ~4 min). Then: check the Qualcomm + new jobs (families, years, locations; generalization check),
+   then Opus gap fill for the configured families (tell the user the job count and cost first).
+2. **Microsoft** (next day): see "TODO MICROSOFT" in the M7b status below.
+3. Commit the Eightfold work (EightfoldAdapter with adaptive pace + detailDepartments, V11, V12, tests) once the
+   crawls look right.
+
 ### ROADMAP (agreed 2026-10-05; work strictly in this order, one milestone at a time)
 | # | Milestone | Status |
 |---|---|---|
@@ -102,6 +152,30 @@ loop on evaluation; build. Keep this roadmap updated when a milestone finishes.
   max < min); qwen2.5:3b far worse (56/124 same as rules; puts N+ into maxYears). DECISION (user): rules first, Opus
   for uncertain cases, local models scrapped for now; both models deleted and the Ollama server stopped.
 
+### M7b status (2026-10-06): Eightfold adapter in progress (Microsoft + Qualcomm first; M7 committed as 86df413)
+- PCSX API: GET https://{host}/api/pcsx/search?domain={domain}&query=&location=India&start=N (10/page, data.count,
+  server-side location), GET /api/pcsx/position_details?position_id=..&domain=..&hl=en (jobDescription, publicUrl,
+  department, standardizedLocations "Hyderabad, TS, IN" -> ISO code, postedTs epoch s, workLocationOption,
+  Microsoft efcustom* fields are LISTS). robots.txt allows /api/pcsx. User pasted EightfoldAdapter, V11 (microsoft,
+  qualcomm), EightfoldAdapterTest. Then, at the user's request, ADAPTIVE PACE (Claude edited): each crawl starts at
+  1 request/s (config delayMs = starting pace), every 429 or refused/timed-out connection adds 1 s per request (max
+  15 s) for the rest of that crawl, cool-down 10 s x signals in a row, same request retried; gives up after 5 signals
+  in a row (list page -> crawl fails, detail -> job kept without description). 196 tests green.
+- MICROSOFT THROTTLES HARD: at 1 s and at 2 s per request it answered 429 every few requests during the 24 list
+  pages, then refused connections (connect timeout, likely a temporary IP block). Stopped all Microsoft requests
+  2026-10-06 01:22. Do not hammer it; next try only much slower (e.g. 5-10 s per request, once a day) and only with
+  the user's ok. Qualcomm answered normally; full Qualcomm test run started (584 jobs).
+- detailDepartments (Claude edited, 197 tests): optional regex in companies.config; only matching departments get a
+  detail request, the rest are saved from the list (title, department, location, date; no description). The Microsoft
+  list has NO years and NO languages (checked), so descriptions stay needed for the jobs that matter.
+- TODO MICROSOFT (user, 2026-10-06; "handle tomorrow", NOT crawled yet): it put our IP in a 429 cool-down (still 429
+  at 01:35, 12 min after the last request). Next session: (1) one test request to see that the cool-down is over;
+  (2) set its detailDepartments (data, not code), e.g. a V12 migration
+  `UPDATE companies SET config = config || '{"detailDepartments": "software|engineering|data|applied sciences|research|cloud|ai|security"}'
+  WHERE slug = 'microsoft'` after looking at its real department names (~234 jobs; list pages first); (3) crawl.
+- Qualcomm crawl started by the user 2026-10-06 ~01:45 (no department filter, 584 jobs).
+- Morgan Stanley / UKG need the page's session cookie + CSRF token: later.
+
 ### M7 design: Workday (then Eightfold, Oracle)
 - Recipes in section 3.2 (facet discovery for the India filter, never searchText "India"; detail endpoint per job).
   Tenants: Nvidia 244, Mastercard 207, Salesforce 111, Visa 81, Adobe 79, Intel 58, Samsung 31, Expedia 30, PayPal 10.
@@ -124,6 +198,13 @@ then the rest in the BACKGROUND--> verdicts saved forever per (profile hash, job
 - Storage in Postgres (no Redis for now): `judgments` table (durable: verdicts cost money) and a search table (sorted
   candidate list + how far each list has been shown). The same search started twice reuses the running job.
 - Export: all APPLY so far as company, title, apply link (the user wants hundreds of apply-worthy jobs later).
+- REFINED 2026-10-06 (user): "keep N ready" buffer instead of judging everything. First call judges `first-batch` (10)
+  in parallel; a background worker per search keeps judging in score order until `ready-target` (30) unseen APPLY
+  are ready, then pauses; `more_jobs(n)` returns up to n ready ones at once and wakes the worker to refill to 30
+  (if fewer are ready: return those + "N being judged, ~X s"). Stop rule: worker stops after `stop-after-nos` (20)
+  NO verdicts in a row (lower scores rarely APPLY). All three in application.yaml (jobagent.search.*). Verdicts are
+  persisted, so a restart just resumes on the next call. Decided: match_jobs gets an optional `wants` text (role
+  types the candidate wants, filled by Claude from the conversation) for the judge's rubric.
 - Later (M11): Anthropic API (no process start, high parallelism -> first batch ~5 s), prefetch, several jobs per call,
   stop rule (a full batch with no APPLY/MAYBE), spot checks below the cut, recall@K tests.
 

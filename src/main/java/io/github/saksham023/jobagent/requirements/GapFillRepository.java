@@ -14,7 +14,8 @@ import java.util.Optional;
 /**
  * job_gap_fills: which jobs still have gaps, the stored model answers, and writing the accepted values into
  * job_requirements. A fill only ever writes into a field that is still a gap (the WHERE clauses), so a rules
- * result with HIGH or MEDIUM confidence is never overwritten.
+ * result with HIGH or MEDIUM confidence is never overwritten. A family gap is UNCLASSIFIED or a family the rules
+ * only guessed from the title (family_guessed).
  */
 @Repository
 public class GapFillRepository {
@@ -31,7 +32,7 @@ public class GapFillRepository {
             SELECT j.id, j.title, j.department, j.function, j.description, j.employment_type,
                    c.name AS company_name, j.content_hash,
                    r.years_confidence IN ('NONE', 'LOW') AS years_gap,
-                   r.family = 'UNCLASSIFIED' AS family_gap,
+                   (r.family = 'UNCLASSIFIED' OR r.family_guessed) AS family_gap,
                    cardinality(r.primary_languages) = 0 AS languages_gap
             FROM jobs j
             JOIN companies c ON c.id = j.company_id
@@ -41,7 +42,7 @@ public class GapFillRepository {
               AND j.country_codes @> ARRAY[CAST(:country AS text)]
               AND f.job_id IS NULL
               AND (r.family = ANY(:families) OR r.secondary_families && CAST(:families AS text[]))
-              AND (r.years_confidence IN ('NONE', 'LOW') OR r.family = 'UNCLASSIFIED'
+              AND (r.years_confidence IN ('NONE', 'LOW') OR r.family = 'UNCLASSIFIED' OR r.family_guessed
                    OR cardinality(r.primary_languages) = 0)
             ORDER BY j.id
             """;
@@ -70,15 +71,24 @@ public class GapFillRepository {
             WHERE job_id = :jobId AND years_confidence IN ('NONE', 'LOW')
             """;
 
-    /** The new family leaves the secondary families (a job's family is never also its secondary). */
+    /**
+     * The new family leaves the secondary families (a job's family is never also its secondary). A guessed
+     * SOFTWARE_ENGINEERING that the model replaces stays a secondary family (recall first: the title does say
+     * "engineer"), unless the model chose hardware (kept out of software searches).
+     */
     private static final String APPLY_FAMILY = """
             UPDATE job_requirements
-            SET family = :family,
+            SET secondary_families = array_remove(
+                    CASE WHEN family_guessed AND family <> :family AND :family <> 'HARDWARE_ENGINEERING'
+                              AND NOT (family = ANY(secondary_families))
+                         THEN secondary_families || family ELSE secondary_families END,
+                    CAST(:family AS text)),
+                family = :family,
                 specialization = coalesce(:specialization, specialization),
-                secondary_families = array_remove(secondary_families, CAST(:family AS text)),
                 family_reasons = family_reasons || jsonb_build_array(CAST(:reason AS text)),
-                family_source = :source
-            WHERE job_id = :jobId AND family = 'UNCLASSIFIED'
+                family_source = :source,
+                family_guessed = false
+            WHERE job_id = :jobId AND (family = 'UNCLASSIFIED' OR family_guessed)
             """;
 
     private static final String APPLY_LANGUAGES = """
@@ -87,11 +97,17 @@ public class GapFillRepository {
             WHERE job_id = :jobId AND cardinality(primary_languages) = 0
             """;
 
-    /** The stored fill for the job's current content, if any. */
+    /**
+     * The stored fill for the job's current content, if any, with the model's family answer: the model always
+     * answers the family, so a family the rules only guessed later can be filled from an earlier answer.
+     */
     private static final String SELECT_CURRENT_FILL = """
-            SELECT f.model, f.accepted::text AS accepted
+            SELECT f.model, f.accepted::text AS accepted, f.answer ->> 'family' AS answered_family,
+                   f.answer ->> 'specialization' AS answered_specialization,
+                   f.answer ->> 'familyReason' AS answered_reason, r.family_guessed
             FROM job_gap_fills f
             JOIN jobs j ON j.id = f.job_id AND j.content_hash = f.content_hash
+            JOIN job_requirements r ON r.job_id = f.job_id
             WHERE f.job_id = :jobId
             """;
 
@@ -161,15 +177,32 @@ public class GapFillRepository {
         }
     }
 
-    /** After a rules re-extraction: applies the stored fill again when the posting has not changed since. */
+    /**
+     * After a rules re-extraction: applies the stored fill again when the posting has not changed since. When the
+     * rules now only guess the family and the stored fill did not use the model's family answer (it was not a gap
+     * then), that answer fills it: no new call.
+     */
     public void reapply(long jobId) {
-        record Stored(String model, String accepted) {
+        record Stored(String model, Fill accepted, String family, String specialization, String reason,
+                      boolean guessed) {
         }
         Optional<Stored> stored = jdbc.sql(SELECT_CURRENT_FILL)
                 .param("jobId", jobId)
-                .query((rs, rowNum) -> new Stored(rs.getString("model"), rs.getString("accepted")))
+                .query((rs, rowNum) -> new Stored(rs.getString("model"),
+                        jsonMapper.readValue(rs.getString("accepted"), Fill.class), rs.getString("answered_family"),
+                        rs.getString("answered_specialization"), rs.getString("answered_reason"),
+                        rs.getBoolean("family_guessed")))
                 .optional();
-        stored.ifPresent(s -> apply(jobId, jsonMapper.readValue(s.accepted(), Fill.class), s.model()));
+        stored.ifPresent(s -> {
+            Fill fill = s.accepted();
+            boolean answeredFamily = s.family() != null && !JobFamily.UNCLASSIFIED.name().equals(s.family());
+            if (s.guessed() && !fill.hasFamily() && answeredFamily) {
+                fill = new Fill(fill.minYears(), fill.maxYears(), fill.yearsEvidence(), JobFamily.valueOf(s.family()),
+                        s.specialization() == null ? null : JobClassifier.Specialization.valueOf(s.specialization()),
+                        s.reason(), fill.languages());
+            }
+            apply(jobId, fill, s.model());
+        });
     }
 
     static String source(String model) {

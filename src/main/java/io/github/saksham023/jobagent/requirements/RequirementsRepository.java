@@ -57,12 +57,12 @@ public class RequirementsRepository {
                                           min_years, max_years, preferred_min_years, years_evidence, years_confidence,
                                           family, secondary_families, specialization, family_reasons, employment_type,
                                           required_skills, preferred_skills, primary_languages, extracted_at,
-                                          years_source, family_source, languages_source)
+                                          years_source, family_source, languages_source, family_guessed)
             VALUES (:jobId, :version,
                     :minYears, :maxYears, :preferredMinYears, :yearsEvidence, :yearsConfidence,
                     :family, :secondaryFamilies, :specialization, CAST(:familyReasons AS jsonb), :employmentType,
                     :requiredSkills, :preferredSkills, :primaryLanguages, now(),
-                    'rules', 'rules', 'rules')
+                    'rules', 'rules', 'rules', :familyGuessed)
             ON CONFLICT (job_id) DO UPDATE SET
                 extractor_version   = EXCLUDED.extractor_version,
                 min_years           = EXCLUDED.min_years,
@@ -81,7 +81,8 @@ public class RequirementsRepository {
                 extracted_at        = EXCLUDED.extracted_at,
                 years_source        = EXCLUDED.years_source,
                 family_source       = EXCLUDED.family_source,
-                languages_source    = EXCLUDED.languages_source
+                languages_source    = EXCLUDED.languages_source,
+                family_guessed      = EXCLUDED.family_guessed
             """;
 
     private final JdbcClient jdbc;
@@ -127,6 +128,7 @@ public class RequirementsRepository {
                 .param("family", classification.family().name())
                 .param("secondaryFamilies", classification.secondaryFamilies().stream().map(Enum::name).toArray(String[]::new))
                 .param("specialization", classification.specialization() == null ? null : classification.specialization().name())
+                .param("familyGuessed", classification.familyGuessed())
                 .param("familyReasons", jsonMapper.writeValueAsString(classification.reasons()))
                 .param("employmentType", employmentType)
                 .param("requiredSkills", skills.required().toArray(String[]::new))

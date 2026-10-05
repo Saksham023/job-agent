@@ -211,6 +211,20 @@ class LocationParserTest {
     }
 
     @Test
+    void workdayDottedCodes() {
+        ParsedLocation pune = single("IND.Pune");
+        assertThat(pune.city()).isEqualTo("Pune");
+        assertThat(pune.countryCode()).isEqualTo("IN");
+    }
+
+    @Test
+    void aDashWithASpaceOnlyAfterItSeparatesParts() {
+        ParsedLocation location = single("Remote- India- Gurugram");
+        assertThat(location.city()).isEqualTo("Gurugram");
+        assertThat(location.remote()).isTrue();
+    }
+
+    @Test
     void virtualMeansRemote() {
         ParsedLocation location = single("Virtual India");
 

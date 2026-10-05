@@ -46,6 +46,25 @@ class ExperienceExtractorTest {
     }
 
     @Test
+    void aLevelLadderCountsAsItsLowestLevel() {
+        Experience e = fromDescription("""
+                We have openings at multiple levels.
+                - Senior Engineer: 3-5 years of relevant experience.
+                - Lead Engineer: 5-8 years of relevant experience.
+                - Staff Engineer: 8-12 years of relevant experience.
+                - Principal Engineer: 18+ years of relevant experience.""");
+
+        assertThat(e.minYears()).isEqualTo(3);
+        assertThat(e.maxYears()).isEqualTo(5);
+    }
+
+    @Test
+    void oneLabelledLineIsNotALadder() {
+        assertThat(fromDescription("- Experience: 5+ years of backend development\n- 7+ years overall in software")
+                .minYears()).isEqualTo(7);
+    }
+
+    @Test
     void lowerBoundWords() {
         assertThat(fromDescription("- Minimum 4 years of auditing source code").minYears()).isEqualTo(4);
         assertThat(fromDescription("- At least 3 years of experience with Java").minYears()).isEqualTo(3);

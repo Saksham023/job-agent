@@ -30,8 +30,12 @@ public class RequirementsService {
      * 1 = the rules and dictionaries of Milestone 2 (2026-10-05).
      * 2 = shared section detection (intro sections skipped for experience), skills after a slash ("Python/Java").
      * 8 = company boilerplate lines skipped, HARDWARE_ENGINEERING family, "8 years to 18 years" ranges (Workday).
+     * 9 = a specific technical department beats the generic "engineer" title, ASICS / DV / synthesis are hardware,
+     *     level ladders (Qualcomm), dotted and "Remote- India-" locations.
+     * 10 = family_guessed: a SOFTWARE_ENGINEERING family that comes only from the catch-all title is marked for the
+     *      model to check.
      */
-    public static final int EXTRACTOR_VERSION = 8;
+    public static final int EXTRACTOR_VERSION = 10;
 
     private static final Pattern INTERN = Pattern.compile("(?i)\\b(?:intern(?:ship)?|trainee|apprentice)\\b");
     private static final Pattern CONTRACT = Pattern.compile("(?i)\\b(?:contract|contractor|temporary|freelance)\\b");

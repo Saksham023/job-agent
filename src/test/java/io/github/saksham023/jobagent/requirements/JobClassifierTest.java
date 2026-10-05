@@ -60,6 +60,31 @@ class JobClassifierTest {
     }
 
     @Test
+    void aGenericEngineerTitleFollowsASpecificTechnicalDepartment() {
+        assertThat(classify("Synthesis Engineer, Sr Lead", "Hardware Engineering").family())
+                .isEqualTo(JobFamily.HARDWARE_ENGINEERING);
+        assertThat(classify("NPU Synthesis Engineer, Principal", "ASICS Engineering").family())
+                .isEqualTo(JobFamily.HARDWARE_ENGINEERING);
+
+        Classification infra = classify("Performance Engineer, Kernels", "Infrastructure");
+        assertThat(infra.family()).isEqualTo(JobFamily.INFRA_DEVOPS);
+        assertThat(infra.secondaryFamilies()).contains(JobFamily.SOFTWARE_ENGINEERING);   // still found by software searches
+    }
+
+    @Test
+    void aFamilyFromTheCatchAllTitleAloneIsMarkedAsGuessed() {
+        assertThat(classify("Senior Lead Engineer", "Engineering").familyGuessed()).isTrue();
+        assertThat(classify("Staff Software Engineer - Backend", "Engineering").familyGuessed()).isFalse();
+        assertThat(classify("Synthesis Engineer, Sr Lead", "Hardware Engineering").familyGuessed()).isFalse();
+        assertThat(classify("Account Executive", "Sales").familyGuessed()).isFalse();
+    }
+
+    @Test
+    void aBusinessDepartmentDoesNotOverruleAnEngineerTitle() {
+        assertThat(classify("Senior Lead Engineer", "Customer Success").family()).isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+    }
+
+    @Test
     void technicalConsultingIsSalesEngineering() {
         assertThat(classify("Manager, Technical Consulting-Health Domain", "Customer Success").family())
                 .isEqualTo(JobFamily.SALES_ENGINEERING);

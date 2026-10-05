@@ -10,7 +10,7 @@ SALES_ENGINEERING,\bfield engineering\b|\bsolutions?\b|professional services|dep
 SECURITY,\bsecurity\b
 DATA_ML,\bmodels\b|\bai services\b|data science|\bml\b
 INFRA_DEVOPS,\binfrastructure\b|\bsre\b
-HARDWARE_ENGINEERING,\bsilicon\b|\bhardware\b|\bvlsi\b|manufacturing and process
+HARDWARE_ENGINEERING,\bsilicon\b|\bhardware\b|\bvlsi\b|\basics?\b|manufacturing and process
 TECH,\bengineering\b|\btech\b|\btechnology\b|\bbackend\b|commerce platform|digital technology|\br&d\b|\bit\b|information technology
 PRODUCT,\bproduct\b
 DESIGN,\bdesign\b|art/creative|\bux\b

@@ -34,7 +34,7 @@ public class GapFillRunner {
 
     private static final Logger log = LoggerFactory.getLogger(GapFillRunner.class);
 
-    static final int MAX_PARALLELISM = 4;
+    static final int MAX_PARALLELISM = 10;          // Opus via the CLI; drop the request to 4 if calls start failing (429/529)
 
     /** If this many calls fail before any succeeds, the problem is the setup (login, CLI), not the jobs: stop. */
     static final int FAILURES_BEFORE_GIVING_UP = 3;

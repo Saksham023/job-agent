@@ -46,9 +46,11 @@ public class JobClassifier {
     /**
      * @param secondaryFamilies other technical families the job also belongs to (never contains family)
      * @param reasons           the votes, e.g. "title 'sde' -> SOFTWARE_ENGINEERING +3", for debugging and the user
+     * @param familyGuessed     the family is SOFTWARE_ENGINEERING only because the title says "engineer" / "architect"
+     *                          (the catch-all rule) and no specific evidence: a model may check it (GapFiller)
      */
     public record Classification(JobFamily family, List<JobFamily> secondaryFamilies, Specialization specialization,
-                                 int score, List<String> reasons) {
+                                 int score, List<String> reasons, boolean familyGuessed) {
     }
 
     /** AI_ENGINEERING builds products on top of models (LLM apps, agents, RAG); ML_AI builds the models. */
@@ -92,8 +94,22 @@ public class JobClassifier {
         List<String> reasons = new ArrayList<>();
 
         List<Hit<JobFamily>> titleHits = allMatches(titleRules, title);
+        Optional<Hit<JobFamily>> departmentHit = firstMatch(departmentRules, department)
+                .or(() -> firstMatch(departmentRules, function));
+
+        // the generic "engineer" catch-all only says "some engineering job": when the department names a specific
+        // technical family ("Synthesis Engineer" in "Hardware Engineering"), the department decides alone; against a
+        // business department ("Technical Architect" in "Sales") the title keeps its full vote
         Optional<Hit<JobFamily>> titleHit = titleHits.stream().findFirst()
                 .or(() -> firstMatch(fallbackTitleRules, title));
+        boolean genericTitle = titleHits.isEmpty() && titleHit.isPresent();
+        boolean departmentDecides = genericTitle
+                && departmentHit.map(Hit::value).filter(f -> f.group() != JobFamily.Group.BUSINESS).isPresent();
+        if (departmentDecides) {
+            reasons.add("title '" + titleHit.get().matched() + "' is generic: department '"
+                    + departmentHit.get().matched() + "' decides");
+            titleHit = Optional.empty();
+        }
         titleHit.ifPresent(hit -> vote(votes, reasons, hit.value(), TITLE_WEIGHT, "title '" + hit.matched() + "'"));
 
         // generic TECH evidence supports a technical title family, otherwise it means software engineering
@@ -101,8 +117,6 @@ public class JobClassifier {
                 .filter(f -> f.group() != JobFamily.Group.BUSINESS)
                 .orElse(JobFamily.SOFTWARE_ENGINEERING);
 
-        Optional<Hit<JobFamily>> departmentHit = firstMatch(departmentRules, department)
-                .or(() -> firstMatch(departmentRules, function));
         departmentHit.ifPresent(hit -> vote(votes, reasons, resolve(hit.value(), techTarget), DEPARTMENT_WEIGHT,
                 "department '" + hit.matched() + "'"));
 
@@ -117,11 +131,20 @@ public class JobClassifier {
         secondaryEvidence.addAll(keywordCounts(description, secondaryKeywordSets));
         List<JobFamily> secondary = secondaryFamilies(family, titleHits, departmentHit, descriptionHit,
                 secondaryEvidence, reasons);
+        boolean engineeringLike = family.isTech() || family == JobFamily.SALES_ENGINEERING;
+        if (departmentDecides && engineeringLike && family != JobFamily.SOFTWARE_ENGINEERING
+                && !secondary.contains(JobFamily.SOFTWARE_ENGINEERING)) {
+            secondary = new ArrayList<>(secondary);                 // recall first: an "... Engineer" stays findable
+            secondary.add(JobFamily.SOFTWARE_ENGINEERING);          // by software searches (hardware excepted)
+            secondary = List.copyOf(secondary);
+            reasons.add("generic title 'engineer' -> also SOFTWARE_ENGINEERING");
+        }
         boolean technical = family.isTech() || secondary.stream().anyMatch(JobFamily::isTech);
         Specialization specialization = technical
                 ? firstMatch(specializationRules, title).map(Hit::value).orElse(null)
                 : null;
-        return new Classification(family, secondary, specialization, score, List.copyOf(reasons));
+        boolean guessed = genericTitle && !departmentDecides && family == JobFamily.SOFTWARE_ENGINEERING;
+        return new Classification(family, secondary, specialization, score, List.copyOf(reasons), guessed);
     }
 
     /**
