@@ -31,7 +31,7 @@ class JobJudgeTest {
     private static JobDetails job(String description) {
         return new JobDetails(7, "Acme", "Backend Engineer", "https://example.com/7", "Engineering",
                 List.of("Bengaluru"), List.of("Bengaluru"), true, null, null, null, true, 3, 5, "3-5 years",
-                "SOFTWARE_ENGINEERING", List.of(), null, List.of(), List.of(), List.of(), description);
+                "SOFTWARE_ENGINEERING", List.of(), null, List.of(), List.of(), List.of(), List.of(), description);
     }
 
     private static ChatModel answering(String json, AtomicReference<Prompt> sent) {

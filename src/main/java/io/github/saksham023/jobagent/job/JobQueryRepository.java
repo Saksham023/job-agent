@@ -18,13 +18,23 @@ import java.util.Optional;
 @Repository
 public class JobQueryRepository {
 
-    /** Everything about one job: the posting, where and when, and what our extractors found in it. */
+    /**
+     * Everything about one job: the posting, where and when, and what our extractors found in it.
+     * filledByModel names the fields a model filled because the rules found nothing ("years", "family",
+     * "primaryLanguages"); every other field comes from the rules.
+     */
     public record JobDetails(long jobId, String company, String title, String url, String department,
                              List<String> locations, List<String> cities, boolean remote, String employmentType,
                              Instant postedAt, Instant firstSeenAt, boolean open,
                              Integer minYears, Integer maxYears, String yearsEvidence, String family,
                              List<String> secondaryFamilies, String specialization, List<String> requiredSkills, List<String> preferredSkills,
-                             List<String> primaryLanguages, String description) {
+                             List<String> primaryLanguages, List<String> filledByModel, String description) {
+
+        public JobDetails withDescription(String newDescription) {
+            return new JobDetails(jobId, company, title, url, department, locations, cities, remote, employmentType,
+                    postedAt, firstSeenAt, open, minYears, maxYears, yearsEvidence, family, secondaryFamilies,
+                    specialization, requiredSkills, preferredSkills, primaryLanguages, filledByModel, newDescription);
+        }
     }
 
     private static final String SELECT_DETAILS = """
@@ -32,7 +42,12 @@ public class JobQueryRepository {
                    coalesce(r.employment_type, j.employment_type) AS employment_type, j.posted_at,
                    j.first_seen_at, j.closed_at IS NULL AS open,
                    r.min_years, r.max_years, r.years_evidence, r.family, r.secondary_families, r.specialization,
-                   r.required_skills, r.preferred_skills, r.primary_languages, j.description
+                   r.required_skills, r.preferred_skills, r.primary_languages,
+                   array_remove(ARRAY[CASE WHEN r.years_source <> 'rules' THEN 'years' END,
+                                      CASE WHEN r.family_source <> 'rules' THEN 'family' END,
+                                      CASE WHEN r.languages_source <> 'rules' THEN 'primaryLanguages' END], NULL)
+                       AS filled_by_model,
+                   j.description
             FROM jobs j
             JOIN companies c ON c.id = j.company_id
             LEFT JOIN job_requirements r ON r.job_id = j.id
@@ -75,6 +90,7 @@ public class JobQueryRepository {
                 strings(rs.getArray("required_skills")),
                 strings(rs.getArray("preferred_skills")),
                 strings(rs.getArray("primary_languages")),
+                strings(rs.getArray("filled_by_model")),
                 rs.getString("description"));
     }
 

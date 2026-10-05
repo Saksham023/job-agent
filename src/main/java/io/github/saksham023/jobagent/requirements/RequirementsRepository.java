@@ -48,11 +48,13 @@ public class RequirementsRepository {
             INSERT INTO job_requirements (job_id, extractor_version,
                                           min_years, max_years, preferred_min_years, years_evidence, years_confidence,
                                           family, secondary_families, specialization, family_reasons, employment_type,
-                                          required_skills, preferred_skills, primary_languages, extracted_at)
+                                          required_skills, preferred_skills, primary_languages, extracted_at,
+                                          years_source, family_source, languages_source)
             VALUES (:jobId, :version,
                     :minYears, :maxYears, :preferredMinYears, :yearsEvidence, :yearsConfidence,
                     :family, :secondaryFamilies, :specialization, CAST(:familyReasons AS jsonb), :employmentType,
-                    :requiredSkills, :preferredSkills, :primaryLanguages, now())
+                    :requiredSkills, :preferredSkills, :primaryLanguages, now(),
+                    'rules', 'rules', 'rules')
             ON CONFLICT (job_id) DO UPDATE SET
                 extractor_version   = EXCLUDED.extractor_version,
                 min_years           = EXCLUDED.min_years,
@@ -68,7 +70,10 @@ public class RequirementsRepository {
                 required_skills     = EXCLUDED.required_skills,
                 preferred_skills    = EXCLUDED.preferred_skills,
                 primary_languages   = EXCLUDED.primary_languages,
-                extracted_at        = EXCLUDED.extracted_at
+                extracted_at        = EXCLUDED.extracted_at,
+                years_source        = EXCLUDED.years_source,
+                family_source       = EXCLUDED.family_source,
+                languages_source    = EXCLUDED.languages_source
             """;
 
     private final JdbcClient jdbc;

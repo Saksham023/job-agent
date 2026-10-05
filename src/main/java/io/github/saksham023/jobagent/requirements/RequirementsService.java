@@ -15,6 +15,8 @@ import java.util.regex.Pattern;
 /**
  * Runs the three rule-based extractors (experience, family, skills) over jobs and stores the results.
  * Bump EXTRACTOR_VERSION whenever a rule or data file changes, so the next rebuild re-extracts every job.
+ * Gaps the rules leave are filled by a model in a separate run (GapFillRunner); a rebuild re-applies those stored
+ * fills, so it never costs a model call.
  */
 @Service
 public class RequirementsService {
@@ -40,13 +42,15 @@ public class RequirementsService {
     private final ExperienceExtractor experienceExtractor;
     private final JobClassifier jobClassifier;
     private final SkillExtractor skillExtractor;
+    private final GapFillRepository gapFills;
 
     public RequirementsService(RequirementsRepository repository, ExperienceExtractor experienceExtractor,
-                               JobClassifier jobClassifier, SkillExtractor skillExtractor) {
+                               JobClassifier jobClassifier, SkillExtractor skillExtractor, GapFillRepository gapFills) {
         this.repository = repository;
         this.experienceExtractor = experienceExtractor;
         this.jobClassifier = jobClassifier;
         this.skillExtractor = skillExtractor;
+        this.gapFills = gapFills;
     }
 
     /**
@@ -79,6 +83,7 @@ public class RequirementsService {
         Skills skills = skillExtractor.extract(job.title(), job.description(), job.companyName());
         repository.upsert(job.jobId(), EXTRACTOR_VERSION, experience, classification, skills,
                 employmentType(job.employmentType(), job.title()));
+        gapFills.reapply(job.jobId());              // the rules reset the model's fills; put them back (no new call)
     }
 
     /**

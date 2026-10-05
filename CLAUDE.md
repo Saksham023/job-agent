@@ -13,7 +13,7 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 `e1bb4ec` M5 part 2 (model judge + reference set), `7d573b8` notes, `f28c9ed` thinking switch + Haiku runs + Opus
 decision, then the roadmap commit. 12 companies on 4 platforms (Greenhouse, Lever, SmartRecruiters, Ashby), 706 India
 jobs, extractor v7. MCP server `http://localhost:8080/mcp`: `list_companies`, `match_jobs` (decimal years, optional
-`postedSince`, `jobYearsFrom/To`), `get_job`, prompt `find-jobs`. Opus judge + answer key in `eval/`. 161 unit tests.
+`postedSince`, `jobYearsFrom/To`), `get_job`, prompt `find-jobs`. Opus judge + answer key in `eval/`. 171 unit tests (M6 code added, see M6 status).
 Full detail of everything done: section 0c. Plain-language history: section 0b.
 
 ### ROADMAP (agreed 2026-10-05; work strictly in this order, one milestone at a time)
@@ -22,9 +22,10 @@ Full detail of everything done: section 0c. Plain-language history: section 0b.
 | 0-3 | Skeleton, 4 adapters, rule extraction, rule matching | DONE |
 | 4 | MCP server (tools, find-jobs prompt, postedSince) | DONE |
 | 5 | Quality foundation: answer key (Opus judge, user-confirmed `eval/reference/saksham.csv`), baseline nDCG@10 0.89, experience window, bullet/typo extraction fixes, `ClaudeCliChatModel` | DONE |
-| **6** | **Opus extraction-gap filler** (design below) | **NEXT** |
+| 6 | Opus extraction-gap filler (status below) | DONE 2026-10-05 (all 145 gap jobs, $3.48) |
 | 7 | Workday adapter (then Eightfold, Oracle) with the generalization check (design below) | planned |
 | 8 | Search with the Opus judge: first batch fast, background judging, `more_jobs`, export (design below) = the END-TO-END DEMO | planned |
+| 8b | Self-learning skill dictionary (user's idea 2026-10-05, design below; suggested placement: after M8, user to confirm) | planned |
 | 9 | Operations: scheduler (per-host virtual threads), change tracking + closed jobs, dedup, health alerts, SmartRecruiters incremental details | planned |
 | 10 | Custom adapters by value: Amazon, IBM, Cisco, Google, Apple, then the rest (section 3) | planned |
 | 11 | Cost and scale: Anthropic API instead of the CLI, cheaper/local judges (code computes the experience window), embeddings + hybrid retrieval, recall@K regression tests, answer keys for more profiles | later |
@@ -33,7 +34,43 @@ User priorities: Workday is eagerly wanted (lots more jobs); the gap filler must
 many unextractable postings. Use OPUS for every model call until M11 (single user; cost fine even at 8-10k jobs). Do not
 loop on evaluation; build. Keep this roadmap updated when a milestone finishes.
 
-### M6 design: Opus extraction-gap filler (agreed direction; confirm details with the user before coding)
+### M6 status (2026-10-05): code written by Claude, 171 unit tests green, SQL checked on real data (temp tables)
+- Scope (user's call, to save Opus usage): open TECH + SALES_ENGINEERING jobs (primary or secondary) and UNCLASSIFIED
+  ones, with a gap: years NONE/LOW, family UNCLASSIFIED, or no main language. 145 jobs today (40 years, 29 family,
+  137 languages). One call per job asks ALL fields; only gap fields are checked and applied; the whole answer is stored.
+- Files: `db/migration/V9__create_job_gap_fills.sql` (table `job_gap_fills` + `job_requirements.{years,family,
+  languages}_source`), `resources/classify/gap-filler-prompt.md` (prompt v1: every family with a one-line meaning, the
+  specializations, the allowed language names), `requirements/` GapAnswer (model answer record), GapFillPrompt,
+  GapFiller (call + checks: years 0-30, min<=max, evidence copied from the posting after normalizing and stating the
+  minimum; family not UNCLASSIFIED; languages canonical LANGUAGE skills mentioned in the posting; nullable fields
+  patched into the generated schema), GapFillRepository (gap query, save, apply only into gap fields, reapply),
+  GapFillRunner (background, Semaphore, shuffled seed 42, stops after 3 initial failures). RequirementsService
+  re-applies stored fills after every rules upsert (no new call). `get_job` shows `filledByModel`.
+- Endpoints: `POST /admin/requirements/fill-gaps?model=opus&limit=15&parallelism=3`,
+  `GET /admin/requirements/fill-gaps/status`. Review fills: `SELECT j.title, f.accepted, f.rejected FROM job_gap_fills f
+  JOIN jobs j ON j.id = f.job_id ORDER BY f.filled_at DESC`.
+- RESULT (2026-10-05): 145 jobs asked, 0 failures, 0 rejected, $3.48, ~5 s/job. UNCLASSIFIED 29 -> 0 (all fills checked,
+  sensible: 12 Paytm "Team Leader - LRM" -> SALES, CTM -> RISK_COMPLIANCE, Workday integration leads -> SWE...); years
+  3 filled with quotes (21 tech jobs truly state none); languages 0 filled, CORRECT: none of those postings names a
+  language (Databricks/Freshworks write language-free postings). Opus agreed with the rules' years on every job where
+  both answered. Log line shows only the gaps asked and their outcome.
+
+### 8b design: self-learning skill dictionary (user's idea, discussed 2026-10-05; viable, ~2 days)
+- Problem: skills.csv is hand-made; new tech terms (as RAG was a few years ago) are missed until someone edits it.
+- Mine candidates during extraction (rules, free): tech-looking tokens/phrases in requirement sections (acronyms,
+  CamelCase, names with digits/dots like "Node.js", "GPT-5", terms in skill lists after "experience with") that match
+  no alias; table `skill_candidates(term, job_count, company_count, first_seen, last_seen, sample_contexts, status)`.
+  Count DISTINCT companies (boilerplate and product names stay at 1). Also record the resume skills match_jobs reports as
+  `unknownSkills` (source = profile).
+- Monthly (or on demand) review run: top candidates (e.g. >= 3 companies) go to Opus with our categories, nearby
+  existing skills and the sample contexts; Opus answers per term: reject (not a skill), alias of an existing skill,
+  or new skill (canonical name, category, aliases, ambiguous flag, implications like "LangGraph -> AI Agents 0.5").
+- Apply without editing resource files: learned rows in a DB table loaded by SkillExtractor on top of the CSV seed;
+  checks: alias occurs in the contexts, no clash with existing aliases, ambiguous names marked ~; audit log + undo;
+  then re-extract only jobs containing the new aliases. Auto-apply confident clear terms, queue ambiguous ones.
+- Better after M7: more jobs and companies make the counts meaningful.
+
+### M6 design: Opus extraction-gap filler (agreed with the user 2026-10-05)
 - Goal: when the rules give no answer, Opus reads the posting and fills it. Gaps today: years NONE 61 + LOW 53, family
   UNCLASSIFIED 29, tech jobs without a main language 78 (~200 jobs, ~$6 of Opus, one-time; then only new/changed jobs).
 - Order: rules always run first; Opus only fills fields the rules left empty or LOW. Never overwrite a HIGH/MEDIUM rule
@@ -79,9 +116,11 @@ Rubric `eval/judge-rubric.md` v2 (role type wanted = asked for OR shown by the s
 fails the experience arithmetic (kappa 0.46); with thinking 0.85; fix later by computing the window in code.
 
 **How we work (user preferences, keep following them):**
-- Claude makes ALL code changes itself (new and existing files) and reports per file what changed and why, SHORT and
-  precise. Exception: when the user says they want to learn a part (as for the judge's Spring AI classes), create the
-  empty files, hand over whole files with purpose, method table, new concepts, shortcomings, and wait for the paste.
+- NEW FILES (rule restated by the user 2026-10-05 after M6, "remember it"): Claude only creates the EMPTY file
+  (touch) and gives the whole verified code with purpose, a short method table, new concepts and shortcomings; the
+  user understands it first and pastes it. Never write a new file's code into the repo. EXISTING files: Claude may
+  edit them itself and report per file what changed and why, SHORT and precise. (M6 files were written by Claude by
+  mistake; the user accepted it once.)
 - Keep answers SHORT, simple and to the point (user complaint 2026-10-05: long answers with lots of information are
   hard to follow). Explain with small concrete examples. Never use em-dashes.
 - Verify before handing over or claiming done: compile with JDK 25
@@ -109,7 +148,8 @@ fails the experience arithmetic (kappa 0.46); with thinking 0.85; fix later by c
 **Code map:** `company` (registry) · `crawl` (+ `crawl.adapter`: Greenhouse/Lever/SmartRecruiters/Ashby, JsonFields) ·
 `geo` (Gazetteer, LocationParser) · `job` (NormalizedJob, JobRepository upsert, JobQueryRepository read side) ·
 `requirements` (ExperienceExtractor, JobClassifier/JobFamily with secondary families, DescriptionSections incl.
-`isBullet`, SkillExtractor, Requirements{Repository,Service,Controller}, EXTRACTOR_VERSION=7) · `matching` (Profile with
+`isBullet`, SkillExtractor, Requirements{Repository,Service,Controller}, EXTRACTOR_VERSION=7, M6 gap filler:
+GapAnswer, GapFillPrompt, GapFiller, GapFillRepository, GapFillRunner) · `matching` (Profile with
 decimal years + jobYearsFrom/To, ExperienceWindow, MatchingProperties `jobagent.matching.*`, SkillImplications,
 MatchCandidateRepository, MatchScorer, MatchService, MatchController) · `mcp` (CompanyTools, JobTools, JobSearchPrompts) ·
 `llm` (ClaudeCliChatModel, ClaudeCliProperties `jobagent.llm.claude-cli.*` incl. thinking=false, ClaudeCliException) ·

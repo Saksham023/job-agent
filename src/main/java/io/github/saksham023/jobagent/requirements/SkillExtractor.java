@@ -124,6 +124,11 @@ public class SkillExtractor {
         return name == null ? Optional.empty() : Optional.ofNullable(skillsByName.get(nameKey(name)));
     }
 
+    /** Every canonical skill name of one category, in dictionary order ("Java", "Python", "Go"...). */
+    public List<String> canonicalNames(Category category) {
+        return aliases.stream().filter(a -> a.category() == category).map(Alias::skill).distinct().toList();
+    }
+
     // ---------------------------------------------------------------- matching
 
     /** Every dictionary skill in one piece of text, in order of position, without duplicates. */
