@@ -16,6 +16,9 @@ public final class DescriptionSections {
 
     public record Line(String text, Kind section) {}
 
+    private static final Pattern BULLET = Pattern.compile(
+            "[-\u2022\u00B7\u25AA\u25CF\u25E6*\u2023\u27A2\u27A4\u2713\u2714]\\s?|\\(?\\d{1,2}[.)]\\s");
+
     private static final Pattern PREFERRED_HEADING = Pattern.compile(
             "(?i).*(?:preferred|nice[- ]to[- ]have|good[- ]to[- ]have|bonus|desired|plus|stand out|additional qualifications).*");
 
@@ -64,8 +67,16 @@ public final class DescriptionSections {
 
     /** A short line that is not a bullet and has no sentence punctuation: "Nice to have", "Requirements:". */
     public static boolean isHeading(String line) {
-        return !line.isEmpty() && line.length() <= 60 && !line.startsWith("-")
+        return !line.isEmpty() && line.length() <= 60 && !isBullet(line)
                 && !line.matches(".*[.;].*") && !YEARS.matcher(line).find();
+    }
+
+    /**
+     * A list item: HtmlToText writes "- " for HTML lists, but many postings type the bullet character into the
+     * text itself ("• 3-6 years in backend", "● Java", "* Kafka", "➢ Redis") or number the items ("1) ", "2. ").
+     */
+    public static boolean isBullet(String line) {
+        return BULLET.matcher(line).lookingAt();
     }
 
     /** True when the sentence around this position says "preferred", "nice to have", "a plus"... */

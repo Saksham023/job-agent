@@ -45,12 +45,16 @@ public class ExperienceExtractor {
     private static final String NUMBER =
             "\\d{1,2}(?:\\.\\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen";
 
-    /** "5+ years", "3-5 yrs", "3 – 5 years", "8 to 12 years", "minimum 4 years", "up to ~2 years". */
+    /**
+     * "5+ years", "3-5 yrs", "3 – 5 years", "8 to 12 years", "minimum 4 years", "up to ~2 years". "ears" is a typo
+     * seen in a real posting ("4 to 6 ears of hands-on backend engineering experience"); it only counts right after
+     * a number and, like every mention, only on a line about experience.
+     */
     private static final Pattern MENTION = Pattern.compile(
             "(?i)(?<qualifier>\\b(?:minimum(?:\\s+of)?|min\\.?|at\\s+least|more\\s+than|over|up\\s*to)\\s+~?\\s*)?"
                     + "\\b(?<low>" + NUMBER + ")\\s*\\+?\\s*"
                     + "(?:(?:-|\\u2013|\\u2014|to)\\s*(?<high>" + NUMBER + ")\\s*)?"
-                    + "\\+?\\s*(?:years?|yrs?)\\b");
+                    + "\\+?\\s*(?:years?|yrs?|ears?)\\b");
 
     /** Words that make a mention about a person's experience. */
     private static final Pattern EXPERIENCE_CUE = Pattern.compile(
@@ -199,8 +203,7 @@ public class ExperienceExtractor {
         if (NOISE_CUE.matcher(window).find()) {
             return null;
         }
-        boolean bullet = line.startsWith("-");
-        if (!EXPERIENCE_CUE.matcher(window).find() && !bullet) {
+        if (!EXPERIENCE_CUE.matcher(window).find() && !DescriptionSections.isBullet(line)) {
             return null;                                                // "a 3-year roadmap", "5 years of growth"
         }
 

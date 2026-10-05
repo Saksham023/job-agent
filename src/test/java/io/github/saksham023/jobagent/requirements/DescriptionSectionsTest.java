@@ -59,4 +59,23 @@ class DescriptionSectionsTest {
         assertThat(DescriptionSections.preferredInSentence(line, line.indexOf("Kafka"))).isTrue();
         assertThat(DescriptionSections.preferredInSentence(line, line.indexOf("Go."))).isFalse();
     }
+
+    @Test
+    void typedBulletCharactersAreListItemsNotHeadings() {
+        for (String line : new String[]{"- Java", "\u2022 Java", "\u25CF Java, Kafka", "* Redis", "\u27A2 Spring Boot"}) {
+            assertThat(DescriptionSections.isBullet(line)).as(line).isTrue();
+            assertThat(DescriptionSections.isHeading(line)).as(line).isFalse();
+        }
+        assertThat(DescriptionSections.isHeading("Nice to have")).isTrue();
+        assertThat(DescriptionSections.isBullet("Requirements")).isFalse();
+    }
+
+    @Test
+    void numberedItemsAreListItems() {
+        for (String line : new String[]{"1) Java", "2. Kafka and Redis", "(3) Spring Boot"}) {
+            assertThat(DescriptionSections.isBullet(line)).as(line).isTrue();
+        }
+        assertThat(DescriptionSections.isBullet("3.5 years of experience")).isFalse();
+        assertThat(DescriptionSections.isBullet("2026 roadmap")).isFalse();
+    }
 }

@@ -51,11 +51,30 @@ Admin: `POST /admin/match?postedSince=`. Real data (user's profile): 23 eligible
 Zscaler SDE 69, Paytm SSE 68, Sarvam Backend 73; Claude flagged July-2025 postings as possibly stale (postedAt).
 Claude skipped the "confirm job families" step once (prompt guidance is not enforcement). 128 unit tests.
 
-**EXACT NEXT STEP:** Milestone 5 (quality). Plan to agree with the user first, in this order: (1) labeled
-set: user marks ~100 jobs fit / not fit (spread across companies, oversample MEDIUM/LOW/UNCLASSIFIED) to get
-precision@10 for every ranking change; (2) wider shortlist (~50) + model re-rank, user sees top N, allow >25 on
-request; (3) embeddings for fuzzy skill/role similarity (ask before downloading any model); (4) extraction
-cascade (rules -> local model -> Claude) with the bake-off. Use product sessions from ~/job-search, not this repo.
+**Milestone 5 so far (2026-10-05, commit "Milestone 5 (part 1)"):**
+- Extraction fixes found while labeling: typed bullets (`• ● * ➢ ✓`) and numbered items (`1)`, `2.`) are list
+  items (`DescriptionSections.isBullet`; before, short typed bullets were taken for HEADINGS and dropped/flipped
+  sections, and "• 3-6 years in backend" was ignored); the typo "4 to 6 ears" counts (only after a number, on an
+  experience line). EXTRACTOR_VERSION=7 (user must rebuild). Policy: rules for repeating patterns, one-off oddities
+  are for the local-model tier, not more rules.
+- Experience window (user's design): resume years are DECIMAL (`Profile.yearsOfExperience` Double), the SERVER
+  rounds (`ExperienceWindow.roundYears`, round-up-from 0.5: 1.5 -> 2, 1.4 -> 1), default window = years -2..+1,
+  a job is eligible when its range OVERLAPS the window (2 yrs -> 0-3: "3-5" shown, "4-6" not); unknown years never
+  exclude. Optional `jobYearsFrom/jobYearsTo` on match_jobs / Profile ONLY when the user explicitly asks.
+  Config `jobagent.matching.{country, years-below, years-above, round-up-from}` (`MatchingProperties`,
+  `@ConfigurationPropertiesScan`). MatchResponse reports `experienceWindow`. 1.6 yrs -> 23 SWE jobs, asks up to 4 -> 33.
+- Language score is ORDER-INDEPENDENT and generic: all of the job's main languages are yours = full, some =
+  partial (0.6), none = 0 (never prefer a language because the user knows it; the profile is just input).
+- Eval: `eval/` (profile.json 1.6 yrs, pool.csv, labels.csv, README). User labeled 100 (6 would apply, 17 worth a
+  look, 77 not for me); the pool was skewed to 5+ year roles (top 60 chosen without the years filter). User does NOT
+  want more manual labeling. Baseline on these labels (SWE, v5 data): 4 of 6 "would apply" at ranks 1-4.
+
+**EXACT NEXT STEP:** model judge for a reference set (agreed direction, user's idea): a fixed rubric prompt via
+`claude -p` (ClaudeCliChatModel or a small runner) labels EVERY tech job for 3-4 different profiles (user, a Python
+data engineer, a frontend dev, a fresher) so ranking is not tailored to one user; validate the judge against the
+user's 100 labels (agreement, review disagreements once), freeze as reference, then compare Haiku and local models
+(ask before downloads) with the same harness; the best cheap one becomes the M5 re-ranker. Ask before the
+~290 claude -p calls per profile. Then: wider shortlist + re-rank, embeddings, extraction cascade.
 NOTE: Claude Code loads this file into EVERY session in this folder, including sessions where the user USES
 the job-agent tools. Keep it current (a stale "not built yet" here made a demo session work around a feature
 that existed), and remember a product session may take the user's profile from §1 instead of the resume.
@@ -63,8 +82,8 @@ that existed), and remember a product session may take the user's profile from �
 **How we work (user preferences, keep following them):**
 - User types/pastes all NEW code; Claude creates the empty file first (`touch`), then gives the whole file
   with: purpose, a short table of methods, new concepts, shortcomings. Keep explanations SHORT and precise.
-- EXISTING files: Claude makes every change itself (decided 2026-10-05: tracing paste locations is hard)
-  and tells the user exactly what changed and why. NEW files: Claude creates them empty and the user pastes.
+- Since Milestone 5 (2026-10-05) Claude makes ALL changes itself, NEW files included (user: "I don't want the
+  code and I don't want to copy paste it"); report per file what changed and why. Still verify before claiming done.
   Claude may write data files (CSV) and docs. Never push. Ask before commits unless the user said "commit".
 - Before handing over code, Claude verifies it in the session scratchpad: compile with JDK 25
   (`/Users/saksham/Library/Java/JavaVirtualMachines/openjdk-25.0.2/Contents/Home`) against jars in
@@ -168,7 +187,6 @@ per connection; harmless macOS Tomcat "setSoLinger Invalid argument" errors.
 - SmartRecruiters fetches every detail each crawl (~117 s PhonePe) -> fetch only new/changed (M7).
 - Closed-job detection, scheduler with per-host virtual threads, crawl_runs, health alerts (M7).
 - Faster skill matching (Aho-Corasick / pre-filter) before 8,000 jobs; full rebuild is 17.6 s for 706.
-- Constants to config: country IN and years tolerance (-1/+3) in MatchService.
 - M5: gold set (user labels ~100 jobs, spread across companies), local-model bake-off, cascade, embeddings.
 - M6: Workday/Eightfold/Oracle with the generalization check (expect hardware roles -> HARDWARE family,
   bank level ladders via levelScheme).

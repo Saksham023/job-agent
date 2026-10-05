@@ -1,0 +1,10 @@
+{
+  "yearsOfExperience": 1.6,
+  "skills": ["Java", "Python", "C#", ".NET", "Spring Boot", "Spring AI", "REST APIs", "Microservices", "Concurrency",
+             "Distributed Systems", "Event-Driven Architecture", "Kafka", "AWS SQS", "Redis", "PostgreSQL", "pgvector",
+             "DynamoDB", "MongoDB", "Cassandra", "Elasticsearch", "AWS S3", "CDC", "AI Agents", "MCP", "RAG", "JWT"],
+  "primaryLanguages": ["Java"],
+  "preferredLocations": [],
+  "openToRemote": true,
+  "families": ["SOFTWARE_ENGINEERING"]
+}

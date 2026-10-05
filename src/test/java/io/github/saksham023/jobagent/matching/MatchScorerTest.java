@@ -88,7 +88,7 @@ class MatchScorerTest {
     void languageFullPartialOrNone() {
         assertThat(scorer.score(job(List.of("Java"), List.of(), List.of("Go", "Java"), null, null,
                 List.of("Bengaluru"), false), JAVA_BACKEND).reasons())
-                .contains("uses Java (main language is Go)");
+                .contains("uses Java, also Go");
         assertThat(scorer.score(job(List.of("Python"), List.of(), List.of("Python"), null, null,
                 List.of("Bengaluru"), false), JAVA_BACKEND).reasons())
                 .contains("main language Python is not one of yours");
@@ -138,5 +138,18 @@ class MatchScorerTest {
         assertThat(m.missingRequired()).containsExactly("Go");
         assertThat(m.reasons()).contains("2.5/4 required skills");
         assertThat(m.score()).isEqualTo(76);                      // 65*(2.5/4) + 20 + 15 = 75.6
+    }
+
+    @Test
+    void theOrderAJobListsItsLanguagesInDoesNotMatter() {
+        Match javaScriptFirst = scorer.score(job(List.of("Java"), List.of(), List.of("JavaScript", "Java"), null, null,
+                List.of("Bengaluru"), false), JAVA_BACKEND);
+        Match javaFirst = scorer.score(job(List.of("Java"), List.of(), List.of("Java", "JavaScript"), null, null,
+                List.of("Bengaluru"), false), JAVA_BACKEND);
+        Match javaOnly = scorer.score(job(List.of("Java"), List.of(), List.of("Java"), null, null,
+                List.of("Bengaluru"), false), JAVA_BACKEND);
+
+        assertThat(javaScriptFirst.score()).isEqualTo(javaFirst.score());
+        assertThat(javaOnly.score()).isGreaterThan(javaFirst.score());       // all of its languages are yours
     }
 }

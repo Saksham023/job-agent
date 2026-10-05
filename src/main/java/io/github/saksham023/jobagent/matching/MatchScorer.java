@@ -24,6 +24,7 @@ public class MatchScorer {
     static final double EXPERIENCE_WEIGHT = 15;
     static final double NEUTRAL = 0.5;
     static final double PREFERRED_SKILL_VALUE = 0.5;
+    static final double PARTIAL_LANGUAGE = 0.6;
 
     /**
      * Long skill lists are wish lists: matching 5 core skills of a 17-skill posting is a strong match, so
@@ -131,22 +132,28 @@ public class MatchScorer {
         return hits == Math.rint(hits) ? String.valueOf((long) hits) : String.valueOf(hits);
     }
 
-    /** Full when the job's main language is yours, partial when one of its languages is, 0 when none is. */
+    /**
+     * Full when you work in every one of the job's main languages, partial when in some of them, 0 when in none.
+     * The order a posting lists them in does not matter ("JavaScript and Java" = "Java and JavaScript"), so a
+     * Java-only job outranks a Java + JavaScript job for a Java developer, and the reverse for a JavaScript one.
+     */
     private static double languageScore(Candidate job, ResolvedProfile profile, List<String> reasons) {
         List<String> jobLanguages = job.primaryLanguages();
         if (jobLanguages.isEmpty()) {
             return NEUTRAL;
         }
-        if (profile.languages().contains(jobLanguages.getFirst())) {
-            reasons.add("main language " + jobLanguages.getFirst() + " matches");
+        List<String> shared = jobLanguages.stream().filter(profile.languages()::contains).toList();
+        List<String> others = jobLanguages.stream().filter(l -> !profile.languages().contains(l)).toList();
+        if (others.isEmpty()) {
+            reasons.add(jobLanguages.size() == 1 ? "main language " + jobLanguages.getFirst() + " matches"
+                    : "main languages " + String.join(", ", jobLanguages) + " match");
             return 1.0;
         }
-        List<String> shared = jobLanguages.stream().filter(profile.languages()::contains).toList();
         if (!shared.isEmpty()) {
-            reasons.add("uses " + String.join(", ", shared) + " (main language is " + jobLanguages.getFirst() + ")");
-            return 0.6;
+            reasons.add("uses " + String.join(", ", shared) + ", also " + String.join(", ", others));
+            return PARTIAL_LANGUAGE;
         }
-        reasons.add("main language " + jobLanguages.getFirst() + " is not one of yours");
+        reasons.add("main language " + String.join(", ", jobLanguages) + " is not one of yours");
         return 0.0;
     }
 

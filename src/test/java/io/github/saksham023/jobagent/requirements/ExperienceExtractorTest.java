@@ -241,4 +241,38 @@ class ExperienceExtractorTest {
         assertThat(e.minYears()).isEqualTo(3);
         assertThat(e.confidence()).isEqualTo(Confidence.HIGH);
     }
+
+    // ---------------------------------------------------------------- typed bullet characters
+
+    @Test
+    void typedBulletsCountAsListItemsEvenWithoutTheWordExperience() {
+        // Sarvam (Ashby) types "\u2022" into the text; HtmlToText only produces "- " for HTML lists
+        Experience e = fromDescription("What We're Looking For\n"
+                + "\u2022 3\u20136 years in backend engineering with production systems in continuous operation");
+
+        assertThat(e.minYears()).isEqualTo(3);
+        assertThat(e.maxYears()).isEqualTo(6);
+        assertThat(e.confidence()).isEqualTo(Confidence.HIGH);
+    }
+
+    @Test
+    void aShortTypedBulletIsNotAHeadingThatResetsTheSection() {
+        // Paytm: "* ... (Preferable)" used to be taken for a heading and switched the section back to required
+        Experience e = fromDescription("Preferred:\n"
+                + "* Good Communication skills in English, French (Preferable)\n"
+                + "* 4+ years of experience with IVR Marketing, Business Development.");
+
+        assertThat(e.preferredMinYears()).isEqualTo(4);
+    }
+
+    @Test
+    void aMisspelledYearsAfterANumberStillCounts() {
+        // Paytm, Backend Technical Lead: the posting really says "ears"
+        Experience e = fromDescription("What We're Looking For:\n"
+                + "1) 4 to 6 ears of hands-on backend engineering experience \u2014 Java/Nodejs.");
+
+        assertThat(e.minYears()).isEqualTo(4);
+        assertThat(e.maxYears()).isEqualTo(6);
+        assertThat(fromDescription("- Keep your eyes and ears open").confidence()).isEqualTo(Confidence.NONE);
+    }
 }

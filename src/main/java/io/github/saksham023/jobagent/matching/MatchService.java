@@ -25,19 +25,17 @@ import java.util.Set;
 @Service
 public class MatchService {
 
-    static final String COUNTRY = "IN";
-    static final int UNDERQUALIFIED_BY = 1;
-    static final int OVERQUALIFIED_BY = 3;
-
     /**
      * @param profile          what the input was understood as (canonical names), so the caller can check it
      * @param unknownSkills    profile skills the dictionary does not know (ignored for scoring)
      * @param unknownLocations profile places the gazetteer does not know (ignored for filtering)
+     * @param experienceWindow the years range jobs had to overlap (from the rounded years, or as asked), or null
      * @param postedSince      the "posted since" filter that was applied, or null
      * @param eligible         jobs that passed the hard filters, before ranking
      */
     public record MatchResponse(ResolvedProfile profile, List<String> unknownSkills, List<String> unknownLocations,
-                                Instant postedSince, int eligible, List<Match> matches) {
+                                ExperienceWindow experienceWindow, Instant postedSince, int eligible,
+                                List<Match> matches) {
     }
 
     private final MatchCandidateRepository repository;
@@ -45,14 +43,16 @@ public class MatchService {
     private final SkillExtractor skillExtractor;
     private final Gazetteer gazetteer;
     private final SkillImplications implications;
+    private final MatchingProperties settings;
 
     public MatchService(MatchCandidateRepository repository, MatchScorer scorer, SkillExtractor skillExtractor,
-                        Gazetteer gazetteer, SkillImplications implications) {
+                        Gazetteer gazetteer, SkillImplications implications, MatchingProperties settings) {
         this.repository = repository;
         this.scorer = scorer;
         this.skillExtractor = skillExtractor;
         this.gazetteer = gazetteer;
         this.implications = implications;
+        this.settings = settings;
     }
 
     public MatchResponse match(Profile profile, int limit) {
@@ -92,12 +92,15 @@ public class MatchService {
             cities.addAll(resolved);
         }
 
-        ResolvedProfile resolved = new ResolvedProfile(profile.yearsOfExperience(), Set.copyOf(skills),
+        Integer years = ExperienceWindow.roundYears(profile.yearsOfExperience(), settings.roundUpFrom());
+        ExperienceWindow window = ExperienceWindow.resolve(years, profile.jobYearsFrom(), profile.jobYearsTo(), settings);
+
+        ResolvedProfile resolved = new ResolvedProfile(years, Set.copyOf(skills),
                 Set.copyOf(languages), Set.copyOf(cities), profile.openToRemote(), implications.expand(skills));
 
-        List<Candidate> candidates = repository.find(new Criteria(COUNTRY,
+        List<Candidate> candidates = repository.find(new Criteria(settings.country(),
                 profile.families().stream().map(JobFamily::name).toList(), List.copyOf(cities),
-                profile.openToRemote(), profile.yearsOfExperience(), UNDERQUALIFIED_BY, OVERQUALIFIED_BY, postedSince));
+                profile.openToRemote(), window, postedSince));
 
         List<Match> ranked = candidates.stream()
                 .map(candidate -> scorer.score(candidate, resolved))
@@ -105,18 +108,18 @@ public class MatchService {
                 .limit(limit)
                 .toList();
 
-        return new MatchResponse(resolved, List.copyOf(unknownSkills), List.copyOf(unknownLocations), postedSince,
-                candidates.size(), ranked);
+        return new MatchResponse(resolved, List.copyOf(unknownSkills), List.copyOf(unknownLocations), window,
+                postedSince, candidates.size(), ranked);
     }
 
-    /** "NCR" -> every city in the metro; "Gurgaon" -> Gurugram (Indian cities first); unknown -> empty. */
+    /** "NCR" -> every city in the metro; "Gurgaon" -> Gurugram (cities of the configured country first); unknown -> empty. */
     private List<String> resolveCity(String place) {
         Optional<Gazetteer.Metro> metro = gazetteer.metroByName(place);
         if (metro.isPresent()) {
             return gazetteer.citiesInMetro(metro.get().key()).stream().map(Gazetteer.City::name).toList();
         }
         return gazetteer.citiesByName(place).stream()
-                .sorted(Comparator.comparing((Gazetteer.City c) -> !COUNTRY.equals(c.countryCode())))
+                .sorted(Comparator.comparing((Gazetteer.City c) -> !settings.country().equals(c.countryCode())))
                 .map(Gazetteer.City::name)
                 .findFirst()
                 .map(List::of)

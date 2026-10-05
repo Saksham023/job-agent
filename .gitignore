@@ -44,3 +44,6 @@ application-local.yml
 ### Logs ###
 *.log
 logs/
+
+### Generated labeling page (job descriptions; rebuild from eval/pool.csv) ###
+eval/label-jobs.html

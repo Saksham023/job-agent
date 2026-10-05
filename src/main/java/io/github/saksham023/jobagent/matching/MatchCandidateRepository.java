@@ -30,19 +30,17 @@ public class MatchCandidateRepository {
 
     /**
      * @param cities             canonical city names; empty = anywhere in the country
-     * @param years              the candidate's years of experience, or null to skip the experience filter
-     * @param underqualifiedBy   how many years below a job's minimum still count as eligible
-     * @param overqualifiedBy    how many years above a job's maximum still count as eligible
+     * @param experience         jobs whose years range overlaps this window, or null to skip the experience filter
      * @param postedSince        only jobs posted at or after this instant, or null for all open jobs
      */
     public record Criteria(String countryCode, List<String> families, List<String> cities, boolean openToRemote,
-                           Integer years, int underqualifiedBy, int overqualifiedBy, Instant postedSince) {
+                           ExperienceWindow experience, Instant postedSince) {
     }
 
     /**
      * Open jobs in the country whose primary OR secondary family is one asked for (recall first); in one of the cities, or remote (when acceptable), or
-     * with no city at all ("India" only); whose years range fits; and, when asked, posted since a date.
-     * Unknown years never exclude a job.
+     * with no city at all ("India" only); whose years range overlaps the experience window; and, when asked,
+     * posted since a date. Unknown years never exclude a job.
      */
     private static final String SELECT_CANDIDATES = """
             SELECT j.id, c.name AS company, j.title, j.url, j.cities, j.remote,
@@ -58,9 +56,9 @@ public class MatchCandidateRepository {
                    OR j.cities && CAST(:cities AS text[])
                    OR (:openToRemote AND j.remote)
                    OR cardinality(j.cities) = 0)
-              AND (CAST(:years AS integer) IS NULL
-                   OR ((r.min_years IS NULL OR CAST(:years AS integer) >= r.min_years - :under)
-                       AND (r.max_years IS NULL OR CAST(:years AS integer) <= r.max_years + :over)))
+              AND (CAST(:yearsTo AS integer) IS NULL OR r.min_years IS NULL OR r.min_years <= CAST(:yearsTo AS integer))
+              AND (CAST(:yearsFrom AS integer) IS NULL OR r.max_years IS NULL
+                   OR r.max_years >= CAST(:yearsFrom AS integer))
               AND (CAST(:postedSince AS timestamptz) IS NULL
                    OR coalesce(j.posted_at, j.first_seen_at) >= CAST(:postedSince AS timestamptz))
             """;
@@ -78,9 +76,8 @@ public class MatchCandidateRepository {
                 .param("anywhere", criteria.cities().isEmpty())
                 .param("cities", criteria.cities().toArray(String[]::new))
                 .param("openToRemote", criteria.openToRemote())
-                .param("years", criteria.years())
-                .param("under", criteria.underqualifiedBy())
-                .param("over", criteria.overqualifiedBy())
+                .param("yearsFrom", criteria.experience() == null ? null : criteria.experience().from())
+                .param("yearsTo", criteria.experience() == null ? null : criteria.experience().to())
                 .param("postedSince", criteria.postedSince() == null ? null
                         : OffsetDateTime.ofInstant(criteria.postedSince(), ZoneOffset.UTC))
                 .query(this::mapRow)

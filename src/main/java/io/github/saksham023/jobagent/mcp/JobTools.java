@@ -52,12 +52,14 @@ public class JobTools {
                     (experience, skills, languages). Do NOT fill preferredLocations from the resume's address: \
                     first ask the candidate whether they have a location preference. Explain the top results \
                     using matchedRequired, missingRequired and reasons, and share each job's url. For "what is \
-                    new since <date>" questions, pass postedSince; each job's postedAt tells how fresh it is.""",
+                    new since <date>" questions, pass postedSince; each job's postedAt tells how fresh it is. \
+                    experienceWindow in the answer is the years range that was applied.""",
             annotations = @McpTool.McpAnnotations(title = "Match jobs", readOnlyHint = true,
                     destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public MatchResponse matchJobs(
-            @McpToolParam(required = false, description = "Total years of professional experience. Omit if unknown.")
-            Integer yearsOfExperience,
+            @McpToolParam(required = false, description = "Total years of professional experience as on the resume, "
+                    + "decimals allowed (e.g. 1.6 for Aug 2024 to Mar 2026); the server rounds them. Omit if unknown.")
+            Double yearsOfExperience,
             @McpToolParam(description = "All technical skills from the resume as written: languages, frameworks, "
                     + "databases, cloud, tools. Example: [\"Java\", \"Spring Boot\", \"Kafka\", \"PostgreSQL\"].")
             List<String> skills,
@@ -77,13 +79,26 @@ public class JobTools {
             Integer limit,
             @McpToolParam(required = false, description = "Only jobs posted on or after this date, YYYY-MM-DD "
                     + "(India time), e.g. for \"what is new since Monday\". Omit for all open jobs.")
-            String postedSince) {
+            String postedSince,
+            @McpToolParam(required = false, description = "ONLY if the candidate explicitly asks for a different "
+                    + "experience range: the lowest years a job may ask for. By default jobs overlapping the "
+                    + "candidate's years minus 2 to plus 1 are shown; do not set this otherwise.")
+            Integer jobYearsFrom,
+            @McpToolParam(required = false, description = "ONLY if the candidate explicitly asks for a different "
+                    + "experience range: the highest years a job may ask for, e.g. 4 for \"also show jobs asking up to "
+                    + "4 years\". Do not set this otherwise.")
+            Integer jobYearsTo) {
 
         if (yearsOfExperience != null && (yearsOfExperience < 0 || yearsOfExperience > 50)) {
             throw new IllegalArgumentException("yearsOfExperience must be between 0 and 50");
         }
+        for (Integer bound : new Integer[]{jobYearsFrom, jobYearsTo}) {
+            if (bound != null && (bound < 0 || bound > 50)) {
+                throw new IllegalArgumentException("jobYearsFrom and jobYearsTo must be between 0 and 50");
+            }
+        }
         Profile profile = new Profile(yearsOfExperience, skills, primaryLanguages, preferredLocations,
-                openToRemote, families);
+                openToRemote, families, jobYearsFrom, jobYearsTo);
         int size = limit == null ? DEFAULT_LIMIT : Math.min(Math.max(limit, 1), MAX_LIMIT);
         return matchService.match(profile, size, startOfDayInIndia(postedSince));
     }
