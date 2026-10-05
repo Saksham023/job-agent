@@ -26,18 +26,27 @@ class MatchScorerTest {
     private static Candidate job(List<String> required, List<String> preferred, List<String> languages,
                                  Integer minYears, Integer maxYears, List<String> cities, boolean remote) {
         return new Candidate(1, "Acme", "Backend Engineer", "https://example.com/1", cities, remote,
-                minYears, maxYears, "SOFTWARE_ENGINEERING", required, preferred, languages);
+                minYears, maxYears, "SOFTWARE_ENGINEERING", List.of(), required, preferred, languages);
     }
 
     @Test
     void perfectFitScoresHundredAndExplainsIt() {
-        Match m = scorer.score(job(List.of("Java", "Kafka", "PostgreSQL"), List.of(), List.of("Java"),
+        Match m = scorer.score(job(List.of("Java", "Kafka", "PostgreSQL", "Redis"), List.of(), List.of("Java"),
                 2, 5, List.of("Bengaluru"), false), JAVA_BACKEND);
 
         assertThat(m.score()).isEqualTo(100);
-        assertThat(m.matchedRequired()).containsExactly("Java", "Kafka", "PostgreSQL");
+        assertThat(m.matchedRequired()).containsExactly("Java", "Kafka", "PostgreSQL", "Redis");
         assertThat(m.missingRequired()).isEmpty();
-        assertThat(m.reasons()).contains("3/3 required skills", "main language Java matches", "asks 2-5 years, you have 3");
+        assertThat(m.reasons()).contains("4/4 required skills", "main language Java matches", "asks 2-5 years, you have 3");
+    }
+
+    @Test
+    void aPostingWithFewSkillsCannotGiveAPerfectSkillMatch() {
+        Match m = scorer.score(job(List.of("Java", "Kafka"), List.of(), List.of("Java"),
+                2, 5, List.of("Bengaluru"), false), JAVA_BACKEND);
+
+        assertThat(m.reasons()).contains("2/2 required skills");
+        assertThat(m.score()).isEqualTo(68);                      // 65*(2/4) + 20 + 15 = 67.5: counted as 2 of 4
     }
 
     @Test
@@ -108,9 +117,10 @@ class MatchScorerTest {
     @Test
     void remoteIsShownButNotScored() {
         Match remote = scorer.score(job(List.of("Java"), List.of(), List.of("Java"), 2, 5, List.of("Pune"), true), JAVA_BACKEND);
+        Match onSite = scorer.score(job(List.of("Java"), List.of(), List.of("Java"), 2, 5, List.of("Pune"), false), JAVA_BACKEND);
 
         assertThat(remote.reasons()).contains("remote");
-        assertThat(remote.score()).isEqualTo(100);
+        assertThat(remote.score()).isEqualTo(onSite.score());
     }
 
     @Test

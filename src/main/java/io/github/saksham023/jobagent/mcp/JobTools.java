@@ -61,7 +61,9 @@ public class JobTools {
             List<String> preferredLocations,
             @McpToolParam(required = false, description = "Whether remote jobs are acceptable. Default true.")
             Boolean openToRemote,
-            @McpToolParam(required = false, description = "Job families to search. Default: all engineering families.")
+            @McpToolParam(required = false, description = "Job families to search. A job matches when its family or "
+                    + "one of its secondaryFamilies is listed (an \"SDE - AI Engineer\" is DATA_ML, also "
+                    + "SOFTWARE_ENGINEERING). Default: all engineering families.")
             List<JobFamily> families,
             @McpToolParam(required = false, description = "How many ranked jobs to return, 1 to 25. Default 10.")
             Integer limit) {
@@ -80,7 +82,7 @@ public class JobTools {
             description = """
                     Returns one job in full: company, title, url, locations, the complete description (cut at \
                     12,000 characters), and what was extracted from it (years of experience, required and \
-                    preferred skills, primary languages, job family). Use it when the candidate wants details \
+                    preferred skills, primary languages, job family and secondary families). Use it when the candidate wants details \
                     about a job from match_jobs; pass that job's jobId.""",
             annotations = @McpTool.McpAnnotations(title = "Get job", readOnlyHint = true,
                     destructiveHint = false, idempotentHint = true, openWorldHint = false))
@@ -97,7 +99,7 @@ public class JobTools {
         JobDetails shortened = new JobDetails(job.jobId(), job.company(), job.title(), job.url(), job.department(),
                 job.locations(), job.cities(), job.remote(), job.employmentType(), job.postedAt(),
                 job.firstSeenAt(), job.open(), job.minYears(), job.maxYears(), job.yearsEvidence(), job.family(),
-                job.specialization(), job.requiredSkills(), job.preferredSkills(), job.primaryLanguages(),
+                job.secondaryFamilies(), job.specialization(), job.requiredSkills(), job.preferredSkills(), job.primaryLanguages(),
                 description.substring(0, MAX_DESCRIPTION_CHARS));
         return new JobView(shortened, true);
     }

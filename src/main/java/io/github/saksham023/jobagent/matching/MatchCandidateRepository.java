@@ -18,7 +18,7 @@ public class MatchCandidateRepository {
     /** One eligible job: the fields shown to the user plus the extracted requirements. */
     public record Candidate(long jobId, String company, String title, String url, List<String> cities,
                             boolean remote, Integer minYears, Integer maxYears, String family,
-                            List<String> requiredSkills, List<String> preferredSkills, List<String> primaryLanguages) {
+                            List<String> secondaryFamilies, List<String> requiredSkills, List<String> preferredSkills, List<String> primaryLanguages) {
     }
 
     /**
@@ -32,18 +32,18 @@ public class MatchCandidateRepository {
     }
 
     /**
-     * Open jobs in the country and families asked for; in one of the cities, or remote (when acceptable), or
+     * Open jobs in the country whose primary OR secondary family is one asked for (recall first); in one of the cities, or remote (when acceptable), or
      * with no city at all ("India" only); and whose years range fits. Unknown years never exclude a job.
      */
     private static final String SELECT_CANDIDATES = """
             SELECT j.id, c.name AS company, j.title, j.url, j.cities, j.remote,
-                   r.min_years, r.max_years, r.family, r.required_skills, r.preferred_skills, r.primary_languages
+                   r.min_years, r.max_years, r.family, r.secondary_families, r.required_skills, r.preferred_skills, r.primary_languages
             FROM jobs j
             JOIN companies c ON c.id = j.company_id
             JOIN job_requirements r ON r.job_id = j.id
             WHERE j.closed_at IS NULL
               AND j.country_codes @> ARRAY[CAST(:country AS text)]
-              AND r.family = ANY(:families)
+              AND (r.family = ANY(:families) OR r.secondary_families && CAST(:families AS text[]))
               AND (:anywhere
                    OR j.cities && CAST(:cities AS text[])
                    OR (:openToRemote AND j.remote)
@@ -84,6 +84,7 @@ public class MatchCandidateRepository {
                 rs.getObject("min_years", Integer.class),
                 rs.getObject("max_years", Integer.class),
                 rs.getString("family"),
+                strings(rs.getArray("secondary_families")),
                 strings(rs.getArray("required_skills")),
                 strings(rs.getArray("preferred_skills")),
                 strings(rs.getArray("primary_languages")));

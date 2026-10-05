@@ -9,7 +9,7 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
-**State (2026-10-05, end of session 1):** Milestones 0-3 DONE; Milestone 4 steps 1-4 DONE. Commits:
+**State (2026-10-05):** Milestones 0-3 DONE; Milestone 4 steps 1-4 and 6 DONE (+ skills and classifier passes). Commits:
 `c517f86` M0, `627fd80` M1, `a562604` M2, `2a3baa1` M3, `ac70084` M4 part 1 (MCP server, list_companies,
 match_jobs), then M4 part 2 (get_job). 12 companies on 4 platforms, 706 India jobs, all with requirements
 (extractor v2). MCP server live at `http://localhost:8080/mcp` with 3 tools: `list_companies`,
@@ -27,19 +27,22 @@ scalable, bare Lambda); EXTRACTOR_VERSION=3; 234 jobs gained skills, none lost. 
 candidate side only, one hop; MatchScorer sums credits, labels "AWS (via DynamoDB)"). User's search: Paytm TL
 49 -> 76, Sarvam Backend 53 -> 73, Zscaler SDE 60 -> 69, Paytm SSE 51 -> 68. 105 unit tests green.
 
-**EXACT NEXT STEP: classifier pass "recall first" (decisions agreed 2026-10-05, see §8):**
-1. Title rules: "IT Support" -> SUPPORT; "<tool> Administrator" (Jira, LMS, ServiceNow, System) ->
-   INFRA_DEVOPS. Leave "IT Lead", "IT Software Engineer", "System Integrator" in SWE (ambiguous; ranking decides).
-2. Secondary families (multi-label): ALL matching specific title rules count (generic "engineer" fallback only
-   when nothing specific matched); a TECH description vote adds SOFTWARE_ENGINEERING as secondary (so an FDE /
-   solutions job with real engineering work shows up for SWE searches); a disagreeing department vote adds its
-   family. New migration V8 `job_requirements.secondary_families TEXT[]` (user pastes); match filter = ANY of the
-   job's families in the selected ones (array overlap); show secondary families in match_jobs and get_job.
-3. New specialization AI_ENGINEERING (LLM apps, agents, RAG, MCP) next to ML_AI (models, research).
-4. Scorer: minimum skills denominator (~4) so a 2-skill posting cannot give 100% skills.
-5. EXTRACTOR_VERSION=4, diff all 706 jobs (list every family change), recall-guard test (titles with
-   engineer/developer/SDE must be in a TECH family, primary or secondary), user runs rebuild + same search.
-Then: commit; M4 step 5 `new_jobs_since`; M4 wrap-up; Milestone 5 (incl. the wider shortlist + re-rank).
+**Classifier pass "recall first" DONE (2026-10-05, Milestone 4 part 4):** title rules (IT support -> SUPPORT,
+"<tool> administrator" -> INFRA_DEVOPS, "Engrg Mgmt" -> ENG_MANAGEMENT, aiml -> DATA_ML, deployment engineer and
+fde -> SWE: pre-sale = sales engineering, post-sale deployment = engineering); generic "engineer" catch-all moved
+to `classify/title-fallback.csv`; SECONDARY FAMILIES (V8 `job_requirements.secondary_families`, GIN): every other
+specific title rule, the department, the description winner, and any tech keyword set with >= 4 distinct hits
+(incl. secondary-only `classify/description-secondary-keywords.csv`: infra-specific words; docker/k8s/ci-cd stay
+generic TECH). Only TECH, SALES_ENGINEERING and UNCLASSIFIED primaries get secondaries; primary voting unchanged.
+Match filter = family OR secondary families (array overlap); match_jobs and get_job show secondaryFamilies.
+Specialization AI_ENGINEERING (LLM apps, agents) vs ML_AI (models; research scientists/engineers). Scorer:
+MIN_SKILLS_COUNTED = 4. EXTRACTOR_VERSION=5; 706 rebuilt, 56 jobs with secondaries. User's search: 17 -> 23
+eligible, Jira/IT support gone, top 4 unchanged, ServiceNow Armis (SECURITY also SWE) found. 125 unit tests.
+
+**EXACT NEXT STEP:** M4 step 5 `new_jobs_since(date, profile)`: match_jobs restricted to jobs first seen after
+a date (jobs.first_seen_at, index jobs_open_first_seen_idx exists). Then M4 wrap-up (final demo in a fresh
+session, docs), then Milestone 5 (labeled set, wider shortlist + model re-rank incl. "allow 50", embeddings,
+extraction cascade). Rules ideas left: dedup of identical postings (ServiceNow Armis pair) is M7.
 
 **How we work (user preferences, keep following them):**
 - User types/pastes all NEW code; Claude creates the empty file first (`touch`), then gives the whole file

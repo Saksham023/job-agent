@@ -31,6 +31,12 @@ public class MatchScorer {
     static final int MAX_REQUIRED_SKILLS_COUNTED = 8;
 
     /**
+     * A posting that lists only one or two skills is weak evidence of fit, so coverage is measured against at
+     * least this many (2 of 2 matched counts as 2 of 4, not as a perfect match).
+     */
+    static final double MIN_SKILLS_COUNTED = 4;
+
+    /**
      * The candidate after normalization: canonical skills and languages, plus the location filter as canonical
      * cities (used by the SQL filter and shown back to the caller, never by the score). impliedSkills are the
      * skills credited through SkillImplications (AWS via DynamoDB), each with its credit.
@@ -67,7 +73,7 @@ public class MatchScorer {
     /** One ranked job with everything needed to explain it. */
     public record Match(long jobId, int score, String company, String title, String url, List<String> cities,
                         boolean remote, Integer minYears, Integer maxYears, String family,
-                        List<String> matchedRequired, List<String> missingRequired, List<String> matchedPreferred,
+                        List<String> secondaryFamilies, List<String> matchedRequired, List<String> missingRequired, List<String> matchedPreferred,
                         List<String> reasons) {
     }
 
@@ -93,14 +99,15 @@ public class MatchScorer {
                 + EXPERIENCE_WEIGHT * experience);
 
         return new Match(job.jobId(), score, job.company(), job.title(), job.url(), job.cities(), job.remote(),
-                job.minYears(), job.maxYears(), job.family(), matchedRequired, missingRequired, matchedPreferred,
+                job.minYears(), job.maxYears(), job.family(), job.secondaryFamilies(), matchedRequired, missingRequired, matchedPreferred,
                 List.copyOf(reasons));
     }
 
     /**
      * Required skills count fully, preferred ones half: (req hit + 0.5 pref hit) / (req + 0.5 pref), where the
-     * required count is capped at MAX_REQUIRED_SKILLS_COUNTED; the result is capped at 1. A hit is the skill's
-     * credit, so a half-credit implied skill adds 0.5.
+     * required count is capped at MAX_REQUIRED_SKILLS_COUNTED and the whole denominator is at least
+     * MIN_SKILLS_COUNTED; the result is capped at 1. A hit is the skill's credit, so a half-credit implied skill
+     * adds 0.5.
      */
     private static double skillScore(Candidate job, double requiredHits, double preferredHits, List<String> reasons) {
         int required = job.requiredSkills().size();
@@ -109,7 +116,8 @@ public class MatchScorer {
             reasons.add("job lists no recognizable skills (neutral)");
             return NEUTRAL;
         }
-        double possible = Math.min(required, MAX_REQUIRED_SKILLS_COUNTED) + PREFERRED_SKILL_VALUE * preferred;
+        double possible = Math.max(MIN_SKILLS_COUNTED,
+                Math.min(required, MAX_REQUIRED_SKILLS_COUNTED) + PREFERRED_SKILL_VALUE * preferred);
         double earned = requiredHits + PREFERRED_SKILL_VALUE * preferredHits;
         reasons.add(count(requiredHits) + "/" + required + " required skills"
                 + (preferred > 0 ? ", " + count(preferredHits) + "/" + preferred + " preferred" : ""));

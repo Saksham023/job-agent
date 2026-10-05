@@ -1,0 +1,7 @@
+# family,keywords
+# Evidence for SECONDARY families only: these sets never vote on a job's primary family (so adding one cannot
+# change any primary). A technical family with at least 4 distinct keywords in the description is added as a
+# secondary family, e.g. an engineering job whose description is clearly infrastructure work.
+# Infrastructure-specific words only: docker/kubernetes/ci-cd stay in the TECH set of description-keywords.csv
+# because ordinary backend jobs ask for them.
+INFRA_DEVOPS,terraform|ansible|helm|prometheus|grafana|datadog|systems administration|linux administration|sre|site reliability|observability|infrastructure as code|iac|on-prem|on-premise|on-premises|air-gapped|deployment pipelines|model serving|incident response|on-call|uptime|disaster recovery|capacity planning|high availability|load balancers|load balancing|cloud infrastructure|infrastructure automation|configuration management|monitoring and alerting

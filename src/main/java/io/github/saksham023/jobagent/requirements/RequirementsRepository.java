@@ -47,11 +47,11 @@ public class RequirementsRepository {
     private static final String UPSERT = """
             INSERT INTO job_requirements (job_id, extractor_version,
                                           min_years, max_years, preferred_min_years, years_evidence, years_confidence,
-                                          family, specialization, family_reasons, employment_type,
+                                          family, secondary_families, specialization, family_reasons, employment_type,
                                           required_skills, preferred_skills, primary_languages, extracted_at)
             VALUES (:jobId, :version,
                     :minYears, :maxYears, :preferredMinYears, :yearsEvidence, :yearsConfidence,
-                    :family, :specialization, CAST(:familyReasons AS jsonb), :employmentType,
+                    :family, :secondaryFamilies, :specialization, CAST(:familyReasons AS jsonb), :employmentType,
                     :requiredSkills, :preferredSkills, :primaryLanguages, now())
             ON CONFLICT (job_id) DO UPDATE SET
                 extractor_version   = EXCLUDED.extractor_version,
@@ -61,6 +61,7 @@ public class RequirementsRepository {
                 years_evidence      = EXCLUDED.years_evidence,
                 years_confidence    = EXCLUDED.years_confidence,
                 family              = EXCLUDED.family,
+                secondary_families  = EXCLUDED.secondary_families,
                 specialization      = EXCLUDED.specialization,
                 family_reasons      = EXCLUDED.family_reasons,
                 employment_type     = EXCLUDED.employment_type,
@@ -104,6 +105,7 @@ public class RequirementsRepository {
                 .param("yearsEvidence", experience.evidence())
                 .param("yearsConfidence", experience.confidence().name())
                 .param("family", classification.family().name())
+                .param("secondaryFamilies", classification.secondaryFamilies().stream().map(Enum::name).toArray(String[]::new))
                 .param("specialization", classification.specialization() == null ? null : classification.specialization().name())
                 .param("familyReasons", jsonMapper.writeValueAsString(classification.reasons()))
                 .param("employmentType", employmentType)

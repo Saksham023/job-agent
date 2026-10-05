@@ -9,9 +9,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -24,6 +26,9 @@ import java.util.regex.Pattern;
  * so an SRE in an "IT" department stays INFRA_DEVOPS instead of tying with software engineering.
  * The family with the most points wins only if it has at least 2 and leads the runner-up by at least 1;
  * otherwise the job is UNCLASSIFIED (reported, never guessed). Rules live in classify/*.csv.
+ * Engineering-like jobs also get SECONDARY families from the evidence that did not win (recall first: a
+ * search for any of a job's families finds it), e.g. "Staff SDE - AI Engineer" is DATA_ML, also
+ * SOFTWARE_ENGINEERING.
  */
 @Component
 public class JobClassifier {
@@ -36,15 +41,20 @@ public class JobClassifier {
     static final int MIN_SCORE = 2;
     static final int MIN_LEAD = 1;
     static final int MIN_KEYWORD_HITS = 3;
+    static final int MIN_SECONDARY_KEYWORD_HITS = 4;
 
     /**
-     * @param reasons the votes, e.g. "title 'sde' -> SOFTWARE_ENGINEERING +3", for debugging and the user
+     * @param secondaryFamilies other technical families the job also belongs to (never contains family)
+     * @param reasons           the votes, e.g. "title 'sde' -> SOFTWARE_ENGINEERING +3", for debugging and the user
      */
-    public record Classification(JobFamily family, Specialization specialization, int score, List<String> reasons) {
+    public record Classification(JobFamily family, List<JobFamily> secondaryFamilies, Specialization specialization,
+                                 int score, List<String> reasons) {
     }
 
+    /** AI_ENGINEERING builds products on top of models (LLM apps, agents, RAG); ML_AI builds the models. */
     public enum Specialization {
-        FULL_STACK, FRONTEND, BACKEND, MOBILE, EMBEDDED, DATA_ENGINEERING, ML_AI, SRE, PLATFORM_INFRA, SECURITY
+        FULL_STACK, FRONTEND, BACKEND, MOBILE, EMBEDDED, DATA_ENGINEERING, AI_ENGINEERING, ML_AI, SRE, PLATFORM_INFRA,
+        SECURITY
     }
 
     private record Rule<T>(T value, Pattern pattern) {}
@@ -55,17 +65,22 @@ public class JobClassifier {
     private static final String TECH = "TECH";
 
     private final List<Rule<JobFamily>> titleRules;
+    private final List<Rule<JobFamily>> fallbackTitleRules;
     private final List<Rule<JobFamily>> departmentRules;
     private final List<KeywordSet> keywordSets;
+    private final List<KeywordSet> secondaryKeywordSets;
     private final List<Rule<Specialization>> specializationRules;
 
     public JobClassifier() {
         this.titleRules = rules("classify/title-families.csv", JobFamily::valueOf);
+        this.fallbackTitleRules = rules("classify/title-fallback.csv", JobFamily::valueOf);
         this.departmentRules = rules("classify/department-families.csv", JobClassifier::familyOrTech);
         this.specializationRules = rules("classify/specializations.csv", Specialization::valueOf);
         this.keywordSets = keywordSets("classify/description-keywords.csv");
-        log.info("Job classifier loaded: {} title rules, {} department rules, {} keyword sets, {} specialization rules",
-                titleRules.size(), departmentRules.size(), keywordSets.size(), specializationRules.size());
+        this.secondaryKeywordSets = keywordSets("classify/description-secondary-keywords.csv");
+        log.info("Job classifier loaded: {} title rules (+{} fallback), {} department rules, {} keyword sets "
+                        + "(+{} secondary-only), {} specialization rules", titleRules.size(), fallbackTitleRules.size(),
+                departmentRules.size(), keywordSets.size(), secondaryKeywordSets.size(), specializationRules.size());
     }
 
     /**
@@ -76,7 +91,9 @@ public class JobClassifier {
         Map<JobFamily, Integer> votes = new EnumMap<>(JobFamily.class);
         List<String> reasons = new ArrayList<>();
 
-        Optional<Hit<JobFamily>> titleHit = firstMatch(titleRules, title);
+        List<Hit<JobFamily>> titleHits = allMatches(titleRules, title);
+        Optional<Hit<JobFamily>> titleHit = titleHits.stream().findFirst()
+                .or(() -> firstMatch(fallbackTitleRules, title));
         titleHit.ifPresent(hit -> vote(votes, reasons, hit.value(), TITLE_WEIGHT, "title '" + hit.matched() + "'"));
 
         // generic TECH evidence supports a technical title family, otherwise it means software engineering
@@ -84,20 +101,68 @@ public class JobClassifier {
                 .filter(f -> f.group() != JobFamily.Group.BUSINESS)
                 .orElse(JobFamily.SOFTWARE_ENGINEERING);
 
-        firstMatch(departmentRules, department)
-                .or(() -> firstMatch(departmentRules, function))
-                .ifPresent(hit -> vote(votes, reasons, resolve(hit.value(), techTarget), DEPARTMENT_WEIGHT,
-                        "department '" + hit.matched() + "'"));
+        Optional<Hit<JobFamily>> departmentHit = firstMatch(departmentRules, department)
+                .or(() -> firstMatch(departmentRules, function));
+        departmentHit.ifPresent(hit -> vote(votes, reasons, resolve(hit.value(), techTarget), DEPARTMENT_WEIGHT,
+                "department '" + hit.matched() + "'"));
 
-        descriptionVote(description).ifPresent(hit -> vote(votes, reasons, resolve(hit.value(), techTarget),
+        List<KeywordCount> keywordCounts = keywordCounts(description, keywordSets);
+        Optional<Hit<JobFamily>> descriptionHit = descriptionVote(keywordCounts);
+        descriptionHit.ifPresent(hit -> vote(votes, reasons, resolve(hit.value(), techTarget),
                 DESCRIPTION_WEIGHT, "description keywords " + hit.matched()));
 
         JobFamily family = decide(votes);
         int score = votes.getOrDefault(family, 0);
-        Specialization specialization = family.isTech()
+        List<KeywordCount> secondaryEvidence = new ArrayList<>(keywordCounts);
+        secondaryEvidence.addAll(keywordCounts(description, secondaryKeywordSets));
+        List<JobFamily> secondary = secondaryFamilies(family, titleHits, departmentHit, descriptionHit,
+                secondaryEvidence, reasons);
+        boolean technical = family.isTech() || secondary.stream().anyMatch(JobFamily::isTech);
+        Specialization specialization = technical
                 ? firstMatch(specializationRules, title).map(Hit::value).orElse(null)
                 : null;
-        return new Classification(family, specialization, score, List.copyOf(reasons));
+        return new Classification(family, secondary, specialization, score, List.copyOf(reasons));
+    }
+
+    /**
+     * The other technical families the evidence points to, so a search for any of them still finds the job:
+     * every other title rule that matched, the department, the description's winning keyword set and any other
+     * technical keyword set with at least MIN_SECONDARY_KEYWORD_HITS distinct hits. Generic TECH evidence means
+     * SOFTWARE_ENGINEERING for a job whose own family is not technical (a forward deployed or solutions engineer
+     * whose work is engineering). Only engineering-like jobs get secondary families: product, design and business
+     * families stay separate on purpose (the user opts in to them).
+     */
+    private static List<JobFamily> secondaryFamilies(JobFamily family, List<Hit<JobFamily>> titleHits,
+                                                     Optional<Hit<JobFamily>> department,
+                                                     Optional<Hit<JobFamily>> description,
+                                                     List<KeywordCount> keywordCounts, List<String> reasons) {
+        if (!family.isTech() && family != JobFamily.SALES_ENGINEERING && family != JobFamily.UNCLASSIFIED) {
+            return List.of();
+        }
+        JobFamily generic = family.isTech() ? family : JobFamily.SOFTWARE_ENGINEERING;
+        Set<JobFamily> secondary = new LinkedHashSet<>();
+        List<String> why = new ArrayList<>();
+        for (Hit<JobFamily> hit : titleHits) {
+            addSecondary(secondary, why, family, hit.value(), "title '" + hit.matched() + "'");
+        }
+        department.ifPresent(hit -> addSecondary(secondary, why, family, resolve(hit.value(), generic),
+                "department '" + hit.matched() + "'"));
+        description.ifPresent(hit -> addSecondary(secondary, why, family, resolve(hit.value(), generic),
+                "description keywords"));
+        for (KeywordCount count : keywordCounts) {
+            if (count.family() != null && count.hits().size() >= MIN_SECONDARY_KEYWORD_HITS) {
+                addSecondary(secondary, why, family, count.family(), "description keywords " + count.hits());
+            }
+        }
+        reasons.addAll(why);
+        return List.copyOf(secondary);
+    }
+
+    private static void addSecondary(Set<JobFamily> secondary, List<String> why, JobFamily family,
+                                     JobFamily candidate, String evidence) {
+        if (candidate.isTech() && candidate != family && secondary.add(candidate)) {
+            why.add(evidence + " -> also " + candidate);
+        }
     }
 
     // ---------------------------------------------------------------- voting
@@ -131,6 +196,21 @@ public class JobClassifier {
         return lead >= MIN_LEAD ? ranked.getFirst().getKey() : JobFamily.UNCLASSIFIED;
     }
 
+    /** Every rule that matches, in file order, one per value (the first rule's text for each). */
+    private static <T> List<Hit<T>> allMatches(List<Rule<T>> rules, String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+        List<Hit<T>> hits = new ArrayList<>();
+        for (Rule<T> rule : rules) {
+            Matcher m = rule.pattern().matcher(text);
+            if (m.find() && hits.stream().noneMatch(h -> h.value().equals(rule.value()))) {
+                hits.add(new Hit<>(rule.value(), m.group()));
+            }
+        }
+        return hits;
+    }
+
     private static <T> Optional<Hit<T>> firstMatch(List<Rule<T>> rules, String text) {
         if (text == null || text.isBlank()) {
             return Optional.empty();
@@ -144,22 +224,31 @@ public class JobClassifier {
         return Optional.empty();
     }
 
-    /** One weak vote for the family whose keywords appear most (at least MIN_KEYWORD_HITS, no tie). */
-    private Optional<Hit<JobFamily>> descriptionVote(String description) {
+    /** The distinct keywords of one keyword set found in a description; family null = the TECH umbrella. */
+    private record KeywordCount(JobFamily family, List<String> hits) {}
+
+    /** Each keyword set's distinct hits in the description, most hits first (empty for no description). */
+    private static List<KeywordCount> keywordCounts(String description, List<KeywordSet> sets) {
         if (description == null || description.isBlank()) {
-            return Optional.empty();
+            return List.of();
         }
-        record Count(JobFamily family, List<String> hits) {}
-        List<Count> counts = keywordSets.stream()
-                .map(set -> new Count(set.family(), set.keywords().stream()
+        return sets.stream()
+                .map(set -> new KeywordCount(set.family(), set.keywords().stream()
                         .map(k -> k.matcher(description))
                         .filter(Matcher::find)
                         .map(m -> m.group().toLowerCase())
                         .distinct()
                         .toList()))
-                .sorted(Comparator.comparingInt((Count c) -> c.hits().size()).reversed())
+                .sorted(Comparator.comparingInt((KeywordCount c) -> c.hits().size()).reversed())
                 .toList();
-        Count best = counts.getFirst();
+    }
+
+    /** One weak vote for the family whose keywords appear most (at least MIN_KEYWORD_HITS, no tie). */
+    private static Optional<Hit<JobFamily>> descriptionVote(List<KeywordCount> counts) {
+        if (counts.isEmpty()) {
+            return Optional.empty();
+        }
+        KeywordCount best = counts.getFirst();
         boolean tie = counts.size() > 1 && counts.get(1).hits().size() == best.hits().size();
         return best.hits().size() >= MIN_KEYWORD_HITS && !tie
                 ? Optional.of(new Hit<>(best.family(), best.hits().toString()))

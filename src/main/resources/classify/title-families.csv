@@ -3,13 +3,18 @@
 # before generic ones ("Sales Engineer" before "Engineer"). Patterns are Java regexes without commas.
 # Level words (Senior, Staff, Lead, Associate, Analyst, Manager...) are deliberately absent: they say how
 # senior a job is, never what it is.
+# The first match decides the title's vote; every OTHER matching line may add a secondary family (see
+# JobClassifier). The generic "engineer" catch-all lives in title-fallback.csv, so it never adds one.
 # --- roles that contain "engineer" but are not software engineering ---
-SALES_ENGINEERING,\b(?:sales|solutions?|pre-?sales|field|partner|deployment|implementation|integration|customer) engineer
+# pre-sale technical work (demos, PoCs, RFPs) is sales engineering; post-sale deployment work is engineering (below)
+SALES_ENGINEERING,\b(?:sales|solutions?|pre-?sales|field|partner|implementation|integration|customer) engineer
 SALES_ENGINEERING,\bsolutions? (?:architect|consultant|specialist|engineering)\b
 SALES_ENGINEERING,\bpre-?sales\b|\btechnical consultant\b|\btechnical account manager\b|\bdeveloper (?:relations|advocate)\b|\bsolution engineering\b
-SUPPORT,\b(?:technical |product )?support engineer\b|\bescalation engineer\b
+SUPPORT,\b(?:technical |product )?support engineer\b|\bescalation engineer\b|\b(?:it|desktop) support\b
+# --- administering a tool or system is IT work, not software engineering ("Jira Administrator") ---
+INFRA_DEVOPS,\b(?:jira|confluence|atlassian|lms|servicenow|salesforce|system|systems|linux|windows|network|it) administrator\b|\bsysadmin\b
 # --- managing engineers ---
-ENG_MANAGEMENT,\bengineering manager\b|\bmanager[ ,-]+(?:software (?:development )?)?engineering\b|\bhead of engineering\b|\bengineering director\b|\bdirector[ ,-]+(?:of )?engineering\b|\bvp[ ,-]+(?:of )?engineering\b|\bcto\b
+ENG_MANAGEMENT,\bengineering manager\b|\bmanager[ ,-]+(?:software (?:development )?)?engineering\b|\bhead of engineering\b|\bengrg mgmt\b|\bengineering director\b|\bdirector[ ,-]+(?:of )?engineering\b|\bvp[ ,-]+(?:of )?engineering\b|\bcto\b
 # --- product and marketing before security/data ("Product Manager - Security AI", "Product Marketing") ---
 MARKETING,\bproduct marketing\b
 PRODUCT,\bproduct (?:manager|management|owner|lead|head)\b|\bhead of product\b|\b(?:apm|associate product manager)\b
@@ -20,11 +25,11 @@ SALES,\b(?:account executive|account manager|sales)\b|\bdeal desk\b
 # --- specialist engineering families ---
 SECURITY,\b(?:security|cyber ?security|appsec|psirt|threat|detection engineer|penetration|red team|soc analyst)\b
 QA,\b(?:qa|quality assurance|sdet|test(?:ing)? engineer|automation test|test automation)\b
-DATA_ML,\b(?:machine learning|ml|ai engineer|ai/ml|ml/ai|ai researcher|data scien\w*|applied scientist|research scientist|llm|nlp|computer vision|mlops|deep learning)\b
+DATA_ML,\b(?:machine learning|ml|ai engineer|ai/ml|ml/ai|aiml|ai researcher|data scien\w*|applied scientist|research scientist|llm|nlp|computer vision|mlops|deep learning)\b
 DATA_ML,\bdata engineer
 INFRA_DEVOPS,\b(?:sre|site reliability|devops|platform engineer|infrastructure engineer|cloud engineer|network(?:ing)? engineer|systems engineer|kubernetes|database administrator|dba)\b
 # --- software engineering role words ---
-SOFTWARE_ENGINEERING,\b(?:software|backend|back-end|frontend|front-end|full[ -]?stack|mobile|android|ios|web|forward deployed) (?:engineer|developer|development)
+SOFTWARE_ENGINEERING,\b(?:software|backend|back-end|frontend|front-end|full[ -]?stack|mobile|android|ios|web|forward deployed|deployment) (?:engineer|developer|development)|\bfde\b|\bsoftware [\w/&+-]+ (?:engineer|developer)\b
 SOFTWARE_ENGINEERING,\b(?:sde|swe|mts|smts|lmts|pmts|amts|member of (?:the )?technical staff|developer|programmer)\b
 # --- non-tech families ---
 DESIGN,\b(?:designer|design lead|design manager|product design|ux|ui/ux|user experience|user research)\b
@@ -37,5 +42,3 @@ MARKETING,\b(?:marketing|brand|content|seo|social media|campaign|communications|
 SALES,\b(?:sales|account executive|account manager|business development|bdm|bde|key account|kam|relationship manager|partnerships?|alliances?|channel|merchant acquisition|tele ?caller|inside sales|renewals?|gtm)\b
 SUPPORT,\b(?:customer support|customer service|customer success|customer experience|cst|support associate|helpdesk|service desk|technical support)\b
 OPERATIONS,\b(?:operations|ops|collections?|procurement|supply chain|logistics|admin|facilities|strategy|chief of staff|fulfil?ment|executive assistant|claims|trainer|training|corporate development)\b
-# --- generic engineering words last: "Staff Engineer", "Principal Architect" ---
-SOFTWARE_ENGINEERING,\b(?:engineer|engineering|architect)\b

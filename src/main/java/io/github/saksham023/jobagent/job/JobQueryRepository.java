@@ -23,7 +23,7 @@ public class JobQueryRepository {
                              List<String> locations, List<String> cities, boolean remote, String employmentType,
                              Instant postedAt, Instant firstSeenAt, boolean open,
                              Integer minYears, Integer maxYears, String yearsEvidence, String family,
-                             String specialization, List<String> requiredSkills, List<String> preferredSkills,
+                             List<String> secondaryFamilies, String specialization, List<String> requiredSkills, List<String> preferredSkills,
                              List<String> primaryLanguages, String description) {
     }
 
@@ -31,7 +31,7 @@ public class JobQueryRepository {
             SELECT j.id, c.name AS company, j.title, j.url, j.department, j.locations, j.cities, j.remote,
                    coalesce(r.employment_type, j.employment_type) AS employment_type, j.posted_at,
                    j.first_seen_at, j.closed_at IS NULL AS open,
-                   r.min_years, r.max_years, r.years_evidence, r.family, r.specialization,
+                   r.min_years, r.max_years, r.years_evidence, r.family, r.secondary_families, r.specialization,
                    r.required_skills, r.preferred_skills, r.primary_languages, j.description
             FROM jobs j
             JOIN companies c ON c.id = j.company_id
@@ -70,6 +70,7 @@ public class JobQueryRepository {
                 rs.getObject("max_years", Integer.class),
                 rs.getString("years_evidence"),
                 rs.getString("family"),
+                strings(rs.getArray("secondary_families")),
                 rs.getString("specialization"),
                 strings(rs.getArray("required_skills")),
                 strings(rs.getArray("preferred_skills")),

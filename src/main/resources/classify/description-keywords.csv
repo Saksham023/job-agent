@@ -1,6 +1,7 @@
 # family,keywords
 # Distinct keywords counted in the description. The family with the most hits gets ONE weak vote if it has at
-# least 3 distinct hits and no other family ties it. Keywords are separated by | and matched as whole words.
+# least 3 distinct hits and no other family ties it. Any other technical family here, or in
+# description-secondary-keywords.csv, with at least 4 distinct hits becomes a secondary family. Keywords are separated by | and matched as whole words.
 # TECH = generic technical evidence (see department-families.csv).
 TECH,java|python|golang|spring|microservices|rest api|kafka|distributed systems|system design|data structures|algorithms|react|node.js|kubernetes|docker|ci/cd|git|typescript|c++|scalability
 DATA_ML,machine learning|deep learning|pytorch|tensorflow|llm|llms|nlp|model training|transformers|statistics|feature engineering|fine-tuning|inference

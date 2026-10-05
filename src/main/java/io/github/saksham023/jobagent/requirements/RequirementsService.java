@@ -25,7 +25,7 @@ public class RequirementsService {
      * 1 = the rules and dictionaries of Milestone 2 (2026-10-05).
      * 2 = shared section detection (intro sections skipped for experience), skills after a slash ("Python/Java").
      */
-    public static final int EXTRACTOR_VERSION = 3;
+    public static final int EXTRACTOR_VERSION = 5;
 
     private static final Pattern INTERN = Pattern.compile("(?i)\\b(?:intern(?:ship)?|trainee|apprentice)\\b");
     private static final Pattern CONTRACT = Pattern.compile("(?i)\\b(?:contract|contractor|temporary|freelance)\\b");

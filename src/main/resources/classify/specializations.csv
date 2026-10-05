@@ -6,7 +6,11 @@ BACKEND,\b(?:backend|back-end|server-side)\b
 MOBILE,\b(?:android|ios|mobile|flutter|react native)\b
 EMBEDDED,\b(?:embedded|firmware)\b
 DATA_ENGINEERING,\bdata engineer|\bbig data\b|\betl\b|\bdata platform\b
-ML_AI,\b(?:machine learning|ml|ai engineer|llm|data scien\w*|applied scientist|nlp)\b
+# researchers and scientists build models even when the title mentions agents ("Research Scientist, Agent Evaluation")
+ML_AI,\b(?:research(?:er)? scientist|research engineer|scientist)\b
+# AI_ENGINEERING = building products on top of models (LLM apps, agents, RAG); ML_AI = building the models.
+AI_ENGINEERING,\bai engineer|\bagents?\b|\bagentic\b|\bgen ?ai\b|\bgenerative ai\b|\bllm (?:apps|applications)\b|\bai (?:platform|applications?|products?|native|studio)\b
+ML_AI,\b(?:machine learning|ml|aiml|ai engineer|llm|data scien\w*|applied scientist|nlp)\b
 SRE,\b(?:sre|site reliability)\b
 PLATFORM_INFRA,\b(?:platform|infrastructure|cloud|kubernetes|devops|networking)\b
 SECURITY,\b(?:security|psirt|threat|detection)\b

@@ -4,6 +4,8 @@
 # "CEO Office", internal product names) simply give no vote.
 # TECH is not a family: it is generic technical evidence that SUPPORTS whatever technical family the title
 # chose (an SRE in an "IT" department is still INFRA_DEVOPS), and counts as SOFTWARE_ENGINEERING otherwise.
+# ServiceNow's whole engineering org is "Engineering, Infrastructure and Operations": generic tech, not infra
+TECH,engineering, infrastructure and operations
 SALES_ENGINEERING,\bfield engineering\b|\bsolutions?\b|professional services|deployment engineering|technical account|delivery solutions
 SECURITY,\bsecurity\b
 DATA_ML,\bmodels\b|\bai services\b|data science|\bml\b

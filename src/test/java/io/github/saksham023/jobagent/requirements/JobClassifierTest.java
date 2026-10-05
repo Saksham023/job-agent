@@ -3,6 +3,8 @@ package io.github.saksham023.jobagent.requirements;
 import io.github.saksham023.jobagent.requirements.JobClassifier.Classification;
 import io.github.saksham023.jobagent.requirements.JobClassifier.Specialization;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -141,5 +143,103 @@ class JobClassifierTest {
         assertThat(JobFamily.INFRA_DEVOPS.isTech()).isTrue();
         assertThat(JobFamily.SALES_ENGINEERING.group()).isEqualTo(JobFamily.Group.TECH_ADJACENT);
         assertThat(JobFamily.FINANCE.group()).isEqualTo(JobFamily.Group.BUSINESS);
+    }
+
+    // ---------------------------------------------------------------- secondary families (recall first)
+
+    /** The family filter matches primary OR secondary families, so this is what a software engineering search finds. */
+    private static boolean foundBySoftwareSearch(Classification c) {
+        return c.family() == JobFamily.SOFTWARE_ENGINEERING || c.secondaryFamilies().contains(JobFamily.SOFTWARE_ENGINEERING);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Sr. Software Development Engineer",
+            "Staff Software Development Engineer - AI Engineer",
+            "AI Engineer - FDE (Forward Deployed Engineer)",
+            "Senior Software AIML Engineer",
+            "Agent Engineer",
+            "IT Software Engineer, Infrastructure",
+            "Software Engineer - SRE (Rust)",
+            "Sr Software Engineer - Kubernetes",
+            "Staff Software Engineer - Machine Learning (Search)",
+            "Strategic Deployment Engineer, Chanakya",
+            "FDE - Enterprise AI"})
+    void softwareRolesAreNeverHiddenFromASoftwareSearch(String title) {
+        assertThat(foundBySoftwareSearch(classify(title, "Engineering"))).as(title).isTrue();
+    }
+
+    @Test
+    void aiEngineeringTitlesKeepBothFamilies() {
+        Classification c = classify("Staff Software Development Engineer - AI Engineer", "Product Management");
+
+        assertThat(c.family()).isEqualTo(JobFamily.DATA_ML);
+        assertThat(c.secondaryFamilies()).containsExactly(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(c.specialization()).isEqualTo(Specialization.AI_ENGINEERING);
+        assertThat(c.reasons()).contains("title 'Software Development' -> also SOFTWARE_ENGINEERING");
+    }
+
+    @Test
+    void solutionsWorkWithEngineeringContentAlsoCountsAsSoftwareEngineering() {
+        Classification c = classifier.classify("Solutions Engineer", "Field Engineering", null,
+                "You will build integrations in Python and Java, deploy on Kubernetes and Docker, and design REST APIs.");
+
+        assertThat(c.family()).isEqualTo(JobFamily.SALES_ENGINEERING);
+        assertThat(c.secondaryFamilies()).containsExactly(JobFamily.SOFTWARE_ENGINEERING);
+    }
+
+    @Test
+    void deploymentEngineersArePostSaleEngineeringNotSalesEngineering() {
+        assertThat(classify("Strategic Deployment Engineer, Chanakya", "Deployment Engineering").family())
+                .isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(classify("Forward Deployed Engineer", "Professional Services").family())
+                .isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(classify("FDE - Enterprise AI", "Professional Services").family())
+                .isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(classify("Senior Solutions Engineer", "Field Engineering").family())
+                .isEqualTo(JobFamily.SALES_ENGINEERING);                 // pre-sale
+    }
+
+    @Test
+    void anInfrastructureHeavyDescriptionAddsInfraWithoutChangingThePrimary() {
+        Classification c = classifier.classify("Strategic Deployment Engineer, Chanakya", "Deployment Engineering", null,
+                "Own deployments on-prem and in air-gapped environments. Manage deployment pipelines and model serving. "
+                        + "Production experience in Python, Docker and Linux systems administration. Own uptime.");
+
+        assertThat(c.family()).isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(c.secondaryFamilies()).containsExactly(JobFamily.INFRA_DEVOPS);
+    }
+
+    @Test
+    void businessProductAndDesignJobsGetNoSecondaryFamilies() {
+        assertThat(classify("Product Manager II - AI", "Engineering").secondaryFamilies()).isEmpty();
+        assertThat(classify("Specialist Account Executive, Data Security", "Global Specialty Sales").secondaryFamilies())
+                .isEmpty();
+    }
+
+    @Test
+    void itSupportAndToolAdministratorsAreNotSoftwareEngineering() {
+        assertThat(classify("Executive - IT Support", "Corp IT").family()).isEqualTo(JobFamily.SUPPORT);
+        assertThat(classify("Jira Administrator (Migration/Scripting/Integration)", "Engineering Operations").family())
+                .isEqualTo(JobFamily.INFRA_DEVOPS);
+        assertThat(classify("Senior LMS Administrator", "Product Management").family()).isEqualTo(JobFamily.INFRA_DEVOPS);
+        assertThat(classify("IT Lead", "Information Technology").family())
+                .isEqualTo(JobFamily.SOFTWARE_ENGINEERING);           // ambiguous: kept, the ranking decides
+    }
+
+    @Test
+    void serviceNowsEngineeringOrgIsNotAnInfrastructureSignal() {
+        Classification c = classify("Staff Software Engineer", "Engineering, Infrastructure and Operations");
+
+        assertThat(c.family()).isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(c.secondaryFamilies()).isEmpty();
+    }
+
+    @Test
+    void researchersBuildModelsEvenWhenTheTitleMentionsAgents() {
+        assertThat(classify("Senior Research Scientist, Agent Evaluation", null).specialization())
+                .isEqualTo(Specialization.ML_AI);
+        assertThat(classify("Principal Software Development Engineer - Agentic Systems", null).specialization())
+                .isEqualTo(Specialization.AI_ENGINEERING);
     }
 }

@@ -4,6 +4,8 @@ import io.github.saksham023.jobagent.matching.SkillImplications.Implied;
 import io.github.saksham023.jobagent.requirements.SkillExtractor;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -16,9 +18,14 @@ class SkillImplicationsTest {
 
     private final SkillImplications implications = new SkillImplications(new SkillExtractor());
 
+    /** In listed order, like MatchService passes them: Set.of has no fixed order, so ties would be random. */
+    private static Set<String> listed(String... skills) {
+        return new LinkedHashSet<>(List.of(skills));
+    }
+
     @Test
     void cloudServicesImplyTheCloudWithFullCredit() {
-        Map<String, Implied> implied = implications.expand(Set.of("DynamoDB", "AWS SQS"));
+        Map<String, Implied> implied = implications.expand(listed("DynamoDB", "AWS SQS"));
 
         assertThat(implied.get("AWS")).isEqualTo(new Implied("AWS", 1.0, "DynamoDB"));
         assertThat(implied.get("Message Queues").credit()).isEqualTo(1.0);          // via AWS SQS
@@ -26,22 +33,22 @@ class SkillImplicationsTest {
 
     @Test
     void relatedExperienceGetsHalfCredit() {
-        Map<String, Implied> implied = implications.expand(Set.of("Distributed Systems"));
+        Map<String, Implied> implied = implications.expand(listed("Distributed Systems"));
 
         assertThat(implied.get("Microservices")).isEqualTo(new Implied("Microservices", 0.5, "Distributed Systems"));
     }
 
     @Test
     void theHigherCreditWinsWhenTwoSkillsImplyTheSameOne() {
-        Map<String, Implied> implied = implications.expand(Set.of("Distributed Systems", "Spring Boot"));
+        Map<String, Implied> implied = implications.expand(listed("Distributed Systems", "Spring Boot"));
 
         assertThat(implied.get("Microservices").credit()).isEqualTo(0.5);           // both are 0.5
-        assertThat(implications.expand(Set.of("Kinesis", "Kafka")).get("Message Queues").credit()).isEqualTo(1.0);
+        assertThat(implications.expand(listed("Kinesis", "Kafka")).get("Message Queues").credit()).isEqualTo(1.0);
     }
 
     @Test
     void listedSkillsAreNotImpliedAgainAndThereIsOnlyOneHop() {
-        Map<String, Implied> implied = implications.expand(Set.of("Spring AI", "Java"));
+        Map<String, Implied> implied = implications.expand(listed("Spring AI", "Java"));
 
         assertThat(implied).doesNotContainKey("Java");                               // listed directly
         assertThat(implied).containsKey("Spring Boot");                              // Spring AI -> Spring Boot

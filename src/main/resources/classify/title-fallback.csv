@@ -1,0 +1,5 @@
+# family,pattern
+# Generic role words, tried only when no rule in title-families.csv matched the title ("Staff Engineer",
+# "Agent Engineer", "Principal Architect"). Kept apart so they never add a secondary family: otherwise every
+# "Sales Engineer" would also count as software engineering.
+SOFTWARE_ENGINEERING,\b(?:engineer|engineering|architect)\b
