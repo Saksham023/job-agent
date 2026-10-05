@@ -1,10 +1,12 @@
 package io.github.saksham023.jobagent.matching;
 
 import io.github.saksham023.jobagent.matching.MatchCandidateRepository.Candidate;
+import io.github.saksham023.jobagent.matching.SkillImplications.Implied;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -30,10 +32,36 @@ public class MatchScorer {
 
     /**
      * The candidate after normalization: canonical skills and languages, plus the location filter as canonical
-     * cities (used by the SQL filter and shown back to the caller, never by the score).
+     * cities (used by the SQL filter and shown back to the caller, never by the score). impliedSkills are the
+     * skills credited through SkillImplications (AWS via DynamoDB), each with its credit.
      */
     public record ResolvedProfile(Integer years, Set<String> skills, Set<String> languages,
-                                  Set<String> preferredCities, boolean openToRemote) {
+                                  Set<String> preferredCities, boolean openToRemote,
+                                  Map<String, Implied> impliedSkills) {
+
+        /** A profile without implied skills (tests, callers that do not expand). */
+        public ResolvedProfile(Integer years, Set<String> skills, Set<String> languages,
+                               Set<String> preferredCities, boolean openToRemote) {
+            this(years, skills, languages, preferredCities, openToRemote, Map.of());
+        }
+
+        /** 1 for a skill the candidate listed, the implied credit for an implied one, 0 otherwise. */
+        double credit(String skill) {
+            if (skills.contains(skill)) {
+                return 1.0;
+            }
+            Implied implied = impliedSkills.get(skill);
+            return implied == null ? 0.0 : implied.credit();
+        }
+
+        /** How a matched skill is shown: "Kafka", "AWS (via DynamoDB)", "Microservices (half credit, via Distributed Systems)". */
+        String label(String skill) {
+            Implied implied = skills.contains(skill) ? null : impliedSkills.get(skill);
+            if (implied == null) {
+                return skill;
+            }
+            return skill + (implied.credit() < 1.0 ? " (half credit, via " : " (via ") + implied.via() + ")";
+        }
     }
 
     /** One ranked job with everything needed to explain it. */
@@ -46,11 +74,15 @@ public class MatchScorer {
     public Match score(Candidate job, ResolvedProfile profile) {
         List<String> reasons = new ArrayList<>();
 
-        List<String> matchedRequired = job.requiredSkills().stream().filter(profile.skills()::contains).toList();
-        List<String> missingRequired = job.requiredSkills().stream().filter(s -> !profile.skills().contains(s)).toList();
-        List<String> matchedPreferred = job.preferredSkills().stream().filter(profile.skills()::contains).toList();
+        List<String> matchedRequired = job.requiredSkills().stream()
+                .filter(s -> profile.credit(s) > 0).map(profile::label).toList();
+        List<String> missingRequired = job.requiredSkills().stream().filter(s -> profile.credit(s) == 0).toList();
+        List<String> matchedPreferred = job.preferredSkills().stream()
+                .filter(s -> profile.credit(s) > 0).map(profile::label).toList();
 
-        double skills = skillScore(job, matchedRequired.size(), matchedPreferred.size(), reasons);
+        double requiredHits = job.requiredSkills().stream().mapToDouble(profile::credit).sum();
+        double preferredHits = job.preferredSkills().stream().mapToDouble(profile::credit).sum();
+        double skills = skillScore(job, requiredHits, preferredHits, reasons);
         double language = languageScore(job, profile, reasons);
         double experience = experienceScore(job, profile, reasons);
         if (job.remote()) {
@@ -67,9 +99,10 @@ public class MatchScorer {
 
     /**
      * Required skills count fully, preferred ones half: (req hit + 0.5 pref hit) / (req + 0.5 pref), where the
-     * required count is capped at MAX_REQUIRED_SKILLS_COUNTED; the result is capped at 1.
+     * required count is capped at MAX_REQUIRED_SKILLS_COUNTED; the result is capped at 1. A hit is the skill's
+     * credit, so a half-credit implied skill adds 0.5.
      */
-    private static double skillScore(Candidate job, int requiredHits, int preferredHits, List<String> reasons) {
+    private static double skillScore(Candidate job, double requiredHits, double preferredHits, List<String> reasons) {
         int required = job.requiredSkills().size();
         int preferred = job.preferredSkills().size();
         if (required == 0 && preferred == 0) {
@@ -78,9 +111,14 @@ public class MatchScorer {
         }
         double possible = Math.min(required, MAX_REQUIRED_SKILLS_COUNTED) + PREFERRED_SKILL_VALUE * preferred;
         double earned = requiredHits + PREFERRED_SKILL_VALUE * preferredHits;
-        reasons.add(requiredHits + "/" + required + " required skills"
-                + (preferred > 0 ? ", " + preferredHits + "/" + preferred + " preferred" : ""));
+        reasons.add(count(requiredHits) + "/" + required + " required skills"
+                + (preferred > 0 ? ", " + count(preferredHits) + "/" + preferred + " preferred" : ""));
         return Math.min(1.0, earned / possible);
+    }
+
+    /** 3.0 -> "3", 2.5 -> "2.5". */
+    private static String count(double hits) {
+        return hits == Math.rint(hits) ? String.valueOf((long) hits) : String.valueOf(hits);
     }
 
     /** Full when the job's main language is yours, partial when one of its languages is, 0 when none is. */

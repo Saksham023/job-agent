@@ -1,0 +1,109 @@
+# skill,implied skill,credit
+# A candidate who has the first skill is credited with the second one. Applied to the CANDIDATE only, never to
+# jobs (a job asking for AWS still asks for AWS). One hop only: implied skills do not imply further skills.
+# credit 1.0 = certainly implied (DynamoDB is an AWS service), 0.5 = related experience (half credit).
+# Both names must be canonical skills from skills.csv; a typo fails at startup.
+# --- cloud services imply the cloud ---
+DynamoDB,AWS,1.0
+AWS SQS,AWS,1.0
+AWS S3,AWS,1.0
+AWS EC2,AWS,1.0
+AWS Lambda,AWS,1.0
+Kinesis,AWS,1.0
+Redshift,AWS,1.0
+CloudFormation,AWS,1.0
+CloudWatch,AWS,1.0
+BigQuery,GCP,1.0
+# --- frameworks imply their language ---
+Spring Boot,Java,1.0
+Hibernate,Java,1.0
+Spring AI,Java,1.0
+Spring AI,Spring Boot,1.0
+JUnit,Java,1.0
+Quarkus,Java,1.0
+Micronaut,Java,1.0
+Django,Python,1.0
+Flask,Python,1.0
+FastAPI,Python,1.0
+Pandas,Python,1.0
+NumPy,Python,1.0
+PyTorch,Python,1.0
+Express,Node.js,1.0
+Node.js,JavaScript,1.0
+TypeScript,JavaScript,1.0
+React,JavaScript,1.0
+Next.js,React,1.0
+Redux,React,1.0
+Angular,TypeScript,1.0
+Vue.js,JavaScript,1.0
+React Native,React,1.0
+Flutter,Dart,1.0
+Ruby on Rails,Ruby,1.0
+Jetpack Compose,Kotlin,1.0
+SwiftUI,Swift,1.0
+.NET,C#,1.0
+# --- object-oriented languages ---
+Java,OOP,1.0
+C#,OOP,1.0
+C++,OOP,0.5
+Kotlin,OOP,1.0
+# --- messaging and caching ---
+Kafka,Message Queues,1.0
+RabbitMQ,Message Queues,1.0
+AWS SQS,Message Queues,1.0
+Pulsar,Message Queues,1.0
+Kinesis,Message Queues,0.5
+Kafka,Event-Driven Architecture,0.5
+Redis,Caching,1.0
+Memcached,Caching,1.0
+Aerospike,Caching,0.5
+# --- relational databases imply SQL ---
+PostgreSQL,SQL,1.0
+MySQL,SQL,1.0
+MariaDB,SQL,1.0
+Oracle Database,SQL,1.0
+SQL Server,SQL,1.0
+Snowflake,SQL,1.0
+BigQuery,SQL,1.0
+Redshift,SQL,1.0
+dbt,SQL,1.0
+MariaDB,MySQL,0.5
+# --- containers, CI and monitoring ---
+Kubernetes,Docker,1.0
+Helm,Kubernetes,1.0
+Istio,Kubernetes,1.0
+Jenkins,CI/CD,1.0
+Prometheus,Observability,1.0
+Grafana,Observability,1.0
+Datadog,Observability,1.0
+OpenTelemetry,Observability,1.0
+ELK Stack,Observability,0.5
+Splunk,Observability,0.5
+JUnit,Unit Testing,1.0
+# --- data and ML ---
+Airflow,ETL,1.0
+Apache Spark,ETL,0.5
+CDC,ETL,0.5
+PyTorch,Deep Learning,1.0
+TensorFlow,Deep Learning,1.0
+Deep Learning,Machine Learning,1.0
+scikit-learn,Machine Learning,1.0
+LangChain,LLMs,1.0
+LlamaIndex,LLMs,1.0
+RAG,LLMs,1.0
+AI Agents,LLMs,1.0
+Spring AI,LLMs,1.0
+LLMs,Generative AI,1.0
+Generative AI,LLMs,0.5
+Prompt Engineering,LLMs,0.5
+Fine-tuning,LLMs,0.5
+MCP,AI Agents,0.5
+RAG,Embeddings,0.5
+Vector Databases,Embeddings,0.5
+# --- related engineering experience (half credit) ---
+Distributed Systems,Microservices,0.5
+Microservices,Distributed Systems,0.5
+Distributed Systems,System Design,0.5
+Microservices,REST APIs,0.5
+Spring Boot,REST APIs,0.5
+Spring Boot,Microservices,0.5

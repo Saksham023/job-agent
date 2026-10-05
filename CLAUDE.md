@@ -16,24 +16,37 @@ match_jobs), then M4 part 2 (get_job). 12 companies on 4 platforms, 706 India jo
 `match_jobs`, `get_job`; Claude Code connects via `.mcp.json` (already approved). End-to-end demos passed.
 99 unit tests green. **M4 goes SLOWLY: the user is new to Spring AI; explain every annotation/term briefly.**
 
-**EXACT NEXT STEP:** M4 step 6 first (user agreed "proceed as you want"; Claude chose 6 before 5): the
-`find-jobs` MCP PROMPT with `@McpPrompt` / `@McpArg` (new concept: prompts = user-selectable workflow
-templates). Workflow text: read the resume -> fill the profile (years, skills, primary languages) -> ASK
-the candidate about location preference and remote (never infer from resume) -> optionally ask which job
-families -> call match_jobs -> explain strong fits / worth a look / skip with matched/missing skills and
-urls -> offer get_job for details. Before writing it, inspect `@McpPrompt`/`@McpArg` attributes and the
-required return type in `spring-ai-mcp-annotations-2.0.1.jar` with javap (as done for @McpTool), draft in
-scratch, compile against `target/classes` + the classpath from `./mvnw dependency:build-classpath`, then
-hand over. Test via a new Claude Code session (prompts appear as slash commands, likely
-`/mcp__job-agent__find-jobs`) or MCP `prompts/list` + `prompts/get` with curl (give the user the commands).
-Then step 5 `new_jobs_since(date, profile)` (match_jobs restricted to first_seen_at > date; date param in
-the schema), then wrap-up (commit, CLAUDE.md), then Milestone 5.
+**Done since (2026-10-05, uncommitted until the next commit):** M4 step 6 `find-jobs` prompt
+(`mcp/JobSearchPrompts`, @McpPrompt + @McpArg, returns GetPromptResult with one USER message; works as
+`/mcp__job-agent__find-jobs` in the Claude Code CLI; the desktop Code tab does not list MCP prompts, so the
+location rule also lives in the server instructions and the match_jobs description). Skills part A: skills.csv
+grew 156 -> ~210 rows (Spring AI, MCP, AI Agents, JWT, CDC, AWS S3, Observability, SRE, Caching, Message
+Queues...), chosen by counting mentions in the 706 jobs and reading contexts (rejected: bedrock, payments,
+scalable, bare Lambda); EXTRACTOR_VERSION=3; 234 jobs gained skills, none lost. Part B: skill implications
+(`classify/skill-implications.csv`, 96 rules, `matching/SkillImplications`, credit 1.0 = certain, 0.5 = related,
+candidate side only, one hop; MatchScorer sums credits, labels "AWS (via DynamoDB)"). User's search: Paytm TL
+49 -> 76, Sarvam Backend 53 -> 73, Zscaler SDE 60 -> 69, Paytm SSE 51 -> 68. 105 unit tests green.
+
+**EXACT NEXT STEP: classifier pass "recall first" (decisions agreed 2026-10-05, see §8):**
+1. Title rules: "IT Support" -> SUPPORT; "<tool> Administrator" (Jira, LMS, ServiceNow, System) ->
+   INFRA_DEVOPS. Leave "IT Lead", "IT Software Engineer", "System Integrator" in SWE (ambiguous; ranking decides).
+2. Secondary families (multi-label): ALL matching specific title rules count (generic "engineer" fallback only
+   when nothing specific matched); a TECH description vote adds SOFTWARE_ENGINEERING as secondary (so an FDE /
+   solutions job with real engineering work shows up for SWE searches); a disagreeing department vote adds its
+   family. New migration V8 `job_requirements.secondary_families TEXT[]` (user pastes); match filter = ANY of the
+   job's families in the selected ones (array overlap); show secondary families in match_jobs and get_job.
+3. New specialization AI_ENGINEERING (LLM apps, agents, RAG, MCP) next to ML_AI (models, research).
+4. Scorer: minimum skills denominator (~4) so a 2-skill posting cannot give 100% skills.
+5. EXTRACTOR_VERSION=4, diff all 706 jobs (list every family change), recall-guard test (titles with
+   engineer/developer/SDE must be in a TECH family, primary or secondary), user runs rebuild + same search.
+Then: commit; M4 step 5 `new_jobs_since`; M4 wrap-up; Milestone 5 (incl. the wider shortlist + re-rank).
 
 **How we work (user preferences, keep following them):**
 - User types/pastes all NEW code; Claude creates the empty file first (`touch`), then gives the whole file
   with: purpose, a short table of methods, new concepts, shortcomings. Keep explanations SHORT and precise.
-- Claude MAY edit existing code itself when the user asks for fixes/cleanups/refactors, and may write data
-  files (CSV) and docs. Never push. Ask before commits unless the user said "commit".
+- EXISTING files: Claude makes every change itself (decided 2026-10-05: tracing paste locations is hard)
+  and tells the user exactly what changed and why. NEW files: Claude creates them empty and the user pastes.
+  Claude may write data files (CSV) and docs. Never push. Ask before commits unless the user said "commit".
 - Before handing over code, Claude verifies it in the session scratchpad: compile with JDK 25
   (`/Users/saksham/Library/Java/JavaVirtualMachines/openjdk-25.0.2/Contents/Home`) against jars in
   `~/.m2`, run against real data (read-only `psql` export or JDBC SELECT), and run JUnit tests. Before a
@@ -121,6 +134,10 @@ tools/call; replies come as SSE (`event:message`, `data:{...}`); JSON-RPC ids ma
 per connection; harmless macOS Tomcat "setSoLinger Invalid argument" errors.
 
 **Backlog (noted, not done; pick up in M5 or a rules pass):**
+- Result size: keep max 25 now, but allow the user to ask for more (e.g. 50) later; account for token/LLM cost
+  then (user, 2026-10-05). M5: scorer builds a wider shortlist, a model re-ranks it, user sees the top N.
+- Ranking boost when the job's specialization matches the profile's (backend over frontend), tuned on the
+  labeled set in M5.
 - Classifier: "Executive - IT Support" (Zeta) -> SOFTWARE_ENGINEERING; add an "it support" SUPPORT title rule;
   bump EXTRACTOR_VERSION after any rule/CSV change and run `POST /admin/requirements/rebuild`.
 - Primary-language quirk: "Jira Administrator" looks Java-primary from "Java/Python scripting".
@@ -460,6 +477,13 @@ Decided (2026-10-04):
   every rule change is re-scored (regression). Bake-off compares rules vs embedding nearest-neighbour vs
   local LLM on UNSEEN companies; the winner becomes tier 1/2.
 - No LLM in the matching step itself: deterministic filters + skill scoring (+ embeddings later).
+- **Recall first (decided 2026-10-05, user's call).** Hard filters (family, location, years) must not drop a
+  relevant job; including an irrelevant one is cheap because ranking (and later a model re-rank) handles
+  precision. So: ambiguous titles stay in the broad family, jobs get secondary families from all evidence
+  (title rules, description, department), and the family filter matches any of them. Pure backend roles should
+  still rank above hybrids (FDE, solutions) through skills/language now and specialization later.
+- Skills: dictionary (exact, explainable) + candidate-side implications (1.0 certain / 0.5 related, one hop) now;
+  embeddings for fuzzy similarity in M5. Dictionary growth is data-driven (mention counts + context checks).
 - **Location is the user's explicit choice (decided 2026-10-05, user's call).** Never inferred from the
   resume's address (where someone lives is not where they want to work). `Profile.preferredLocations` is a
   FILTER only (empty = anywhere in India; remote jobs pass when openToRemote); location is never part of the

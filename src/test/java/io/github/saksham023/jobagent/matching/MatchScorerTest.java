@@ -3,9 +3,11 @@ package io.github.saksham023.jobagent.matching;
 import io.github.saksham023.jobagent.matching.MatchCandidateRepository.Candidate;
 import io.github.saksham023.jobagent.matching.MatchScorer.Match;
 import io.github.saksham023.jobagent.matching.MatchScorer.ResolvedProfile;
+import io.github.saksham023.jobagent.matching.SkillImplications.Implied;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -109,5 +111,22 @@ class MatchScorerTest {
 
         assertThat(remote.reasons()).contains("remote");
         assertThat(remote.score()).isEqualTo(100);
+    }
+
+    @Test
+    void impliedSkillsCountWithTheirCreditAndSayWhereTheyComeFrom() {
+        ResolvedProfile profile = new ResolvedProfile(3, Set.of("Java", "DynamoDB", "Distributed Systems"),
+                Set.of("Java"), Set.of(), true, Map.of(
+                        "AWS", new Implied("AWS", 1.0, "DynamoDB"),
+                        "Microservices", new Implied("Microservices", 0.5, "Distributed Systems")));
+
+        Match m = scorer.score(job(List.of("Java", "AWS", "Microservices", "Go"), List.of(), List.of("Java"),
+                2, 5, List.of("Bengaluru"), false), profile);
+
+        assertThat(m.matchedRequired()).containsExactly("Java", "AWS (via DynamoDB)",
+                "Microservices (half credit, via Distributed Systems)");
+        assertThat(m.missingRequired()).containsExactly("Go");
+        assertThat(m.reasons()).contains("2.5/4 required skills");
+        assertThat(m.score()).isEqualTo(76);                      // 65*(2.5/4) + 20 + 15 = 75.6
     }
 }

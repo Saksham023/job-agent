@@ -42,13 +42,15 @@ public class MatchService {
     private final MatchScorer scorer;
     private final SkillExtractor skillExtractor;
     private final Gazetteer gazetteer;
+    private final SkillImplications implications;
 
     public MatchService(MatchCandidateRepository repository, MatchScorer scorer, SkillExtractor skillExtractor,
-                        Gazetteer gazetteer) {
+                        Gazetteer gazetteer, SkillImplications implications) {
         this.repository = repository;
         this.scorer = scorer;
         this.skillExtractor = skillExtractor;
         this.gazetteer = gazetteer;
+        this.implications = implications;
     }
 
     public MatchResponse match(Profile profile, int limit) {
@@ -84,7 +86,7 @@ public class MatchService {
         }
 
         ResolvedProfile resolved = new ResolvedProfile(profile.yearsOfExperience(), Set.copyOf(skills),
-                Set.copyOf(languages), Set.copyOf(cities), profile.openToRemote());
+                Set.copyOf(languages), Set.copyOf(cities), profile.openToRemote(), implications.expand(skills));
 
         List<Candidate> candidates = repository.find(new Criteria(COUNTRY,
                 profile.families().stream().map(JobFamily::name).toList(), List.copyOf(cities),
