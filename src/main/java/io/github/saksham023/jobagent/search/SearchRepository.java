@@ -28,7 +28,8 @@ import java.util.UUID;
 public class SearchRepository {
 
     /** A stored search: what is needed to judge for it again. */
-    public record SearchRow(UUID id, String profileJson, String profileHash, String rubricVersion, int candidates) {
+    public record SearchRow(UUID id, String profileId, String profileJson, String profileHash, String rubricVersion,
+                            int candidates) {
     }
 
     /**
@@ -143,13 +144,17 @@ public class SearchRepository {
 
     // ---------------------------------------------------------------- searches
 
-    /** @param lowPriorityFrom the 1-based position where the low-priority tier starts, or null for one tier */
+    /**
+     * @param lowPriorityFrom the 1-based position where the low-priority tier starts, or null for one tier
+     * @param profileId       the saved profile the search is for
+     */
     public UUID create(String profileJson, String profileHash, String rubricVersion, List<Long> candidateIds,
-                       List<Integer> candidateScores, Integer lowPriorityFrom) {
+                       List<Integer> candidateScores, Integer lowPriorityFrom, String profileId) {
         return jdbc.sql("""
                         INSERT INTO searches (profile, profile_hash, rubric_version, candidate_ids, candidate_scores,
-                                              low_priority_from)
-                        VALUES (CAST(:profile AS jsonb), :profileHash, :rubric, :ids, :scores, :lowPriorityFrom)
+                                              low_priority_from, profile_id)
+                        VALUES (CAST(:profile AS jsonb), :profileHash, :rubric, :ids, :scores, :lowPriorityFrom,
+                                :profileId)
                         RETURNING id
                         """)
                 .param("profile", profileJson)
@@ -158,17 +163,18 @@ public class SearchRepository {
                 .param("ids", candidateIds.toArray(Long[]::new))
                 .param("scores", candidateScores.toArray(Integer[]::new))
                 .param("lowPriorityFrom", lowPriorityFrom)
+                .param("profileId", profileId)
                 .query(UUID.class)
                 .single();
     }
 
     public Optional<SearchRow> find(UUID id) {
         return jdbc.sql("""
-                        SELECT id, profile::text AS profile, profile_hash, rubric_version, cardinality(candidate_ids) AS n
+                        SELECT id, profile_id, profile::text AS profile, profile_hash, rubric_version, cardinality(candidate_ids) AS n
                         FROM searches WHERE id = :id
                         """)
                 .param("id", id)
-                .query((rs, rowNum) -> new SearchRow(rs.getObject("id", UUID.class), rs.getString("profile"),
+                .query((rs, rowNum) -> new SearchRow(rs.getObject("id", UUID.class), rs.getString("profile_id"), rs.getString("profile"),
                         rs.getString("profile_hash"), rs.getString("rubric_version"), rs.getInt("n")))
                 .optional();
     }

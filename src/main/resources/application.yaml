@@ -10,6 +10,8 @@ spring:
         instructions: >
           Searches live job postings crawled from company careers sites in India and ranks them against
           a candidate's profile. Never guess the candidate's location preference from their resume: ask.
+          Each search saves the resume facts as a profile with an id (like p-7k3x9q2m); tell the candidate the
+          id, and when they give one, search with profileId instead of reading the resume again.
 
   datasource:
     url: jdbc:postgresql://localhost:5433/jobagent

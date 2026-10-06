@@ -9,8 +9,9 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
-**State (2026-10-06, before a compaction):** M0-M7b DONE and committed; M8 (search with the Opus judge) WORKS LIVE
-but is NOT COMMITTED yet. Commits: ... `1497473` M6, `86df413` M7 (Workday, rules v8), `75e6566` M7b (Eightfold,
+**State (2026-10-06):** M0-M8 DONE and committed (`ae7e2cc` M8); M8a (saved profiles) BUILT AND TESTED LIVE by Claude
+(user said: do 8a yourself, no paste), NOT committed yet; DB already at V16 (applied by Claude's test instance on port
+8081). The user's IntelliJ app on 8080 still runs the OLD code: restart it to get profiles. Commits: ... `1497473` M6, `86df413` M7 (Workday, rules v8), `75e6566` M7b (Eightfold,
 6 more Workday companies, rules v9-v10, family_guessed). Data: 2,340 open India jobs from 29 companies on 6 platforms
 (Greenhouse, Lever, SmartRecruiters, Ashby, Workday, Eightfold); extractor v10; guessed and UNCLASSIFIED families 0.
 DB schema at Flyway V15. MCP server `http://localhost:8080/mcp`, 5 tools: `list_companies`, `match_jobs` (now a
@@ -20,14 +21,42 @@ Opus spend so far on the judge in M8: 205 verdicts, $5.50 (3 searches, same prof
 Full detail of everything done: section 0c. Plain-language history: section 0b.
 
 ### NEXT (in this order; 2026-10-06)
-1. COMMIT M8 (user said M8 works: "Okay, this is working"). Uncommitted: package `search` (SearchProperties,
+1. DONE 2026-10-06: M8 committed as ae7e2cc (.m8-wip deleted). Old note: Uncommitted: package `search` (SearchProperties,
    SearchRepository, SearchService, SearchController, SearchServiceTest), V14 (judgments, searches), V15
    (searches.low_priority_from), edits to JobTools, JudgeProfile, JobJudge, application.yaml, JobToolsTest,
    JobJudgeTest, CLAUDE.md. Ask before committing (the user usually says yes). `.m8-wip/` (git-ignored) can be deleted
    after the commit.
-2. M8a SAVED PROFILES: plan READY (agreed 2026-10-06, build on 2026-10-07; see "### M8a plan" below).
+2. M8a SAVED PROFILES: BUILT 2026-10-06 (see "### M8a status"); next: commit (ask), user restarts the app.
 3. Real end-to-end demo through Claude in `~/job-search` (match_jobs with wants + families, more_jobs, export_jobs).
 4. Microsoft crawl (see TODO MICROSOFT in M7b status): one test request first; it rate-limited us on 2026-10-06.
+
+### M8a status (2026-10-06): built by Claude, 224 unit tests, live-tested on a second instance (port 8081)
+- Files: V16__create_profiles.sql (profiles + searches.profile_id); package `profile`: ProfileFacts (years, skills,
+  primaryLanguages, wants; `noneGiven()`), SearchPreferences (locations, remote, families, jobYearsFrom/To; `orElse`
+  = per-field fallback to the saved defaults; [] means anywhere, null means left out), SavedProfile, ProfileIds
+  (`p-` + 8 Crockford base32 chars, SecureRandom; normalize = trim + lower case + format check), ProfileRepository,
+  ProfileService (create, get, resolve(profileId, facts, prefs, source) -> Resolved, recordSearch),
+  ProfileController (POST /admin/profiles, GET /admin/profiles/{id}); common/BadRequestAdvice (any
+  IllegalArgumentException from a controller -> 400 with the message, was a bare 500); ProfileServiceTest (7).
+  Edited: SearchService.start(Resolved, postedSince, pageSize), SearchPage gains profileId (+ "Saved as profile ..."
+  note when created), SearchRepository (profile_id), SearchController (body = facts + preferences, `?profileId=`;
+  `wants` in the body or as query param), JobTools (match_jobs `profileId`, skills no longer required; new tool
+  `get_profile`), JobSearchPrompts (step 0: ask for a profile ID), application.yaml instructions.
+- Live checks (8081, ready-target 1 so no background judging): facts -> new profile p-zxwgkkrb, profile_hash identical
+  to the earlier searches (69ec57d3...), answer in 0.16 s, 0 Opus calls; id only (upper case too) -> same hash and
+  verdicts; id + facts -> 400 / MCP tool error; unknown or malformed id -> 400 with a clear message; MCP tools/list
+  shows get_profile; match_jobs by id with Bengaluru + SWE -> 84 eligible, Bengaluru jobs. Profile p-zxwgkkrb holds
+  the user's facts (its saved defaults are now Bengaluru + SOFTWARE_ENGINEERING from the last test).
+
+- USER'S END-TO-END TEST via Claude Code in ~/job-search PASSED 2026-10-06: find-jobs asked for a profile ID first;
+  resume -> profile p-p1nqs0fb (Java + Python, 24 skills, wants in Claude's words, defaults: anywhere, remote, SWE +
+  DATA_ML, jobYears 0-4 as the user asked); first answer 5 APPLY (5 of the top 10 positions were APPLY: the first page
+  holds 0-10 jobs by design); "10 more" instant; new session + the id -> get_profile, confirm preferences, match_jobs
+  with only profileId, instant, same hash, 0 Opus calls. Background worker for the new profile: 222 verdicts, $6.26
+  (APPLY gets rare down the list, so reaching 30 ready takes many calls; consider a lower ready-target or a per-search
+  budget). Fixed after the test: SearchPage `stillToJudge` -> `notJudgedYet` and the note no longer says "N being
+  judged" (Claude reported "142 still being judged"; the worker stops at 30 ready). Seen: duplicate ServiceNow Armis
+  postings (dedup in M9), stale July 2025 postings flagged by Claude from postedAt.
 
 ### M8a plan: saved profiles / profile IDs (user's idea; decisions made 2026-10-06; build 2026-10-07)
 Why: verdicts are cached per profile_hash; Claude re-reading the same resume can produce a slightly different skill
@@ -137,8 +166,8 @@ stale (store an as-of date and add elapsed time), deleting a profile on request.
 | 5 | Quality foundation: answer key (Opus judge, user-confirmed `eval/reference/saksham.csv`), baseline nDCG@10 0.89, experience window, bullet/typo extraction fixes, `ClaudeCliChatModel` | DONE |
 | 6 | Opus extraction-gap filler (status below) | DONE 2026-10-05 (all 145 gap jobs, $3.48) |
 | 7 | Workday adapter (then Eightfold, Oracle) with the generalization check (design below) | Workday + Eightfold DONE (86df413, 75e6566); Microsoft not crawled yet; Oracle later |
-| 8 | Search with the Opus judge: first batch fast, background judging, `more_jobs`, export (design below) = the END-TO-END DEMO | WORKS LIVE, NOT COMMITTED (see NEXT); tiers added; demo via Claude pending |
-| 8a | Saved profiles / profile IDs (user's idea 2026-10-06; plan in "### M8a plan") | PLAN READY, build 2026-10-07 |
+| 8 | Search with the Opus judge: first batch fast, background judging, `more_jobs`, export (design below) = the END-TO-END DEMO | DONE (ae7e2cc); tiers; demo via Claude pending |
+| 8a | Saved profiles / profile IDs (user's idea 2026-10-06; see "### M8a status") | BUILT + live-tested 2026-10-06, not committed |
 | 8b | Self-learning skill dictionary (user's idea 2026-10-05, design below; suggested placement: after M8, user to confirm) | planned |
 | 9 | Operations: scheduler (per-host virtual threads), change tracking + closed jobs, dedup, health alerts, SmartRecruiters incremental details | planned |
 | 10 | Custom adapters by value: Amazon, IBM, Cisco, Google, Apple, then the rest (section 3) | planned |
@@ -299,20 +328,21 @@ fails the experience arithmetic (kappa 0.46); with thinking 0.85; fix later by c
 - App: IntelliJ run `JobagentApplication`. Its run configuration must have env vars `CLAUDE_CODE_OAUTH_TOKEN` (value
   from `claude setup-token`, also exported in ~/.zshrc; never in git or chat) and
   `JOBAGENT_LLM_CLAUDECLI_COMMAND=/Users/saksham/.local/bin/claude`. Or `./mvnw spring-boot:run` from a terminal.
-- Unit tests (no DB): `./mvnw -q test -Dtest='*Test'` (217 green on 2026-10-06). `JobagentApplicationTests` would migrate the real DB.
-- DB: `docker exec -it rag-postgres psql -U postgres -d jobagent` (Docker Desktop must run). Flyway V1-V15.
+- Unit tests (no DB): `./mvnw -q test -Dtest='*Test'` (224 green on 2026-10-06). `JobagentApplicationTests` would migrate the real DB.
+- DB: `docker exec -it rag-postgres psql -U postgres -d jobagent` (Docker Desktop must run). Flyway V1-V16.
 - Endpoints: `GET /admin/companies[/{slug}]`, `GET /admin/crawl/{slug}/preview?limit&full`, `POST /admin/crawl[/{slug}]`,
   `POST /admin/requirements/rebuild[?all=true]` (after any EXTRACTOR_VERSION bump), `GET /admin/requirements/coverage`,
   `POST /admin/match?limit&postedSince` (Profile JSON body), `POST /admin/eval/judge?profile&model&limit&parallelism`
   (1-4), `GET /admin/eval/judge/status`, `GET /admin/eval/report?run=<date>-<model>-<profile>`,
   `POST /admin/requirements/fill-gaps?model&limit&parallelism` (1-10), `GET /admin/requirements/fill-gaps/status`,
   `POST /admin/search?wants&postedSince&pageSize` (Profile body), `GET /admin/search/{id}/more?count`,
-  `GET /admin/search/{id}/export?includeMaybe`.
+  `GET /admin/search/{id}/export?includeMaybe`, `POST /admin/search?profileId=` (body: preferences or {}),
+  `POST /admin/profiles` (ProfileFacts body), `GET /admin/profiles/{id}`.
 - Using the product: from a clean folder (`~/job-search`; server added with `claude mcp add --transport http --scope user
   job-agent http://localhost:8080/mcp`), not from this repo (this CLAUDE.md would leak into the session).
 
 **Code map:** `company` (registry) · `crawl` (+ `crawl.adapter`: Greenhouse/Lever/SmartRecruiters/Ashby/Workday/Eightfold,
-JsonFields) · `search` (M8: SearchProperties, SearchRepository, SearchService, SearchController) ·
+JsonFields) · `search` (M8: SearchProperties, SearchRepository, SearchService, SearchController) · `profile` (M8a) ·
 `geo` (Gazetteer, LocationParser) · `job` (NormalizedJob, JobRepository upsert, JobQueryRepository read side) ·
 `requirements` (ExperienceExtractor, JobClassifier/JobFamily with secondary families, DescriptionSections incl.
 `isBullet`, SkillExtractor, Requirements{Repository,Service,Controller}, EXTRACTOR_VERSION=7, M6 gap filler:

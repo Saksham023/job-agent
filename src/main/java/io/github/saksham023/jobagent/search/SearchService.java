@@ -12,6 +12,8 @@ import io.github.saksham023.jobagent.matching.MatchScorer.Match;
 import io.github.saksham023.jobagent.matching.MatchService;
 import io.github.saksham023.jobagent.matching.MatchService.MatchResponse;
 import io.github.saksham023.jobagent.matching.Profile;
+import io.github.saksham023.jobagent.profile.ProfileService;
+import io.github.saksham023.jobagent.profile.ProfileService.Resolved;
 import io.github.saksham023.jobagent.search.SearchRepository.JobTraits;
 import io.github.saksham023.jobagent.search.SearchRepository.Ranked;
 import io.github.saksham023.jobagent.search.SearchRepository.SearchRow;
@@ -52,6 +54,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   worker to refill.
  * Likely NO jobs are not dropped but moved to a LOW-PRIORITY tier at the end of the list (lowPriorityReason): they
  * are judged only after the main tier is done, so a normal session never pays for them.
+ * Every search is for a saved profile (ProfileService): the same profile id gives the same candidate, so its stored
+ * verdicts are reused; a profile created by this search is announced in the first answer's note.
  * The state lives in the database (searches, judgments): the only memory here is which searches have a worker
  * running and which calls failed, so after a restart the next `more` simply resumes. Verdicts are stored per
  * (profile, job, rubric, job content) and reused by any later search with the same profile.
@@ -86,13 +90,15 @@ public class SearchService {
      * One answer.
      *
      * @param readyApply  APPLY jobs judged and waiting (more can be returned at once)
-     * @param stillToJudge candidates not judged yet
+     * @param notJudgedYet candidates without a verdict; the worker judges only until readyTarget APPLY are ready,
+     *                     so most of them may never be judged
      * @param judging     a background worker is judging right now
      * @param finished    nothing more will be judged (list done or the NO streak was reached)
      * @param note        a sentence for the user about what happens next
      * @param eligible    first answer only: jobs that passed the filters (null later)
+     * @param profileId   the saved profile this search is for: pass it to match_jobs next time instead of the resume
      */
-    public record SearchPage(UUID searchId, List<JobResult> jobs, int readyApply, int readyMaybe, int stillToJudge,
+    public record SearchPage(UUID searchId, String profileId, List<JobResult> jobs, int readyApply, int readyMaybe, int notJudgedYet,
                              boolean judging, boolean finished, String note, Integer eligible,
                              ExperienceWindow experienceWindow, List<String> unknownSkills,
                              List<String> unknownLocations) {
@@ -112,6 +118,7 @@ public class SearchService {
     private final JobJudge judge;
     private final EvalProperties eval;
     private final SearchProperties settings;
+    private final ProfileService profiles;
     private final JsonMapper jsonMapper;
 
     private final Set<UUID> running = ConcurrentHashMap.newKeySet();
@@ -119,24 +126,29 @@ public class SearchService {
     private final Map<UUID, AtomicInteger> failuresInARow = new ConcurrentHashMap<>();
 
     public SearchService(MatchService matchService, SearchRepository repository, JobQueryRepository jobs,
-                         JobJudge judge, EvalProperties eval, SearchProperties settings, JsonMapper jsonMapper) {
+                         JobJudge judge, EvalProperties eval, SearchProperties settings, ProfileService profiles,
+                         JsonMapper jsonMapper) {
         this.matchService = matchService;
         this.repository = repository;
         this.jobs = jobs;
         this.judge = judge;
         this.eval = eval;
         this.settings = settings;
+        this.profiles = profiles;
         this.jsonMapper = jsonMapper;
     }
 
     // ---------------------------------------------------------------- the three operations
 
     /**
-     * @param wants       the kinds of roles the candidate wants, in words, or null
+     * @param resolved    the saved profile and this search's preferences (ProfileService.resolve)
      * @param postedSince only jobs posted since then, or null
      * @param pageSize    jobs in the answer, or null for the default
      */
-    public SearchPage start(Profile profile, String wants, Instant postedSince, Integer pageSize) {
+    public SearchPage start(Resolved resolved, Instant postedSince, Integer pageSize) {
+        Profile profile = resolved.search();
+        String wants = resolved.wants();
+        String profileId = resolved.profile().id();
         Rubric rubric = rubric();
         MatchResponse match = matchService.match(profile, Integer.MAX_VALUE, postedSince);
         JudgeProfile candidate = judgeProfile(profile, match, wants);
@@ -156,15 +168,17 @@ public class SearchService {
         ordered.addAll(low);
         UUID id = repository.create(stored, profileHash, rubric.version(),
                 ordered.stream().map(Match::jobId).toList(), ordered.stream().map(Match::score).toList(),
-                low.isEmpty() ? null : main.size() + 1);
+                low.isEmpty() ? null : main.size() + 1, profileId);
+        profiles.recordSearch(profileId, resolved.preferences(), profileHash);
         SearchRow search = repository.find(id).orElseThrow();
-        log.info("Search {}: {} eligible jobs ({} low priority), judging the first {}", id, match.eligible(), low.size(),
-                settings.firstBatch());
+        log.info("Search {} for profile {}{}: {} eligible jobs ({} low priority), judging the first {}", id, profileId,
+                resolved.created() ? " (new)" : "", match.eligible(), low.size(), settings.firstBatch());
 
         judgeTop(search, candidate, rubric, settings.firstBatch());
         SearchPage page = page(search, settings.pageSize(pageSize));
-        return new SearchPage(page.searchId(), page.jobs(), page.readyApply(), page.readyMaybe(), page.stillToJudge(),
-                page.judging(), page.finished(), page.note(), match.eligible(), match.experienceWindow(),
+        String note = resolved.created() ? newProfileNote(profileId) + " " + page.note() : page.note();
+        return new SearchPage(page.searchId(), page.profileId(), page.jobs(), page.readyApply(), page.readyMaybe(),
+                page.notJudgedYet(), page.judging(), page.finished(), note, match.eligible(), match.experienceWindow(),
                 match.unknownSkills(), match.unknownLocations());
     }
 
@@ -207,7 +221,7 @@ public class SearchService {
         Status after = status(search);
         boolean judging = running.contains(search.id());
         boolean finished = !judging && !canJudgeMore(search);
-        return new SearchPage(search.id(), results, after.readyApply(), after.readyMaybe(), after.unjudged(),
+        return new SearchPage(search.id(), search.profileId(), results, after.readyApply(), after.readyMaybe(), after.unjudged(),
                 judging, finished, note(results.size(), count, after, judging, finished), null, null, null, null);
     }
 
@@ -220,12 +234,17 @@ public class SearchService {
                 verdict.roleFit(), verdict.experienceFit(), verdict.stackFit());
     }
 
+    static String newProfileNote(String profileId) {
+        return "Saved as profile " + profileId + ": next time pass profileId " + profileId
+                + " instead of the resume to search with the same facts.";
+    }
+
     static String note(int returned, int asked, Status status, boolean judging, boolean finished) {
         if (returned >= asked) {
             return status.readyApply() > 0 ? status.readyApply() + " more APPLY jobs are ready." : "More jobs are being judged.";
         }
         if (judging) {
-            return status.unjudged() + " more candidates are being judged; ask again in about a minute for more.";
+            return "The next candidates are being judged in the background; ask again in about a minute for more.";
         }
         return finished ? "That is everything that fits for this search." : "Ask again for more.";
     }

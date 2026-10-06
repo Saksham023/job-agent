@@ -74,7 +74,7 @@ class SearchServiceTest {
         assertThat(SearchService.note(10, 10, new Status(12, 0, 40, 30, 0), true, false))
                 .isEqualTo("12 more APPLY jobs are ready.");
         assertThat(SearchService.note(3, 10, new Status(0, 0, 40, 30, 0), true, false))
-                .startsWith("40 more candidates are being judged");
+                .startsWith("The next candidates are being judged in the background");
         assertThat(SearchService.note(3, 10, new Status(0, 2, 0, 70, 20), false, true))
                 .isEqualTo("That is everything that fits for this search.");
     }

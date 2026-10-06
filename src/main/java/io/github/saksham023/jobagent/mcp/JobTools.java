@@ -2,7 +2,10 @@ package io.github.saksham023.jobagent.mcp;
 
 import io.github.saksham023.jobagent.job.JobQueryRepository;
 import io.github.saksham023.jobagent.job.JobQueryRepository.JobDetails;
-import io.github.saksham023.jobagent.matching.Profile;
+import io.github.saksham023.jobagent.profile.ProfileFacts;
+import io.github.saksham023.jobagent.profile.ProfileService;
+import io.github.saksham023.jobagent.profile.SavedProfile;
+import io.github.saksham023.jobagent.profile.SearchPreferences;
 import io.github.saksham023.jobagent.requirements.JobFamily;
 import io.github.saksham023.jobagent.search.SearchService;
 import io.github.saksham023.jobagent.search.SearchService.ExportRow;
@@ -36,10 +39,12 @@ public class JobTools {
     }
 
     private final SearchService searchService;
+    private final ProfileService profileService;
     private final JobQueryRepository jobQueryRepository;
 
-    public JobTools(SearchService searchService, JobQueryRepository jobQueryRepository) {
+    public JobTools(SearchService searchService, ProfileService profileService, JobQueryRepository jobQueryRepository) {
         this.searchService = searchService;
+        this.profileService = profileService;
         this.jobQueryRepository = jobQueryRepository;
     }
 
@@ -48,9 +53,13 @@ public class JobTools {
             description = """
                     Searches open jobs in India for a candidate. Rules shortlist and rank the jobs, then a model \
                     judge reads each posting and keeps only jobs worth applying to: every returned job has a \
-                    verdict (APPLY, or MAYBE once no APPLY are left) and a one-line reason. Fill the arguments from \
-                    the candidate's resume (experience, skills, languages) and from what they said they want \
-                    (wants). Do NOT fill preferredLocations from the resume's address: first ask the candidate \
+                    verdict (APPLY, or MAYBE once no APPLY are left) and a one-line reason. \
+                    PROFILE: if the candidate gives a profileId (like p-7k3x9q2m) from an earlier search, pass ONLY \
+                    profileId plus the search preferences; do not read the resume and do not pass years, skills, \
+                    primaryLanguages or wants (the stored ones are used). Otherwise fill those from the resume and \
+                    from what they said they want (wants): a new profile is saved, and the answer's profileId and \
+                    note must be passed on to the candidate so they can reuse it next time. A new or changed resume \
+                    always means a new profile (leave profileId out). Do NOT fill preferredLocations from the resume's address: first ask the candidate \
                     whether they have a location preference. The first answer takes ~15-30 s. It returns a \
                     searchId: call more_jobs with it to get the next jobs (judging continues in the background), \
                     and export_jobs for a plain list of every APPLY job. Share each job's url. For "what is new \
@@ -58,17 +67,23 @@ public class JobTools {
             annotations = @McpTool.McpAnnotations(title = "Match jobs", readOnlyHint = true,
                     destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public SearchPage matchJobs(
+            @McpToolParam(required = false, description = "The candidate's saved profile id from an earlier search, "
+                    + "e.g. p-7k3x9q2m. When given, leave years, skills, primaryLanguages and wants out. Preferences "
+                    + "left out (locations, remote, families, job years) are taken from the profile's last search.")
+            String profileId,
             @McpToolParam(required = false, description = "Total years of professional experience as on the resume, "
                     + "decimals allowed (e.g. 1.6 for Aug 2024 to Mar 2026); the server rounds them. Omit if unknown.")
             Double yearsOfExperience,
-            @McpToolParam(description = "All technical skills from the resume as written: languages, frameworks, "
-                    + "databases, cloud, tools. Example: [\"Java\", \"Spring Boot\", \"Kafka\", \"PostgreSQL\"].")
+            @McpToolParam(required = false, description = "All technical skills from the resume as written: "
+                    + "languages, frameworks, databases, cloud, tools. Example: [\"Java\", \"Spring Boot\", \"Kafka\", "
+                    + "\"PostgreSQL\"]. Required unless profileId is given.")
             List<String> skills,
             @McpToolParam(required = false, description = "The 1-3 programming languages the candidate mainly works "
                     + "in. Omit to derive them from skills.")
             List<String> primaryLanguages,
             @McpToolParam(required = false, description = "Cities or regions the candidate EXPLICITLY asked for, e.g. "
-                    + "[\"Bengaluru\", \"NCR\"]. Never take them from the resume's address. Omit = anywhere in India.")
+                    + "[\"Bengaluru\", \"NCR\"]. Never take them from the resume's address. Pass [] for anywhere in "
+                    + "India. Omit = anywhere for a new profile, or the profile's last choice with profileId.")
             List<String> preferredLocations,
             @McpToolParam(required = false, description = "Whether remote jobs are acceptable. Default true.")
             Boolean openToRemote,
@@ -95,17 +110,30 @@ public class JobTools {
                     + "4 years\". Do not set this otherwise.")
             Integer jobYearsTo) {
 
-        if (yearsOfExperience != null && (yearsOfExperience < 0 || yearsOfExperience > 50)) {
-            throw new IllegalArgumentException("yearsOfExperience must be between 0 and 50");
-        }
         for (Integer bound : new Integer[]{jobYearsFrom, jobYearsTo}) {
             if (bound != null && (bound < 0 || bound > 50)) {
                 throw new IllegalArgumentException("jobYearsFrom and jobYearsTo must be between 0 and 50");
             }
         }
-        Profile profile = new Profile(yearsOfExperience, skills, primaryLanguages, preferredLocations,
-                openToRemote, families, jobYearsFrom, jobYearsTo);
-        return searchService.start(profile, wants, startOfDayInIndia(postedSince), limit);
+        Instant since = startOfDayInIndia(postedSince);
+        ProfileService.Resolved resolved = profileService.resolve(profileId,
+                new ProfileFacts(yearsOfExperience, skills, primaryLanguages, wants),
+                new SearchPreferences(preferredLocations, openToRemote, families, jobYearsFrom, jobYearsTo), "mcp");
+        return searchService.start(resolved, since, limit);
+    }
+
+    @McpTool(
+            name = "get_profile",
+            description = """
+                    Shows a saved profile: the resume facts stored under the id (years, skills, primary languages, \
+                    wants) and the preferences of its last search, which match_jobs reuses when they are left out. \
+                    Use it when the candidate gives a profileId, to confirm the stored facts and their location \
+                    preference before searching.""",
+            annotations = @McpTool.McpAnnotations(title = "Get profile", readOnlyHint = true,
+                    destructiveHint = false, idempotentHint = true, openWorldHint = false))
+    public SavedProfile getProfile(
+            @McpToolParam(description = "The profile id, e.g. p-7k3x9q2m.") String profileId) {
+        return profileService.get(profileId);
     }
 
     @McpTool(
