@@ -29,7 +29,13 @@ public record JobSearch(List<String> companies, List<JobFamily> families, Intege
     public enum Sort { NEWEST, COMPANY, EXPERIENCE }
 
     public static final String REMOTE = "Remote";
+    /** Page size for an ordinary visitor; a caller with the API key may ask for up to MAX_TRUSTED_SIZE. */
     static final int MAX_SIZE = 60;
+    static final int MAX_TRUSTED_SIZE = 1000;
+    /** Limits for an ordinary visitor of the public API: no requests built to be expensive (thousands of values, a huge offset). */
+    static final int MAX_VALUES = 50;
+    static final int MAX_QUERY_LENGTH = 100;
+    static final int MAX_PAGE = 1000;
 
     /** The SQL filter and its named parameters. */
     public record Where(String sql, Map<String, Object> params) {
@@ -54,7 +60,25 @@ public record JobSearch(List<String> companies, List<JobFamily> families, Intege
         if (page < 0) {
             throw new IllegalArgumentException("page must not be negative");
         }
-        size = Math.clamp(size, 1, MAX_SIZE);
+        size = Math.clamp(size, 1, MAX_TRUSTED_SIZE);
+    }
+
+    /**
+     * The limits for an ordinary visitor (a caller with the API key skips this call): bounded lists, keyword, page and
+     * page size, so nobody can make one request expensive.
+     */
+    public JobSearch checkedForVisitor() {
+        if (page > MAX_PAGE) {
+            throw new IllegalArgumentException("page must be between 0 and " + MAX_PAGE);
+        }
+        if (companies.size() > MAX_VALUES || cities.size() > MAX_VALUES || skills.size() > MAX_VALUES) {
+            throw new IllegalArgumentException("at most " + MAX_VALUES + " companies, cities or skills per search");
+        }
+        if (query != null && query.length() > MAX_QUERY_LENGTH) {
+            throw new IllegalArgumentException("the keyword must not be longer than " + MAX_QUERY_LENGTH + " characters");
+        }
+        return size <= MAX_SIZE ? this : new JobSearch(companies, families, minYears, maxYears, includeUnstated, cities,
+                skills, query, postedWithinDays, sort, page, MAX_SIZE);
     }
 
     /** "years stated" = the posting says it (rules or the model with a quote); LOW is only a guess from the title. */

@@ -180,6 +180,57 @@ or POST /admin/crawl) skips a company whose last crawl STARTED (any status) less
 report's `skipped`; POST /admin/crawl/{slug} is never blocked. CrawlRunService.tooSoon + test (271 tests).
 Committed.
 
+### Microsoft first load (2026-10-06, user: "get Microsoft jobs in")
+One request each: 253 India jobs, 10 per page (num=100 is ignored) -> 26 list + 253 detail requests; no batch detail
+endpoint. Browser by hand rejected (same IP, same requests). Plan: ONE slow crawl, delayMs 10000 (~47 min), V23 also
+enables Microsoft. Code: EightfoldAdapter config.maxDetailsPerCrawl (optional cap; leftover jobs saved list-only and
+fetched next crawl; not set for Microsoft), DetailCache.Known.anyAge (a failed or capped detail keeps the older stored
+detail instead of wiping the description), gap fill skips jobs without a description. 273 tests. CONFIGURATION.md lists
+all settings (new settings go there). Qualcomm is enabled=false in the DB (unknown who; user not answered yet).
+NEXT: user restarts (V23), runs POST /admin/crawl/microsoft, later maybe detailDepartments / lower delayMs.
+
+### Home server: MacBook Air M1 8 GB (2026-10-06, set up with the user step by step; they ran every command)
+Host `jobserver.local`, macOS user `serverserver`, SSH by key (ssh-copy-id done). Homebrew: openjdk@21, postgresql@18
+(brew service, port 5432, role `jobagent` owns database `jobagent`; no Docker on purpose, saves ~2 GB RAM), Claude CLI
+at ~/.local/bin/claude. Data copied with pg_dump -Fc / pg_restore (5,322 open jobs, 34 companies, Flyway V23).
+App: ~/jobagent/jobagent.jar (built on the main Mac with JDK 25, `./mvnw -q package -DskipTests`, copied with scp),
+~/jobagent/run.sh (sources ~/jobagent/env, then java -Xmx2g -jar), env file ~/jobagent/env (chmod 600; datasource URL,
+DB user/password, JOBAGENT_LLM_CLAUDECLI_COMMAND=/Users/serverserver/.local/bin/claude, CLAUDE_CODE_OAUTH_TOKEN; never
+in chat or git). Service: launchd agent ~/Library/LaunchAgents/com.jobagent.app.plist (RunAtLoad, KeepAlive, log
+~/jobagent/logs/app.log, DEBUG level so it grows: log rotation not done). Tested: answers on http://jobserver.local:8080
+(actuator/health UP), survives SSH logout, restarts after pkill. Restart: `launchctl kickstart -k gui/$(id -u)/com.jobagent.app`.
+SCHEDULERS STAY OFF (user: first get it running, push-to-deploy next; crawl by hand with POST /admin/crawl; enable later
+with env lines JOBAGENT_CRAWL_SCHEDULE_ENABLED=true / JOBAGENT_SKILLS_LEARNING_ENABLED=true in ~/jobagent/env, which
+override application.yaml). The Air's DB is now the live copy: do not run the main Mac's app against its own DB in
+parallel (same home IP would double the load on throttling sites like Microsoft). Air settings: sleep 0 on power, Remote
+Login on, auto macOS updates off, no auto-login (FileVault stays on: after a reboot someone must log in once).
+NEXT (user's order): (1) push-to-deploy with a GitHub Actions self-hosted runner on the Air (the repo must be pushed by the
+user first; public repo = run only on pushes to main), (2) first Microsoft crawl (V23: delayMs 10000, enabled; Microsoft
+has 0 jobs: its first crawl never finished on the main Mac), (3) optional log rotation. Qualcomm is enabled=false in the DB.
+
+### Public-exposure hardening (2026-10-06, user: do everything in code first; HTTPS and the tunnel later)
+Built by Claude, 289 tests, live-checked on port 8081:
+- common/ApiKeyFilter: /admin/** and /mcp need jobagent.security.api-key (env JOBAGENT_SECURITY_API_KEY) as
+  `X-API-Key: key` or `Authorization: Bearer key`, else 401; /api/v1/** and /actuator/health stay open; blank key = off +
+  warning; constant-time compare. User chose the plain API key over JWT.
+- common/RateLimitFilter: in-memory token bucket per client on /api/** only (120/min, burst 30, 429 + Retry-After);
+  client address = connection, or the header jobagent.security.rate-limit.client-ip-header (CF-Connecting-IP behind
+  Cloudflare; only set it when ALL traffic comes through the proxy). Spring Boot has no built-in limiter; Redis is only
+  needed for several instances.
+- JobSearch caps for ordinary visitors (checkedForVisitor): <= 50 companies/cities/skills, keyword <= 100 chars, page
+  <= 1000, size <= 60. A request with the valid API key is TRUSTED (ApiKeyFilter sets request attribute, marks it on every
+  path): no rate limit, no caps, size up to 1000 (user's request). Filter order: ApiKeyFilter @Order(1), RateLimitFilter @Order(2).
+- common/WebUiConfig: jobagent.web.dir (env JOBAGENT_WEB_DIR) serves the built UI (web/dist) at "/" from the same server.
+- Health check shows status only (show-details: never).
+DONE ON THE AIR 2026-10-06 (user ran every step): new jar, API key in ~/jobagent/env, JOBAGENT_WEB_DIR=/Users/serverserver/
+jobagent/web with the built UI (web/dist copied by scp; a UI change = rebuild + scp, no restart), restart via launchctl.
+Verified by the user: /admin/companies gives 401 without the key and works with it; MCP user-scope entry
+`claude mcp add --transport http --scope user job-agent http://jobserver.local:8080/mcp --header "X-API-Key: ..."` shows
+Connected from ~/job-search (the repo's .mcp.json project entry still points to localhost:8080 and wins inside the repo
+folder: expected, do not put the key in it). Later: HTTPS + tunnel (Cloudflare Tunnel or Tailscale Funnel; user first
+wants Tailscale, not yet installed), push-to-deploy, first Microsoft crawl, log rotation.
+Uncommitted: Microsoft first-load work, CONFIGURATION.md, the hardening above (user: commit after the code work is done).
+
 ### FINAL PLAN (user, 2026-10-06; project nearing its end: only these, in this order; nothing else deleted below)
 | Order | Item | Status |
 |---|---|---|

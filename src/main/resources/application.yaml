@@ -60,6 +60,14 @@ jobagent:
       batch-size: 20            # words per Opus call
       parallelism: 4
       model: opus
+  security:
+    api-key: ${JOBAGENT_SECURITY_API_KEY:}   # shared secret for /admin/** and /mcp; blank = open (set it before exposing the app)
+    rate-limit:                              # /api/** only, per client, in memory
+      requests-per-minute: 120               # sustained rate; 0 = no limit
+      burst: 30                              # requests allowed at once
+      client-ip-header: ${JOBAGENT_CLIENT_IP_HEADER:}   # behind a proxy/tunnel, e.g. CF-Connecting-IP; blank = the connection's address
+  web:
+    dir: ${JOBAGENT_WEB_DIR:}                # folder with the built web UI (web/dist) to serve at /; blank = not served
   gap-fill:
     # Opus fills missing fields (years, family, main language) only for jobs in these families (primary or
     # secondary). Every job is still crawled and run through the rules; other families just keep their gaps.
@@ -75,7 +83,7 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: never       # the health check is public: status only, no database or disk details
 
 logging:
   level:

@@ -17,6 +17,29 @@ class JobSearchTest {
     }
 
     @Test
+    void visitorsCannotBuildExpensiveRequestsButTheKeyHolderCan() {
+        List<String> many = java.util.stream.IntStream.range(0, 51).mapToObj(i -> "city" + i).toList();
+        assertThatThrownBy(() -> search(null, null, true, many).checkedForVisitor())
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("at most 50");
+        assertThatThrownBy(() -> new JobSearch(List.of(), List.of(), null, null, true, List.of(), List.of(), "x".repeat(101),
+                null, null, 0, 24).checkedForVisitor()).hasMessageContaining("keyword");
+        assertThatThrownBy(() -> new JobSearch(List.of(), List.of(), null, null, true, List.of(), List.of(), null,
+                null, null, 1001, 24).checkedForVisitor()).hasMessageContaining("page must be between");
+        assertThat(search(null, null, true, many.subList(0, 50)).checkedForVisitor().cities()).hasSize(50);
+        // without checkedForVisitor (the trusted path) nothing above is refused
+        assertThat(search(null, null, true, many).cities()).hasSize(51);
+    }
+
+    @Test
+    void pageSizeIsCappedForVisitorsAndHighForTheKeyHolder() {
+        JobSearch big = new JobSearch(List.of(), List.of(), null, null, true, List.of(), List.of(), null, null, null, 0, 500);
+        assertThat(big.size()).isEqualTo(500);                           // trusted: as asked
+        assertThat(big.checkedForVisitor().size()).isEqualTo(JobSearch.MAX_SIZE);
+        assertThat(new JobSearch(List.of(), List.of(), null, null, true, List.of(), List.of(), null, null, null, 0, 99999)
+                .size()).isEqualTo(JobSearch.MAX_TRUSTED_SIZE);
+    }
+
+    @Test
     void noFiltersMeansOpenJobsInTheCountry() {
         Where where = search(null, null, true, List.of()).where("IN");
         assertThat(where.sql()).isEqualTo("j.closed_at IS NULL AND j.country_codes @> ARRAY[CAST(:country AS text)]");
@@ -51,7 +74,7 @@ class JobSearchTest {
                 "@> CAST(:skills AS text[])", "make_interval(days => :days)");
         assertThat((String[]) where.params().get("companies")).containsExactly("adobe");
         assertThat(where.params()).containsEntry("query", "%50\\%\\_off%");
-        assertThat(search.size()).isEqualTo(JobSearch.MAX_SIZE);
+        assertThat(search.checkedForVisitor().size()).isEqualTo(JobSearch.MAX_SIZE);
         assertThat(search.orderBy()).startsWith(JobSearch.STATED + " DESC, r.min_years NULLS LAST");
     }
 

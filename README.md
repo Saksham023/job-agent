@@ -142,7 +142,10 @@ Both background jobs are **off by default**; switch them on in `src/main/resourc
 | `jobagent.crawl.schedule.enabled` | crawl job every 6 hours (`cron`), then the Opus gap fill |
 | `jobagent.skills.learning.enabled` | skill learning daily at 03:30, at most 300 terms to Opus per run |
 
-**Endpoints**
+Every other setting (app-wide in `application.yaml`, per company in the `companies` table) is listed in
+[CONFIGURATION.md](CONFIGURATION.md).
+
+**Endpoints** (`/admin/**` and `/mcp` need the API key when `JOBAGENT_SECURITY_API_KEY` is set: header `X-API-Key: <key>`; the web API `/api/v1` is open but rate limited; `JOBAGENT_WEB_DIR` serves the built UI)
 
 | Endpoint | What it does |
 |---|---|
