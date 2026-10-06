@@ -231,6 +231,19 @@ folder: expected, do not put the key in it). Later: HTTPS + tunnel (Cloudflare T
 wants Tailscale, not yet installed), push-to-deploy, first Microsoft crawl, log rotation.
 Uncommitted: Microsoft first-load work, CONFIGURATION.md, the hardening above (user: commit after the code work is done).
 
+### Push-to-deploy (2026-10-07, user: do it while the Funnel DNS settles; repo is on GitHub: Saksham023/job-agent)
+Built by Claude: .github/workflows/deploy.yml (triggers: push to main + manual only, never pull requests; job `build` on
+ubuntu-latest = JDK 21 tests + jar + web UI build + artifact `release`; job `deploy` on the self-hosted runner of the Air
+(labels self-hosted, macOS, ARM64) downloads it and runs deploy/deploy.sh) and deploy/deploy.sh (keeps jobagent.jar.prev,
+swaps jar + rsync --checksum --delete of web/, launchctl kickstart, waits for actuator health UP, rolls back on failure).
+Script tested with stubs (success, rollback, missing release, same-timestamp UI file). The workflow itself is untested
+until the runner exists. USER STEPS: register the runner on the Air (repo Settings > Actions > Runners > New self-hosted
+runner > macOS ARM64; commands from that page; `./svc.sh install && ./svc.sh start`), set Settings > Actions > General >
+fork PR workflows to require approval, then Actions > deploy > Run workflow. No secrets needed in GitHub (the env file
+with the key and token already lives on the Air).
+Funnel DNS status 2026-10-07: https://jobserver.tail8cf172.ts.net/ Funnel on, Air has funnel/https capabilities, but
+public DNS (8.8.8.8, 1.1.1.1) answers NOERROR with no A/AAAA records yet; stopgap idea: Cloudflare quick tunnel (asks first).
+
 ### FINAL PLAN (user, 2026-10-06; project nearing its end: only these, in this order; nothing else deleted below)
 | Order | Item | Status |
 |---|---|---|

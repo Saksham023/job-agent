@@ -158,6 +158,13 @@ Every other setting (app-wide in `application.yaml`, per company in the `compani
 | `GET /api/v1/meta`, `/jobs`, `/facets`, `/jobs/{id}` | the read-only API behind the web UI |
 | `/mcp` | MCP server: `match_jobs`, `more_jobs`, `export_jobs`, `get_job`, `get_profile`, `list_companies`, prompt `find-jobs` |
 
+## Deploying
+
+Pushing to `main` deploys by itself (`.github/workflows/deploy.yml`): GitHub's machine runs the unit tests and builds
+the jar and the web UI; if all tests pass, a self-hosted runner on the home server takes the build, swaps in the new
+jar and UI, restarts the service and checks the health endpoint (`deploy/deploy.sh`). If the new version does not
+become healthy, the previous jar is put back. Pull requests never reach the server.
+
 ## Project layout
 
 ```
