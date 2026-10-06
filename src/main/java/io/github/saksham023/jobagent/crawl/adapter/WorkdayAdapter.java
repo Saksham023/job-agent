@@ -95,14 +95,18 @@ public class WorkdayAdapter implements JobBoardAdapter {
         List<RawJob> jobs = new ArrayList<>();
         for (Summary summary : listAll(config, countryFilter)) {
             String path = text(summary.posting(), "externalPath");
+            if (path == null) {                               // seen at Mastercard: a posting without its own page
+                log.warn("{}: skipping a posting without externalPath: '{}'", company.slug(), text(summary.posting(), "title"));
+                continue;
+            }
             String listHash = listHash(summary);
-            JsonNode stored = path == null ? null : known.reusable(externalId(path), listHash);
+            JsonNode stored = known.reusable(externalId(path), listHash);
             if (stored != null) {                                          // stored raw = the detail's jobPostingInfo
                 JsonNode detail = JsonNodeFactory.instance.objectNode().set("jobPostingInfo", stored);
                 jobs.add(toRawJob(config, summary, detail).withDetail(listHash, RawJob.DetailSource.REUSED));
                 continue;
             }
-            JsonNode detail = path == null ? null : fetchDetail(company, config, path);
+            JsonNode detail = fetchDetail(company, config, path);
             jobs.add(toRawJob(config, summary, detail).withDetail(listHash,
                     detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
             pause();

@@ -4,6 +4,7 @@ import io.github.saksham023.jobagent.company.Company;
 import io.github.saksham023.jobagent.company.CompanyRepository;
 import io.github.saksham023.jobagent.crawl.CrawlService.CrawlResult;
 import io.github.saksham023.jobagent.job.NormalizedJob;
+import io.github.saksham023.jobagent.requirements.GapFillRunner;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,8 +19,9 @@ import java.util.Map;
 
 /**
  * Admin endpoints for crawling. Local use only (no authentication).
- * GET /admin/crawl/{slug}/preview fetches live and saves nothing; POST /admin/crawl[/{slug}] crawl, save, judge the
- * crawl's health and close jobs that disappeared (CrawlRunService); GET /admin/health shows every company's last crawl.
+ * GET /admin/crawl/{slug}/preview fetches live and saves nothing; POST /admin/crawl/{slug} crawls one company (save,
+ * extract, health, close vanished jobs); POST /admin/crawl runs the whole crawl job (every company, then the model's gap
+ * fill), the same as the scheduler; GET /admin/health shows every company's last crawl.
  */
 @RestController
 @RequestMapping("/admin")
@@ -61,10 +63,16 @@ public class CrawlController {
         return CompanyCrawl.of(crawlRunService.crawlOne(supportedCompany(slug), "manual"));
     }
 
-    /** Crawls every enabled company that has an adapter, one thread per server (the scheduled run, by hand). */
+    /**
+     * The whole crawl job by hand, the same as the scheduled one: every enabled company (one thread per server; each
+     * crawl saves, extracts requirements, checks health, closes vanished jobs), then the model's gap fill, waited for.
+     */
     @PostMapping("/crawl")
-    public List<CompanyCrawl> crawlAll() {
-        return crawlRunService.runAll("manual").stream().map(CompanyCrawl::of).toList();
+    public CrawlJob crawlAll() {
+        CrawlRunService.CrawlJobReport r = crawlRunService.crawlJob("manual");
+        return new CrawlJob(r.skipped(), r.ok(), r.suspect(), r.failed(), r.newJobs(), r.updatedJobs(), r.closedJobs(),
+                r.jobsExtracted(), r.detailsFetched(), r.detailsReused(), r.gapFill(), r.note(), r.seconds(),
+                r.companies().stream().map(CompanyCrawl::of).toList());
     }
 
     /** Every company's open jobs and latest crawl; the ones that need a look (not OK, or alerts) first. */
@@ -114,6 +122,12 @@ public class CrawlController {
                     r.detailsFetched(), r.detailsReused(), closed,
                     r.elapsedMs(), r.unresolvedLocations(), sample);
         }
+    }
+
+    /** The whole crawl job: totals, the gap fill's numbers (null when it did not run: see note), and every company. */
+    record CrawlJob(List<String> skipped, long companiesOk, long companiesSuspect, long companiesFailed, int newJobs, int updatedJobs,
+                    int closedJobs, int jobsExtracted, int detailsFetched, int detailsReused,
+                    GapFillRunner.RunStatus gapFill, String note, long seconds, List<CompanyCrawl> companies) {
     }
 
     /** One company's crawl: OK, SUSPECT (saved, nothing closed) or FAILED, with the health alerts and the numbers. */

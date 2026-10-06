@@ -9,7 +9,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** crawl_runs: the history of every company crawl, the health overview, and closing jobs that disappeared. */
 @Repository
@@ -86,6 +88,14 @@ public class CrawlRunRepository {
                 .param("elapsedMs", run.elapsedMs())
                 .query(Long.class)
                 .single();
+    }
+
+    /** When each company's last crawl started (any status), by company id. */
+    public Map<Long, Instant> lastCrawlStarts() {
+        Map<Long, Instant> starts = new HashMap<>();
+        jdbc.sql("SELECT company_id, max(started_at) AS last FROM crawl_runs GROUP BY company_id")
+                .query((rs, n) -> starts.put(rs.getLong("company_id"), rs.getTimestamp("last").toInstant())).list();
+        return starts;
     }
 
     /** Kept counts of the company's latest OK crawls, newest first. */

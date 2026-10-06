@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
@@ -90,6 +91,19 @@ public class GapFillRunner {
         return run.status();
     }
 
+    /** Starts a run like start() and waits until it has finished; returns its final status. */
+    public RunStatus runAndWait(String model, Integer limit, int parallelism) {
+        start(model, limit, parallelism);
+        Run run = current.get();
+        try {
+            run.finished.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for the gap fill", e);
+        }
+        return run.status();
+    }
+
     public Optional<RunStatus> status() {
         return Optional.ofNullable(current.get()).map(Run::status);
     }
@@ -109,6 +123,7 @@ public class GapFillRunner {
         final AtomicInteger rejected = new AtomicInteger();
         final DoubleAdder costUsd = new DoubleAdder();
         volatile boolean running = true;
+        final CountDownLatch finished = new CountDownLatch(1);
         volatile Instant finishedAt;
         volatile String lastError;
 
@@ -138,6 +153,7 @@ public class GapFillRunner {
             } finally {
                 running = false;
                 finishedAt = Instant.now();
+                finished.countDown();
                 log.info("Gap fill finished: {} done, {} failed; filled years {}, families {}, languages {}; "
                                 + "{} answers rejected; ${}", done.get(), failed.get(), years.get(), families.get(),
                         languages.get(), rejected.get(), String.format("%.2f", costUsd.sum()));

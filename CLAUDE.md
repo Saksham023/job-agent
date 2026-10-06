@@ -158,6 +158,28 @@ stale (store an as-of date and add elapsed time), deleting a profile on request.
 2. **Microsoft**: still open, see "TODO MICROSOFT" in the M7b status below.
 3. DONE: Eightfold work committed in 75e6566.
 
+### HOW THE SYSTEM RUNS (recap confirmed with the user 2026-10-06; use this in the README)
+Two background jobs, both OFF by default in application.yaml, each with ONE endpoint that does exactly the same:
+1. Crawl job (jobagent.crawl.schedule.enabled; every 6 h at 00/06/12/18; POST /admin/crawl): every enabled company
+   on one virtual thread per server (same server = one after another); per company on that thread: fetch (stored
+   details reused unless new / list entry changed / 7+ days old) -> save jobs -> rule extraction of new/changed jobs ->
+   health check (crawl_runs) -> close jobs missing from 2 good crawls; AFTER all companies: the Opus gap fill for
+   software/data/infra/unclassified jobs never asked before (the endpoint waits for it; one report for both parts).
+   POST /admin/crawl/{slug} crawls one company without the gap fill.
+2. Skill learning (jobagent.skills.learning.enabled; daily 03:30; POST /admin/skills/learn): mine candidate words ->
+   Opus decides only words never asked before (3+ companies, capped per run) -> checks -> apply (re-extract jobs
+   mentioning new spellings as whole words).
+On demand only: AI search over MCP (match_jobs / more_jobs / export_jobs / get_job / get_profile; Opus judge with a
+background worker keeping 15 APPLY ready), the web UI JobRadar (/api/v1, no AI), saved profiles.
+Live check 2026-10-06 of POST /admin/crawl: 899 s (Qualcomm throttled up to 13 s/request on its 3rd crawl of the day),
+32 OK + Mastercard FAILED (a Workday list entry without externalPath crashed the adapter; health recorded it, nothing
+closed) -> fixed (such entries are skipped with a warning), Mastercard re-crawl OK; 36 new jobs, 8 closed, details
+fetched 20 / reused 2,256; gap fill 32 jobs $1.13. Per-company rhythm DONE (user: Qualcomm and Microsoft once per 24 h):
+companies.config.minCrawlHours (V22 sets 24 for qualcomm + microsoft; Microsoft still disabled); a full run (scheduled
+or POST /admin/crawl) skips a company whose last crawl STARTED (any status) less than that ago and lists it in the
+report's `skipped`; POST /admin/crawl/{slug} is never blocked. CrawlRunService.tooSoon + test (271 tests).
+Committed.
+
 ### FINAL PLAN (user, 2026-10-06; project nearing its end: only these, in this order; nothing else deleted below)
 | Order | Item | Status |
 |---|---|---|
