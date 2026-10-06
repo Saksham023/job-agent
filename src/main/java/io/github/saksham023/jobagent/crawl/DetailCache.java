@@ -7,7 +7,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
-import java.sql.Timestamp;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -32,28 +31,42 @@ public class DetailCache {
     public record Stored(String listHash, Instant detailFetchedAt, JsonNode detail) {
     }
 
-    /** The reusable details of one company, loaded once per crawl. */
-    public record Known(Map<String, Stored> byExternalId) {
+    /**
+     * The stored details of one company, loaded once per crawl. Details fetched before freshSince are not reused
+     * normally, but they are still better than nothing when a crawl cannot fetch a job (a failed request, or the
+     * company's maxDetailsPerCrawl is used up): see {@link #anyAge}.
+     */
+    public record Known(Map<String, Stored> byExternalId, Instant freshSince) {
 
         public static final Known NONE = new Known(Map.of());
+
+        /** Every stored detail counts as fresh (tests). */
+        public Known(Map<String, Stored> byExternalId) {
+            this(byExternalId, Instant.MIN);
+        }
 
         /** The stored detail to reuse for this job, or null when it must be fetched. */
         public JsonNode reusable(String externalId, String listHash) {
             Stored stored = externalId == null ? null : byExternalId.get(externalId);
-            if (stored == null || stored.detail() == null) {
-                return null;                                        // new job (or no detail kept)
+            if (stored == null || stored.detail() == null || !stored.detailFetchedAt().isAfter(freshSince)) {
+                return null;                                        // new job, no detail kept, or too old
             }
             boolean listUnchanged = stored.listHash() == null || stored.listHash().equals(listHash);
             return listUnchanged ? stored.detail() : null;
         }
+
+        /** The stored detail whatever its age or list fingerprint, or null: so a job never loses its description. */
+        public JsonNode anyAge(String externalId) {
+            Stored stored = externalId == null ? null : byExternalId.get(externalId);
+            return stored == null ? null : stored.detail();
+        }
     }
 
-    /** Only details still fresh enough are loaded: an older one is fetched again anyway. */
     private static final String LOAD = """
             SELECT external_id, list_hash, detail_fetched_at, raw::text AS raw
             FROM jobs
             WHERE company_id = :companyId AND raw IS NOT NULL AND description IS NOT NULL
-              AND detail_fetched_at > :freshSince
+              AND detail_fetched_at IS NOT NULL
             """;
 
     private final JdbcClient jdbc;
@@ -67,16 +80,15 @@ public class DetailCache {
         this.maxAge = Duration.ofDays(maxAgeDays);
     }
 
-    /** The company's jobs whose stored detail is younger than the max age, by external id. */
+    /** The company's jobs with a stored detail, by external id; reusable when younger than the max age. */
     public Known load(long companyId) {
         Map<String, Stored> stored = jdbc.sql(LOAD)
                 .param("companyId", companyId)
-                .param("freshSince", Timestamp.from(Instant.now().minus(maxAge)))
                 .query((rs, rowNum) -> Map.entry(rs.getString("external_id"), new Stored(rs.getString("list_hash"),
                         rs.getTimestamp("detail_fetched_at").toInstant(), jsonMapper.readTree(rs.getString("raw")))))
                 .list().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> a));
-        return new Known(stored);
+        return new Known(stored, Instant.now().minus(maxAge));
     }
 
     /**

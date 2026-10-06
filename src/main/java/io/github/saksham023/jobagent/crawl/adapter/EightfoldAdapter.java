@@ -42,6 +42,9 @@ import static io.github.saksham023.jobagent.crawl.adapter.JsonFields.value;
  * Optional config.detailDepartments (a regex, case-insensitive) limits the detail requests to jobs whose department
  * matches; every other job is still saved from the list (title, department, location, date), just without a
  * description. It is data, not code: change it per company in companies.config.
+ * Optional config.maxDetailsPerCrawl caps the detail requests of one crawl (for a first load of a company that
+ * throttles): the remaining jobs are saved from the list (or with their older stored detail) and, having no
+ * description, are fetched by the next crawl. A detail that cannot be fetched also keeps an older stored one.
  * Tenants that need a session cookie and CSRF token (Morgan Stanley, UKG) are not supported yet.
  */
 @Component
@@ -106,24 +109,39 @@ public class EightfoldAdapter implements JobBoardAdapter {
         DetailCache.Known known = detailCache.load(company.id());
         List<RawJob> jobs = new ArrayList<>();
         int listOnly = 0;
+        int fetched = 0;
+        int deferred = 0;
         for (JsonNode summary : listPositions(company, config, pace)) {
+            String id = text(summary, "id");
             String listHash = listHash(summary);
             if (!config.wantsDetail(text(summary, "department"))) {
                 listOnly++;
                 jobs.add(toRawJob(config, summary, null).withDetail(listHash, RawJob.DetailSource.NONE));
                 continue;
             }
-            JsonNode stored = known.reusable(text(summary, "id"), listHash);
+            JsonNode stored = known.reusable(id, listHash);
             if (stored != null) {
                 jobs.add(toRawJob(config, summary, stored).withDetail(listHash, RawJob.DetailSource.REUSED));
                 continue;
             }
-            JsonNode detail = fetchDetail(company, config, pace, text(summary, "id"));
-            jobs.add(toRawJob(config, summary, detail).withDetail(listHash,
-                    detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
+            JsonNode detail = null;
+            if (config.maxDetailsPerCrawl() == null || fetched < config.maxDetailsPerCrawl()) {
+                fetched++;
+                detail = fetchDetail(company, config, pace, id);
+            } else {
+                deferred++;                                         // the next crawl fetches it
+            }
+            if (detail != null) {
+                jobs.add(toRawJob(config, summary, detail).withDetail(listHash, RawJob.DetailSource.FETCHED));
+            } else {                                                // keep an older detail rather than none
+                JsonNode older = known.anyAge(id);
+                jobs.add(toRawJob(config, summary, older).withDetail(listHash,
+                        older == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.REUSED));
+            }
         }
-        log.info("{}: {} jobs, {} saved without a detail (detailDepartments); crawl finished at one request every {} s",
-                company.slug(), jobs.size(), listOnly, pace.delay().toMillis() / 1000.0);
+        log.info("{}: {} jobs, {} saved without a detail (detailDepartments), {} details left for the next crawl "
+                        + "(maxDetailsPerCrawl); crawl finished at one request every {} s",
+                company.slug(), jobs.size(), listOnly, deferred, pace.delay().toMillis() / 1000.0);
         return jobs;
     }
 
@@ -278,7 +296,8 @@ public class EightfoldAdapter implements JobBoardAdapter {
      * its own when the site throttles) and "detailDepartments" (regex; only jobs whose department matches get a
      * detail request; absent = all).
      */
-    record EightfoldConfig(String host, String domain, String location, Duration delay, Pattern detailDepartments) {
+    record EightfoldConfig(String host, String domain, String location, Duration delay, Pattern detailDepartments,
+                           Integer maxDetailsPerCrawl) {
 
         static EightfoldConfig from(Company company) {
             String host = text(company.config(), "host");
@@ -289,9 +308,11 @@ public class EightfoldAdapter implements JobBoardAdapter {
             String location = text(company.config(), "location");
             JsonNode delayMs = company.config().path("delayMs");
             String detailDepartments = text(company.config(), "detailDepartments");
+            JsonNode maxDetails = company.config().path("maxDetailsPerCrawl");
             return new EightfoldConfig(host, domain, location != null ? location : "India",
                     Duration.ofMillis(delayMs.isNumber() ? delayMs.asLong() : 1000),
-                    detailDepartments == null ? null : Pattern.compile(detailDepartments, Pattern.CASE_INSENSITIVE));
+                    detailDepartments == null ? null : Pattern.compile(detailDepartments, Pattern.CASE_INSENSITIVE),
+                    maxDetails.isNumber() ? maxDetails.asInt() : null);
         }
 
         /** True when every job gets a detail, or the department matches detailDepartments. */

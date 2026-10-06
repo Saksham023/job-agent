@@ -30,6 +30,8 @@ public class GapFillRepository {
      * A missing main language alone does not start a call: the rules find every language a posting names, so such a
      * gap is a posting that names none ("at least one programming language"), which the model cannot fill either
      * (M6: 137 asked, 0 filled; 2026-10-06: 0 of 804 fillable). It is still asked when the job is called anyway.
+     * A job without a description is never asked: the model would only see the title (a list-only job, e.g. one whose
+     * detail is left for the next crawl); once the description arrives the content hash changes and it is asked then.
      */
     private static final String SELECT_JOBS_WITH_GAPS = """
             SELECT j.id, j.title, j.department, j.function, j.description, j.employment_type,
@@ -42,6 +44,7 @@ public class GapFillRepository {
             JOIN job_requirements r ON r.job_id = j.id
             LEFT JOIN job_gap_fills f ON f.job_id = j.id AND f.content_hash = j.content_hash
             WHERE j.closed_at IS NULL
+              AND j.description IS NOT NULL AND j.description <> ''
               AND j.country_codes @> ARRAY[CAST(:country AS text)]
               AND f.job_id IS NULL
               AND (r.family = ANY(:families) OR r.secondary_families && CAST(:families AS text[]))

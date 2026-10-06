@@ -40,6 +40,16 @@ class DetailCacheTest {
     }
 
     @Test
+    void anOldDetailIsNotReusedButStaysAvailableAsAFallback() {
+        Instant now = Instant.now();
+        Known known = new Known(Map.of("A", new Stored("hash-1", now.minusSeconds(8 * 86_400), DETAIL)),
+                now.minusSeconds(7 * 86_400));
+        assertThat(known.reusable("A", "hash-1")).isNull();             // 8 days old: fetch again
+        assertThat(known.anyAge("A")).isSameAs(DETAIL);                 // but better than nothing if that fails
+        assertThat(known.anyAge("C")).isNull();
+    }
+
+    @Test
     void theFingerprintDependsOnEveryPartAndItsOrder() {
         JsonNode title = JSON.readTree("\"Backend Engineer\"");
         String hash = DetailCache.fingerprint(title, "Pune");

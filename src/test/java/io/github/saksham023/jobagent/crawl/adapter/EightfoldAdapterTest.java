@@ -9,17 +9,27 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
+import io.github.saksham023.jobagent.crawl.DetailCache;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
  * The Eightfold adapter without the network: mapping real-shaped positions (Microsoft and Qualcomm, 2026-10-06),
@@ -29,7 +39,7 @@ class EightfoldAdapterTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final EightfoldConfig MICROSOFT =
-            new EightfoldConfig("apply.careers.microsoft.com", "microsoft.com", "India", Duration.ZERO, null);
+            new EightfoldConfig("apply.careers.microsoft.com", "microsoft.com", "India", Duration.ZERO, null, null);
 
     private static JsonNode json(String text) {
         return JSON.readTree(text);
@@ -89,9 +99,39 @@ class EightfoldAdapterTest {
         assertThat(config.delay()).isEqualTo(Duration.ofSeconds(1));
         assertThat(config.base()).isEqualTo("https://careers.qualcomm.com");
         assertThat(config.detailDepartments()).isNull();
+        assertThat(config.maxDetailsPerCrawl()).isNull();
 
         assertThatThrownBy(() -> EightfoldConfig.from(company("{\"host\": \"careers.qualcomm.com\"}")))
                 .hasMessage("acme: config.host and config.domain are required");
+    }
+
+    @Test
+    void maxDetailsPerCrawlLeavesTheRestForTheNextCrawlAndKeepsOlderDetails() {
+        Company company = company("""
+                {"host": "apply.careers.microsoft.com", "domain": "microsoft.com", "delayMs": 0, "maxDetailsPerCrawl": 1}""");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(containsString("/api/pcsx/search"))).andRespond(withSuccess("""
+                {"status": 200, "data": {"count": 3, "positions": [
+                  {"id": 1, "name": "New A", "locations": ["India"], "standardizedLocations": ["IN"]},
+                  {"id": 2, "name": "Known B", "locations": ["India"], "standardizedLocations": ["IN"]},
+                  {"id": 3, "name": "New C", "locations": ["India"], "standardizedLocations": ["IN"]}]}}""",
+                MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=1"))).andRespond(withSuccess("""
+                {"status": 200, "data": {"id": 1, "name": "New A", "jobDescription": "<p>A</p>"}}""",
+                MediaType.APPLICATION_JSON));                       // the only detail request: the cap is 1
+        JsonNode olderB = json("{\"id\": 2, \"name\": \"Known B\", \"jobDescription\": \"<p>B</p>\"}");
+        DetailCache cache = mock(DetailCache.class);
+        when(cache.load(1L)).thenReturn(new DetailCache.Known(Map.of("2",
+                new DetailCache.Stored("old-hash", Instant.parse("2026-09-01T00:00:00Z"), olderB)), Instant.now()));
+
+        List<RawJob> jobs = new EightfoldAdapter(builder.build(), cache).fetchJobs(company);
+
+        server.verify();
+        assertThat(jobs).extracting(RawJob::externalId, RawJob::description, RawJob::detail).containsExactly(
+                tuple("1", "<p>A</p>", RawJob.DetailSource.FETCHED),
+                tuple("2", "<p>B</p>", RawJob.DetailSource.REUSED),        // too old to reuse normally, kept over nothing
+                tuple("3", null, RawJob.DetailSource.NONE));                // no description: the next crawl fetches it
     }
 
     @Test
