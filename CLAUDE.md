@@ -244,6 +244,11 @@ download-artifact v8), `deploy` job on the Air green in 1m 18s ("Deployed: the a
 worked). Concurrency group "deploy" makes a second push wait for the first run (cancel the stale one if it blocks).
 Optional: pin ubuntu-latest to ubuntu-24.04 (GitHub moves the label to Ubuntu 26 on 2026-10-19). Fork-PR approval
 setting for a public repo: user to confirm. Every push to main now deploys by itself.
+FUNNEL WORKS 2026-10-07 (DNS appeared after ~hours): https://jobserver.tail8cf172.ts.net/ (permanent). Header probe with a
+small echo server: visitor address = `X-Forwarded-For` (single address); public requests also carry
+`Tailscale-Funnel-Request: ?1` (could be used to refuse /admin and /mcp on the public address: offered, not decided).
+RateLimitFilter now uses the LAST entry of a header list. TO DO on the Air: add `export JOBAGENT_CLIENT_IP_HEADER=X-Forwarded-For`
+to ~/jobagent/env (then the deploy's restart picks it up); /tmp/echo.py + its funnel on 8443 are temporary (kill, funnel off).
 Funnel DNS status 2026-10-07: https://jobserver.tail8cf172.ts.net/ Funnel on, Air has funnel/https capabilities, but
 public DNS (8.8.8.8, 1.1.1.1) answers NOERROR with no A/AAAA records yet; stopgap idea: Cloudflare quick tunnel (asks first).
 

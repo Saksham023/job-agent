@@ -72,8 +72,9 @@ class RateLimitFilterTest {
         assertThat(call(filter, "/api/v1/jobs", "10.0.0.1", "CF-Connecting-IP", "5.5.5.5").getStatus()).isEqualTo(200);
         assertThat(call(filter, "/api/v1/jobs", "10.0.0.1", "CF-Connecting-IP", "5.5.5.5").getStatus()).isEqualTo(429);
         assertThat(call(filter, "/api/v1/jobs", "10.0.0.1", "CF-Connecting-IP", "6.6.6.6").getStatus()).isEqualTo(200);
-        // a list: the first entry is the client
-        assertThat(call(filter, "/api/v1/jobs", "10.0.0.1", "CF-Connecting-IP", "5.5.5.5, 10.0.0.1").getStatus()).isEqualTo(429);
+        // a list: the last entry is the one our own proxy added (earlier ones can be forged by the caller)
+        assertThat(call(filter, "/api/v1/jobs", "10.0.0.1", "CF-Connecting-IP", "9.9.9.9, 5.5.5.5").getStatus()).isEqualTo(429);
+        assertThat(call(filter, "/api/v1/jobs", "10.0.0.1", "CF-Connecting-IP", "5.5.5.5, 6.6.6.7").getStatus()).isEqualTo(200);
     }
 
     @Test

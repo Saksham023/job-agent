@@ -94,7 +94,7 @@ Also needed as an environment variable, never in a file: `CLAUDE_CODE_OAUTH_TOKE
 | `api-key` | empty (protection off, a warning is logged) | shared secret for `/admin/**` and `/mcp`; requests must send `X-API-Key: <key>` or `Authorization: Bearer <key>`, else 401. `/api/v1/**` (the web UI's read-only API) and `/actuator/health` stay open. Env `JOBAGENT_SECURITY_API_KEY`, never in a file in git. Use HTTPS when the app is reachable from the internet. |
 | `rate-limit.requests-per-minute` | `120` | sustained rate per client on `/api/**`; over it the answer is 429 with `Retry-After`; `0` = no limit |
 | `rate-limit.burst` | `30` | requests one client may send at once |
-| `rate-limit.client-ip-header` | empty (the connection's address) | behind a proxy or tunnel, the header that carries the visitor's address (Cloudflare: `CF-Connecting-IP`). Env `JOBAGENT_CLIENT_IP_HEADER`. Set it ONLY when all traffic comes through that proxy, otherwise a caller can invent addresses and escape the limit. |
+| `rate-limit.client-ip-header` | empty (the connection's address) | behind a proxy or tunnel, the header that carries the visitor's address (Tailscale Funnel: `X-Forwarded-For`; Cloudflare: `CF-Connecting-IP`). When the header holds a list, the last entry is used (the one our proxy added). Env `JOBAGENT_CLIENT_IP_HEADER`. Set it ONLY when all traffic comes through that proxy, otherwise a caller can invent addresses and escape the limit. On the home server: `export JOBAGENT_CLIENT_IP_HEADER=X-Forwarded-For` in `~/jobagent/env`. |
 
 The public search also refuses, for an ordinary visitor, requests built to be expensive: more than 50 companies, cities or
 skills, a keyword over 100 characters, a page above 1000; page size is capped at 60.

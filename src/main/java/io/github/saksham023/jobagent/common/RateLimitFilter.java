@@ -25,9 +25,10 @@ import java.util.function.LongSupplier;
  * need the API key), neither are the web UI's files, and neither are requests that carry the API key (trusted).
  *
  * Who is "one client": the connection's address, or, behind a tunnel or proxy (where every request comes from the
- * proxy), the header named in jobagent.security.rate-limit.client-ip-header (Cloudflare: CF-Connecting-IP). Set that
- * header ONLY when all traffic really comes through that proxy, otherwise a caller could invent a new address in
- * every request and never be limited.
+ * proxy), the header named in jobagent.security.rate-limit.client-ip-header (Cloudflare: CF-Connecting-IP; Tailscale
+ * Funnel: X-Forwarded-For, where the last entry is the one the proxy added). Set that header ONLY when all traffic
+ * really comes through that proxy, otherwise a caller could invent a new address in every request and never be
+ * limited.
  *
  * In memory, for one app instance (a restart resets the counters); several instances would need a shared store such
  * as Redis. Idle clients are dropped so the map cannot grow without bound.
@@ -121,7 +122,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (clientIpHeader != null) {
             String value = request.getHeader(clientIpHeader);
             if (value != null && !value.isBlank()) {
-                return value.split(",")[0].strip();                  // X-Forwarded-For style lists: the first is the client
+                // X-Forwarded-For style lists: every proxy appends the address it saw, so the LAST entry is the one our
+                // own proxy added; earlier entries can be forged by the caller
+                String[] parts = value.split(",");
+                return parts[parts.length - 1].strip();
             }
         }
         return request.getRemoteAddr();
