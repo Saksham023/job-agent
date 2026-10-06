@@ -164,7 +164,7 @@ stale (store an as-of date and add elapsed time), deleting a profile on request.
 | 1 | Amazon adapter (~2,300 India jobs): crawl, run extraction BEFORE any rule change, measure gaps, fix rules | DONE (28e5513) |
 | 2 | Oracle Recruiting Cloud adapter (JPMorgan, Goldman, TI, Amex, Oracle; ~600 jobs): same check | DONE (Oracle itself skipped) |
 | 3 | Scheduler (per-host virtual threads) + closed jobs + health checks/alerts (core of M9) | NEXT: design agreed, building (see plan) |
-| 4 | Embeddings TEST (never tested in job-agent; vectors only in code-mcp): build, measure vs the answer key; keep only if it helps | later |
+| 4 | Embeddings TEST | DONE 2026-10-06: NO gain for ranking, not adopted (eval/embeddings/REPORT.md) |
 | 5 | 8b self-learning skill dictionary (strong resume story) | later |
 | 6 | README with measured numbers, then the user pushes the repo | last |
 DROPPED (user, 2026-10-06): a per-profile "seen jobs" list / "new since last search" flag (NOT even backlog); new jobs
@@ -351,6 +351,17 @@ Amazon, other companies still show what they would add); skills are "all of", so
 Family counts include secondary families (= what the family filter returns), so SWE shows 1,426, not the 1,079 primary.
 UI: counts from /facets, options with 0 dimmed, companies sorted by live count (selected first), skill suggestions from
 the current results. 257 tests.
+
+### Embeddings experiment (2026-10-06, user: run it, use Opus as the truth, stay under $20, write a plain report)
+Result: eval/embeddings/REPORT.md (+ code: Lab.java/Embedder.java (ONNX Runtime + DJL tokenizer, mean/CLS pooling),
+score.py, rankings/pools/results JSON). Models in ~/.cache/job-agent/models (all-MiniLM-L6-v2 90 MB 17 ms/job,
+bge-small-en-v1.5 133 MB 65 ms/job). 3 test sets (resume p-p1nqs0fb 855 candidates, Milestone 5 profile 785, made-up ML
+engineer p-9tk1dew8 1,136), pooled labeling (top 50 of 18 orders + 40 random), 454 Opus judgments $12.77. "Opus checks
+to find 10 APPLY": today's search order (rules + tiers) 42 total = best mixes 42; vectors alone 46 (bge) / 49 (MiniLM);
+rule score without tiers 50. DECISION: embeddings NOT added to ranking (tiers carry the quality); optional later:
+"similar jobs" in the web UI. For the resume profile ~20% of the unreached candidates are APPLY (many Amazon SDE).
+Labeling trick used: a searches row whose candidate_ids are exactly the jobs to judge, then GET /admin/search/{id}/more on
+an instance with huge ready-target/stop-after-nos judges them all (rows kept; harmless).
 
 ### ROADMAP (agreed 2026-10-05; work strictly in this order, one milestone at a time)
 | # | Milestone | Status |
