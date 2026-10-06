@@ -1,4 +1,3 @@
-#Just for DEmo
 # job-agent: notes for Claude
 
 A personal job-search agent for the Indian tech market. It crawls live job postings directly from major
@@ -297,10 +296,6 @@ GRACEFUL SHUTDOWN + PER-COMPANY GAP FILL (2026-10-07, user asked for both; built
 - IN-PROGRESS GUARD (found while planning the live test): CrawlRunService.crawlOne refuses a company already being crawled
   ("already being crawled", no run row), because a run is recorded only when it ends and the next schedule slot would otherwise
   start a SECOND Microsoft crawl while a long one runs. 318 tests.
-- FIRST LIVE MICROSOFT CRAWL (2026-10-07 02:18, on the Air, delayMs 10000, page by page): 248 jobs, 25 list pages; 3 throttles in
-  the first 6 min (pace 10 -> 12 s), ~12.6 s per description, a batch of 10 per ~2 min 50 s -> about 70-80 min in total; page 2
-  produced only 8 new jobs (the list shifted by 2, the duplicates were skipped). Progress lines and per-job debug lines look as
-  designed. Interruption test (push during the crawl) in progress.
 - Per-company gap fill: GapFillRunner.fillCompany(companyId, model, parallelism) (blocking, own Run, does not touch
   start()/status()), GapFillRepository.findJobsWithGaps(country, families, companyId); CrawlRunService.runAll queues each
   company's fill (only when it inserted/updated jobs) on ONE single-worker queue, so at most gapFillParallelism Opus calls run at
