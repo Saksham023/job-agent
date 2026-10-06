@@ -99,4 +99,11 @@ class JobJudgeTest {
         assertThat(result.promptTokens()).isZero();
         assertThat(result.costUsd()).isZero();
     }
+
+    @Test
+    void unknownYearsAreSaidPlainly() {
+        JudgeProfile unknown = new JudgeProfile("dev", null, null, List.of("Java"), List.of(), "Backend roles.");
+
+        assertThat(JobJudge.userMessage(unknown, job("Build things."))).contains("Years of professional experience: not stated");
+    }
 }

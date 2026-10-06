@@ -9,14 +9,63 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
-**State (2026-10-05, end of the long session):** Milestones 0-5 DONE (see the roadmap). Last commits: `e16566c` M5 part 1,
-`e1bb4ec` M5 part 2 (model judge + reference set), `7d573b8` notes, `f28c9ed` thinking switch + Haiku runs + Opus
-decision, then the roadmap commit. 12 companies on 4 platforms (Greenhouse, Lever, SmartRecruiters, Ashby), 706 India
-jobs, extractor v7. MCP server `http://localhost:8080/mcp`: `list_companies`, `match_jobs` (decimal years, optional
-`postedSince`, `jobYearsFrom/To`), `get_job`, prompt `find-jobs`. Opus judge + answer key in `eval/`. 171 unit tests (M6 code added, see M6 status).
+**State (2026-10-06, before a compaction):** M0-M7b DONE and committed; M8 (search with the Opus judge) WORKS LIVE
+but is NOT COMMITTED yet. Commits: ... `1497473` M6, `86df413` M7 (Workday, rules v8), `75e6566` M7b (Eightfold,
+6 more Workday companies, rules v9-v10, family_guessed). Data: 2,340 open India jobs from 29 companies on 6 platforms
+(Greenhouse, Lever, SmartRecruiters, Ashby, Workday, Eightfold); extractor v10; guessed and UNCLASSIFIED families 0.
+DB schema at Flyway V15. MCP server `http://localhost:8080/mcp`, 5 tools: `list_companies`, `match_jobs` (now a
+JUDGED search: returns APPLY jobs + `searchId`; params incl. `wants`, `families`, `limit`), `more_jobs(searchId,
+count=10)`, `export_jobs(searchId, includeMaybe)`, `get_job`; prompt `find-jobs`. 217 unit tests green.
+Opus spend so far on the judge in M8: 205 verdicts, $5.50 (3 searches, same profile, verdicts reused).
 Full detail of everything done: section 0c. Plain-language history: section 0b.
 
-### M8 status (2026-10-06): code written + verified in the scratchpad (205 tests, SQL on temp tables); user pasting
+### NEXT (in this order; 2026-10-06)
+1. COMMIT M8 (user said M8 works: "Okay, this is working"). Uncommitted: package `search` (SearchProperties,
+   SearchRepository, SearchService, SearchController, SearchServiceTest), V14 (judgments, searches), V15
+   (searches.low_priority_from), edits to JobTools, JudgeProfile, JobJudge, application.yaml, JobToolsTest,
+   JobJudgeTest, CLAUDE.md. Ask before committing (the user usually says yes). `.m8-wip/` (git-ignored) can be deleted
+   after the commit.
+2. M8a SAVED PROFILES: plan READY (agreed 2026-10-06, build on 2026-10-07; see "### M8a plan" below).
+3. Real end-to-end demo through Claude in `~/job-search` (match_jobs with wants + families, more_jobs, export_jobs).
+4. Microsoft crawl (see TODO MICROSOFT in M7b status): one test request first; it rate-limited us on 2026-10-06.
+
+### M8a plan: saved profiles / profile IDs (user's idea; decisions made 2026-10-06; build 2026-10-07)
+Why: verdicts are cached per profile_hash; Claude re-reading the same resume can produce a slightly different skill
+list or wants text -> new hash -> Opus judges everything again. A stored profile freezes the facts, so the cache hits.
+Decisions (user): every new resume = a NEW ID, no matter how similar (no dedup by hash; identical facts still share
+verdicts because the cache stays keyed by profile_hash). Profiles are never edited. ID format left to Claude:
+`p-` + 8 random Crockford base32 chars from SecureRandom (e.g. `p-7k3x9q2m`, 40 bits, unguessable; retry on the rare
+collision). Store only facts, never the PDF, name, email or address.
+What is stored vs per search:
+- PROFILE (frozen facts from the resume): yearsOfExperience, skills, primaryLanguages, wants, source (mcp/api).
+- PER SEARCH (preferences, may change any day): preferredLocations, openToRemote, families, postedSince,
+  jobYearsFrom/To. The last ones used are saved on the profile as `defaults` and used when a later call with the
+  profileId leaves a preference out (null). Claude must still confirm location with the user (rule stands).
+Steps (new files: Claude touches them empty, hands over the code, user pastes; existing files: Claude edits):
+1. NEW `V16__create_profiles.sql`: `profiles(id TEXT PK, facts JSONB NOT NULL, profile_hash TEXT NOT NULL (index,
+   not unique), source TEXT NOT NULL, defaults JSONB, created_at, last_used_at, last_search_at)`;
+   `ALTER TABLE searches ADD COLUMN profile_id TEXT REFERENCES profiles(id)` + index.
+2. NEW package `profile`: `ProfileFacts` record (the 4 facts), `SavedProfile` record (id, facts, defaults,
+   createdAt, lastUsedAt, lastSearchAt), `ProfileIds` (generator), `ProfileRepository` (insert, find, saveDefaults,
+   touch), `ProfileService` (create(facts, source) -> id; get(id) or "unknown profile id" error; merge(saved
+   defaults, request preferences) -> Profile + wants), `ProfileController` (`POST /admin/profiles`, `GET
+   /admin/profiles/{id}`), `ProfileServiceTest` (id format, merge rules, unknown id).
+   The hash is recomputed from the stored raw facts on every search (same facts -> same hash; if the skill
+   dictionary grows, the hash changes, and re-judging is then correct).
+3. EDIT SearchService.start: takes the resolved Profile + wants + profileId; SearchRepository.create stores
+   profile_id; SearchPage gains `profileId`; touch last_used_at/last_search_at and save defaults.
+4. EDIT JobTools.match_jobs: new optional `profileId`. Given -> facts come from the profile; passing resume facts
+   too is an error ("pass either profileId or the resume facts"). Not given -> skills required, a profile is
+   created and its id returned with a note: "Next time just give this profile ID instead of the resume."
+   NEW tool `get_profile(profileId)`: stored facts, saved defaults, created / last search dates.
+   SearchController: `?profileId=` (body then only preferences). find-jobs prompt + server instructions: ask
+   whether the user has a profile ID before reading a resume; after the first search tell them the ID.
+5. Tests (unit, all green), user runs V16 + restarts, live checks with curl: create via search -> id; repeat search
+   with the id -> 0 new Opus calls; unknown id -> clean error; then the demo in ~/job-search.
+Later (not in M8a): "new jobs since my last search" (postedSince = last_search_at), digests per profile, years going
+stale (store an as-of date and add elapsed time), deleting a profile on request.
+
+### M8 status (2026-10-06): LIVE AND WORKING, uncommitted (see NEXT 1). History below.
 - New package `search` (user pastes, in order): V14 (judgments + searches incl. candidate_scores; was V13, renumbered
   because V13 became add_family_guessed), SearchProperties
   (jobagent.search.*: first-batch 10, ready-target 30, stop-after-nos 20, parallelism 4, page-size 10, max 25, opus),
@@ -30,7 +79,26 @@ Full detail of everything done: section 0c. Plain-language history: section 0b.
   back at the committed versions; ALL M8 files (new + edited) are kept in `.m8-wip/` (same paths, git-ignored via
   .git/info/exclude). Resume: hand over the 6 new files for pasting (V14 first), copy the 6 edited files from
   .m8-wip into place, run the tests, restart.
-- Live test after the restart (needs V12 + V13): curl POST /admin/search with the user's profile.
+- TIERS (user's design, 2026-10-06): likely-NO candidates are not dropped but moved to a low-priority tier at the end
+  (searches.low_priority_from, V15): senior title (lead 5 / staff, principal, architect, manager 8 / director 12) with
+  no years stated and above the window; EMBEDDED without C/C++; job main languages none of the candidate's. The
+  low tier is judged only after the main tier is done (all judged or its own 20-NO streak); each tier has its own
+  streak. Replay of the first live search: main 133 (29 APPLY, 18 MAYBE, 63 NO), low 102 (1 APPLY, 4 MAYBE, 67 NO).
+  match_jobs `families` description now tells Claude to always pass families. First answer judges only unjudged
+  candidates among the top first-batch POSITIONS (bug found live: it judged positions 111-120 and made a repeat
+  search wait ~17 s). 217 tests.
+- First live search 2026-10-06: 235 eligible, 5/10 APPLY in the first batch, more_jobs instant, Opus reasons good;
+  answer key: 5 of 7 APPLY agree so far, PhonePe System Integrator got MAYBE (borderline), Zscaler 188 at rank 113.
+- RESUMED 2026-10-06 after the M7b commit (75e6566): user pasted all 6 search files (V14 now), Claude put the 6 edited
+  files back from .m8-wip; 212 tests green; then tiers (V15, user pasted) + first-batch fix; 217 tests. Flyway at V15.
+- Live checks done: search start (5/10 APPLY first batch), more_jobs instant, repeat search reuses all verdicts, tier
+  split 133 main / 102 low. Export endpoint not yet shown to the user. Search ids used: 7fec5bab-... (before tiers),
+  4668e6f1-... (with tiers).
+- Admin curl for a judged search: POST /admin/search?pageSize=10&wants=... with the Profile JSON body (the user's
+  profile is in eval/judge-profiles.json, id "saksham"); GET /admin/search/{id}/more?count=10; GET .../export.
+- Open M8 follow-ups (backlog): ranking penalty for a specialization mismatch (embedded vs backend) instead of only
+  tiering; Zscaler 188 twin ranks 113 vs 21; PhonePe System Integrator flips APPLY/MAYBE between runs (judge noise);
+  searches are never cleaned up (last_used_at); no global cap on parallel judge calls across searches.
 
 ### Rules v9 (2026-10-06, after crawling Qualcomm 584 + Sprinklr/BlackRock/Wells Fargo/Autodesk/Workday/Ciena 213)
 - Claude edited (all existing files, 203 tests): JobClassifier: a generic "engineer" title (title-fallback.csv) is
@@ -56,15 +124,10 @@ Full detail of everything done: section 0c. Plain-language history: section 0b.
   Guessed families 0, UNCLASSIFIED 0, 367 families set/confirmed by Opus (this run: SWE confirmed 132, HARDWARE 34,
   DATA_ML 27, QA 19, SALES_ENG 9...). Spot check of 14 changes: all sensible. Next: commit, then resume M8.
 
-### PENDING ACTIONS (remind the user; do not drop)
-1. DONE 2026-10-06 (Qualcomm crawled, V12 companies crawled). Was: when the Qualcomm crawl is over, restart the app
-   (Flyway V12 adds sprinklr, blackrock, wells-fargo, autodesk, workday, ciena; V12 is already pasted), then run
-   `for c in sprinklr blackrock wells-fargo autodesk workday ciena; do curl -s -X POST http://localhost:8080/admin/crawl/$c; echo; done`
-   (~214 jobs, ~4 min). Then: check the Qualcomm + new jobs (families, years, locations; generalization check),
-   then Opus gap fill for the configured families (tell the user the job count and cost first).
-2. **Microsoft** (next day): see "TODO MICROSOFT" in the M7b status below.
-3. Commit the Eightfold work (EightfoldAdapter with adaptive pace + detailDepartments, V11, V12, tests) once the
-   crawls look right.
+### PENDING ACTIONS (older list; all done except Microsoft, see NEXT above)
+1. DONE 2026-10-06: Qualcomm + the 6 V12 Workday companies crawled, checked (rules v9/v10), gap fill run.
+2. **Microsoft**: still open, see "TODO MICROSOFT" in the M7b status below.
+3. DONE: Eightfold work committed in 75e6566.
 
 ### ROADMAP (agreed 2026-10-05; work strictly in this order, one milestone at a time)
 | # | Milestone | Status |
@@ -73,8 +136,9 @@ Full detail of everything done: section 0c. Plain-language history: section 0b.
 | 4 | MCP server (tools, find-jobs prompt, postedSince) | DONE |
 | 5 | Quality foundation: answer key (Opus judge, user-confirmed `eval/reference/saksham.csv`), baseline nDCG@10 0.89, experience window, bullet/typo extraction fixes, `ClaudeCliChatModel` | DONE |
 | 6 | Opus extraction-gap filler (status below) | DONE 2026-10-05 (all 145 gap jobs, $3.48) |
-| 7 | Workday adapter (then Eightfold, Oracle) with the generalization check (design below) | planned |
-| 8 | Search with the Opus judge: first batch fast, background judging, `more_jobs`, export (design below) = the END-TO-END DEMO | planned |
+| 7 | Workday adapter (then Eightfold, Oracle) with the generalization check (design below) | Workday + Eightfold DONE (86df413, 75e6566); Microsoft not crawled yet; Oracle later |
+| 8 | Search with the Opus judge: first batch fast, background judging, `more_jobs`, export (design below) = the END-TO-END DEMO | WORKS LIVE, NOT COMMITTED (see NEXT); tiers added; demo via Claude pending |
+| 8a | Saved profiles / profile IDs (user's idea 2026-10-06; plan in "### M8a plan") | PLAN READY, build 2026-10-07 |
 | 8b | Self-learning skill dictionary (user's idea 2026-10-05, design below; suggested placement: after M8, user to confirm) | planned |
 | 9 | Operations: scheduler (per-host virtual threads), change tracking + closed jobs, dedup, health alerts, SmartRecruiters incremental details | planned |
 | 10 | Custom adapters by value: Amazon, IBM, Cisco, Google, Apple, then the rest (section 3) | planned |
@@ -235,16 +299,20 @@ fails the experience arithmetic (kappa 0.46); with thinking 0.85; fix later by c
 - App: IntelliJ run `JobagentApplication`. Its run configuration must have env vars `CLAUDE_CODE_OAUTH_TOKEN` (value
   from `claude setup-token`, also exported in ~/.zshrc; never in git or chat) and
   `JOBAGENT_LLM_CLAUDECLI_COMMAND=/Users/saksham/.local/bin/claude`. Or `./mvnw spring-boot:run` from a terminal.
-- Unit tests (no DB): `./mvnw -q test -Dtest='*Test'` (161 green). `JobagentApplicationTests` would migrate the real DB.
-- DB: `docker exec -it rag-postgres psql -U postgres -d jobagent` (Docker Desktop must run). Flyway V1-V8.
+- Unit tests (no DB): `./mvnw -q test -Dtest='*Test'` (217 green on 2026-10-06). `JobagentApplicationTests` would migrate the real DB.
+- DB: `docker exec -it rag-postgres psql -U postgres -d jobagent` (Docker Desktop must run). Flyway V1-V15.
 - Endpoints: `GET /admin/companies[/{slug}]`, `GET /admin/crawl/{slug}/preview?limit&full`, `POST /admin/crawl[/{slug}]`,
   `POST /admin/requirements/rebuild[?all=true]` (after any EXTRACTOR_VERSION bump), `GET /admin/requirements/coverage`,
   `POST /admin/match?limit&postedSince` (Profile JSON body), `POST /admin/eval/judge?profile&model&limit&parallelism`
-  (1-4), `GET /admin/eval/judge/status`, `GET /admin/eval/report?run=<date>-<model>-<profile>`.
+  (1-4), `GET /admin/eval/judge/status`, `GET /admin/eval/report?run=<date>-<model>-<profile>`,
+  `POST /admin/requirements/fill-gaps?model&limit&parallelism` (1-10), `GET /admin/requirements/fill-gaps/status`,
+  `POST /admin/search?wants&postedSince&pageSize` (Profile body), `GET /admin/search/{id}/more?count`,
+  `GET /admin/search/{id}/export?includeMaybe`.
 - Using the product: from a clean folder (`~/job-search`; server added with `claude mcp add --transport http --scope user
   job-agent http://localhost:8080/mcp`), not from this repo (this CLAUDE.md would leak into the session).
 
-**Code map:** `company` (registry) · `crawl` (+ `crawl.adapter`: Greenhouse/Lever/SmartRecruiters/Ashby, JsonFields) ·
+**Code map:** `company` (registry) · `crawl` (+ `crawl.adapter`: Greenhouse/Lever/SmartRecruiters/Ashby/Workday/Eightfold,
+JsonFields) · `search` (M8: SearchProperties, SearchRepository, SearchService, SearchController) ·
 `geo` (Gazetteer, LocationParser) · `job` (NormalizedJob, JobRepository upsert, JobQueryRepository read side) ·
 `requirements` (ExperienceExtractor, JobClassifier/JobFamily with secondary families, DescriptionSections incl.
 `isBullet`, SkillExtractor, Requirements{Repository,Service,Controller}, EXTRACTOR_VERSION=7, M6 gap filler:
@@ -258,6 +326,10 @@ EvalProperties `jobagent.eval.dir`) · `common` (CsvResource). Data: `resources/
 description-secondary-keywords, specializations). Eval files: `eval/` (README explains each).
 
 **Backlog (not on the roadmap yet; pull in when relevant):**
+- SAVED PROFILES (user, 2026-10-06, first "keep as backlog", then proposed as resume IDs; see NEXT 2): verdicts are reused per profile_hash (SHA-256 of years,
+  sorted canonical languages + skills, lower-cased wants). Claude re-extracting a resume can differ slightly (skill
+  list, wants wording) -> new hash -> everything judged again. Plan: `save_profile` tool (profile stored under a name,
+  match_jobs(profile: "saksham") uses the stored facts -> stable hash; also enables digests). Option: wants as an enum.
 - Ranking: specialization boost (backend over frontend); skill category weights; Zscaler job 188 (APPLY) ranks #12 while
   its twin 187 is #2 (likely an extraction difference, investigate); "Jira Administrator" looks Java-primary.
 - Accepted for now (user): MAYBE jobs one year above the window are filtered out; Jira Admin is INFRA_DEVOPS.
@@ -321,6 +393,16 @@ bullets, "ears" typo), configurable experience window (decimal years rounded by 
 order-independent language score, ClaudeCliChatModel (Spring AI ChatModel over claude -p), Opus judge with a fixed
 rubric, answer key for the user's profile (7 APPLY / 9 MAYBE / 271 NO, user-confirmed), baseline nDCG@10 0.89, Haiku
 tested and parked. Then the roadmap was reordered: M6 Opus gap filler, M7 Workday, M8 search with the judge.
+Milestone 6 DONE 2026-10-05 (1497473): Opus gap filler (years, family, main languages; one call per gap job; checks:
+quote in the posting, family from our list, known languages), stored per content hash, re-applied after rebuilds.
+Milestone 7 DONE 2026-10-06 (86df413): Workday adapter (country filter discovered from facets), 9 companies, rules v8
+(HARDWARE_ENGINEERING, company boilerplate lines skipped, ranges), configurable Opus families; local models tested
+(qwen2.5:3b, qwen3:4b) and rejected; models deleted.
+Milestone 7b DONE 2026-10-06 (75e6566): Eightfold adapter (adaptive pace, detailDepartments), Qualcomm + 6 more
+Workday companies, rules v9 (department beats generic engineer title, level ladders, locations), v10 (family_guessed
+checked by Opus); 2,340 jobs, guessed/UNCLASSIFIED 0.
+Milestone 8 WORKING 2026-10-06 (uncommitted): judged search (first 10 in parallel, background worker keeps 30 APPLY
+ready, stop after 20 NO in a row), more_jobs / export_jobs, verdicts cached per profile hash, two tiers.
 
 ## 0c. Detailed record of the 2026-10-05 session (moved here from section 0; nothing deleted)
 

@@ -70,6 +70,7 @@ public class JobJudge {
         }
         String location = (job.cities().isEmpty() ? "India" : String.join(", ", job.cities()))
                 + (job.remote() ? " (remote possible)" : "");
+        String candidateYears = profile.years() == null ? "not stated" : String.valueOf(profile.years());
         String years = job.minYears() == null ? "not stated"
                 : job.maxYears() == null ? job.minYears() + "+ years" : job.minYears() + "-" + job.maxYears() + " years";
         return """
@@ -87,7 +88,7 @@ public class JobJudge {
 
                 Posting:
                 %s
-                """.formatted(profile.years(), String.join(", ", profile.mainLanguages()),
+                """.formatted(candidateYears, String.join(", ", profile.mainLanguages()),
                 String.join(", ", profile.otherSkills()), profile.wants(), job.company(), job.title(), location,
                 years, description);
     }

@@ -2,10 +2,11 @@ package io.github.saksham023.jobagent.mcp;
 
 import io.github.saksham023.jobagent.job.JobQueryRepository;
 import io.github.saksham023.jobagent.job.JobQueryRepository.JobDetails;
-import io.github.saksham023.jobagent.matching.MatchService;
-import io.github.saksham023.jobagent.matching.MatchService.MatchResponse;
 import io.github.saksham023.jobagent.matching.Profile;
 import io.github.saksham023.jobagent.requirements.JobFamily;
+import io.github.saksham023.jobagent.search.SearchService;
+import io.github.saksham023.jobagent.search.SearchService.ExportRow;
+import io.github.saksham023.jobagent.search.SearchService.SearchPage;
 import org.springframework.ai.mcp.annotation.McpTool;
 import org.springframework.ai.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Component;
@@ -15,6 +16,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * MCP tools for finding jobs. Each @McpToolParam becomes one property of the tool's input JSON schema, and its
@@ -22,9 +24,6 @@ import java.util.List;
  */
 @Component
 public class JobTools {
-
-    static final int DEFAULT_LIMIT = 10;
-    static final int MAX_LIMIT = 25;
 
     /** Some postings are ~20,000 characters; tool output goes straight into Claude's context. */
     static final int MAX_DESCRIPTION_CHARS = 12_000;
@@ -36,27 +35,29 @@ public class JobTools {
     public record JobView(JobDetails job, boolean descriptionTruncated) {
     }
 
-    private final MatchService matchService;
+    private final SearchService searchService;
     private final JobQueryRepository jobQueryRepository;
 
-    public JobTools(MatchService matchService, JobQueryRepository jobQueryRepository) {
-        this.matchService = matchService;
+    public JobTools(SearchService searchService, JobQueryRepository jobQueryRepository) {
+        this.searchService = searchService;
         this.jobQueryRepository = jobQueryRepository;
     }
 
     @McpTool(
             name = "match_jobs",
             description = """
-                    Finds open jobs in India that fit a candidate and ranks them 0-100, with matched and missing \
-                    skills and short reasons for each job. Fill the arguments from the candidate's resume \
-                    (experience, skills, languages). Do NOT fill preferredLocations from the resume's address: \
-                    first ask the candidate whether they have a location preference. Explain the top results \
-                    using matchedRequired, missingRequired and reasons, and share each job's url. For "what is \
-                    new since <date>" questions, pass postedSince; each job's postedAt tells how fresh it is. \
-                    experienceWindow in the answer is the years range that was applied.""",
+                    Searches open jobs in India for a candidate. Rules shortlist and rank the jobs, then a model \
+                    judge reads each posting and keeps only jobs worth applying to: every returned job has a \
+                    verdict (APPLY, or MAYBE once no APPLY are left) and a one-line reason. Fill the arguments from \
+                    the candidate's resume (experience, skills, languages) and from what they said they want \
+                    (wants). Do NOT fill preferredLocations from the resume's address: first ask the candidate \
+                    whether they have a location preference. The first answer takes ~15-30 s. It returns a \
+                    searchId: call more_jobs with it to get the next jobs (judging continues in the background), \
+                    and export_jobs for a plain list of every APPLY job. Share each job's url. For "what is new \
+                    since <date>" pass postedSince.""",
             annotations = @McpTool.McpAnnotations(title = "Match jobs", readOnlyHint = true,
                     destructiveHint = false, idempotentHint = true, openWorldHint = false))
-    public MatchResponse matchJobs(
+    public SearchPage matchJobs(
             @McpToolParam(required = false, description = "Total years of professional experience as on the resume, "
                     + "decimals allowed (e.g. 1.6 for Aug 2024 to Mar 2026); the server rounds them. Omit if unknown.")
             Double yearsOfExperience,
@@ -71,11 +72,16 @@ public class JobTools {
             List<String> preferredLocations,
             @McpToolParam(required = false, description = "Whether remote jobs are acceptable. Default true.")
             Boolean openToRemote,
-            @McpToolParam(required = false, description = "Job families to search. A job matches when its family or "
-                    + "one of its secondaryFamilies is listed (an \"SDE - AI Engineer\" is DATA_ML, also "
-                    + "SOFTWARE_ENGINEERING). Default: all engineering families.")
+            @McpToolParam(required = false, description = "Job families to search; ALWAYS pass the ones that match what "
+                    + "the candidate wants, e.g. backend or full-stack -> [SOFTWARE_ENGINEERING]; AI engineering -> "
+                    + "[SOFTWARE_ENGINEERING, DATA_ML]; DevOps/SRE -> [INFRA_DEVOPS]. A job matches when its family or "
+                    + "one of its secondaryFamilies is listed. Omitting it searches every engineering family, including "
+                    + "QA, security and engineering management, which mostly adds jobs the judge rejects.")
             List<JobFamily> families,
-            @McpToolParam(required = false, description = "How many ranked jobs to return, 1 to 25. Default 10.")
+            @McpToolParam(required = false, description = "The kinds of roles the candidate wants, in their words, e.g. "
+                    + "\"backend or AI engineering roles, no frontend\". Ask if unclear; omit if they did not say.")
+            String wants,
+            @McpToolParam(required = false, description = "How many jobs to return now, 1 to 25. Default 10.")
             Integer limit,
             @McpToolParam(required = false, description = "Only jobs posted on or after this date, YYYY-MM-DD "
                     + "(India time), e.g. for \"what is new since Monday\". Omit for all open jobs.")
@@ -99,8 +105,42 @@ public class JobTools {
         }
         Profile profile = new Profile(yearsOfExperience, skills, primaryLanguages, preferredLocations,
                 openToRemote, families, jobYearsFrom, jobYearsTo);
-        int size = limit == null ? DEFAULT_LIMIT : Math.min(Math.max(limit, 1), MAX_LIMIT);
-        return matchService.match(profile, size, startOfDayInIndia(postedSince));
+        return searchService.start(profile, wants, startOfDayInIndia(postedSince), limit);
+    }
+
+    @McpTool(
+            name = "more_jobs",
+            description = """
+                    Returns the next jobs of a search started with match_jobs: APPLY jobs first, MAYBE jobs only when \
+                    no APPLY can come any more. If fewer than asked are ready, the note says how many are still \
+                    being judged; ask again a little later.""",
+            annotations = @McpTool.McpAnnotations(title = "More jobs", readOnlyHint = true,
+                    destructiveHint = false, idempotentHint = false, openWorldHint = false))
+    public SearchPage moreJobs(
+            @McpToolParam(description = "The searchId from match_jobs.") String searchId,
+            @McpToolParam(required = false, description = "How many jobs, 1 to 25. Default 10.") Integer count) {
+        return searchService.more(searchId(searchId), count);
+    }
+
+    @McpTool(
+            name = "export_jobs",
+            description = """
+                    Every APPLY job of a search judged so far, as company, title and apply link, for a plain list \
+                    the candidate can work through (includeMaybe adds the MAYBE ones).""",
+            annotations = @McpTool.McpAnnotations(title = "Export jobs", readOnlyHint = true,
+                    destructiveHint = false, idempotentHint = true, openWorldHint = false))
+    public List<ExportRow> exportJobs(
+            @McpToolParam(description = "The searchId from match_jobs.") String searchId,
+            @McpToolParam(required = false, description = "Also list MAYBE jobs. Default false.") Boolean includeMaybe) {
+        return searchService.export(searchId(searchId), Boolean.TRUE.equals(includeMaybe));
+    }
+
+    static UUID searchId(String value) {
+        try {
+            return UUID.fromString(value.strip());
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("searchId must be the id returned by match_jobs, got: " + value);
+        }
     }
 
     /** "2026-10-01" -> midnight of that day in India; null or blank -> null (no date filter). */

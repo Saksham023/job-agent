@@ -8,7 +8,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The postedSince argument of match_jobs: a date the user says ("since 1 October") means that day in India.
+ * The argument parsing of the job tools: a postedSince date the user says ("since 1 October") means that day in
+ * India, and a searchId must be the UUID match_jobs returned.
  */
 class JobToolsTest {
 
@@ -31,5 +32,14 @@ class JobToolsTest {
                 .hasMessage("postedSince must be a date like 2026-10-01, got: last Monday");
         assertThatThrownBy(() -> JobTools.startOfDayInIndia("01/10/2026"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void searchIdMustBeAUuid() {
+        assertThat(JobTools.searchId(" 3f1c2a9e-0b6d-4c55-9a1e-2b7c1d0e9f10 "))
+                .hasToString("3f1c2a9e-0b6d-4c55-9a1e-2b7c1d0e9f10");
+        assertThatThrownBy(() -> JobTools.searchId("abc"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("searchId must be the id returned by match_jobs, got: abc");
     }
 }

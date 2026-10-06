@@ -32,6 +32,14 @@ jobagent:
     years-below: 2        # default experience window: a job's range must reach down to years - 2 ...
     years-above: 1        # ... and start at most years + 1 (2 years -> jobs overlapping 0 to 3)
     round-up-from: 0.5    # 1.5 years -> 2, 1.4 -> 1
+  search:
+    first-batch: 10       # candidates judged before the first answer (in parallel)
+    ready-target: 30      # the background judge keeps this many APPLY jobs ready, refilling after each more_jobs
+    stop-after-nos: 20    # ...and stops for good after this many NO verdicts in a row
+    parallelism: 4
+    page-size: 10         # jobs per answer when not asked for a number
+    max-page-size: 25
+    model: opus
   gap-fill:
     # Opus fills missing fields (years, family, main language) only for jobs in these families (primary or
     # secondary). Every job is still crawled and run through the rules; other families just keep their gaps.
