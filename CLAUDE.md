@@ -163,7 +163,7 @@ stale (store an as-of date and add elapsed time), deleting a profile on request.
 |---|---|---|
 | 1 | Amazon adapter (~2,300 India jobs): crawl, run extraction BEFORE any rule change, measure gaps, fix rules | DONE (28e5513) |
 | 2 | Oracle Recruiting Cloud adapter (JPMorgan, Goldman, TI, Amex, Oracle; ~600 jobs): same check | DONE (Oracle itself skipped) |
-| 3 | Scheduler (per-host virtual threads) + closed jobs + health checks/alerts (core of M9) | NEXT (design with the user first) |
+| 3 | Scheduler (per-host virtual threads) + closed jobs + health checks/alerts (core of M9) | NEXT: design agreed, building (see plan) |
 | 4 | Embeddings TEST (never tested in job-agent; vectors only in code-mcp): build, measure vs the answer key; keep only if it helps | later |
 | 5 | 8b self-learning skill dictionary (strong resume story) | later |
 | 6 | README with measured numbers, then the user pushes the repo | last |
@@ -228,6 +228,93 @@ handed to the user for pasting (OracleAdapter, V18__add_oracle_companies, Oracle
   whole DB: 5 Goldman placeholder postings ("Contingent Worker India 1", "Industrial Trainee"), correct. Oracle jobs in
   SWE/DATA_ML/INFRA searches: JPMorgan 113, Goldman 34, TI 18, Amex 17. Totals: 5,258 open jobs, 33 companies, 8
   platforms (Greenhouse, Lever, SmartRecruiters, Ashby, Workday, Eightfold, Amazon, Oracle).
+
+### Scheduler + closed jobs + health plan (AGREED with the user 2026-10-06; final plan item 3)
+Decisions (user): crawl every 6 hours; a job missing from 2 successful crawls in a row is closed; alerts go to the log +
+`GET /admin/health` (email/Slack later). Parallelism: ONE VIRTUAL THREAD PER SERVER (user: "the best approach"), not per
+company (shared APIs would get several streams from our IP at once) and not per platform (a slow company, e.g. Microsoft
+throttling at 15 s/request, would delay companies on other servers). Each adapter names a company's server:
+`JobBoardAdapter.serverKey(company)`, default = platform (Greenhouse, Lever, SmartRecruiters, Ashby: one shared API
+host each; Amazon); Workday = the cluster from the host ("adobe.wd5.myworkdayjobs.com" -> "wd5.myworkdayjobs.com");
+Eightfold and Oracle = config.host (one server per company). Same server = one after another; different servers =
+in parallel. Each crawl keeps its own adaptive pace inside the adapter.
+Steps (new files: user pastes; existing files: Claude edits):
+1. V19 `crawl_runs` (company_id, trigger schedule/manual, started_at = the crawl's seenAt, finished_at, status
+   OK / SUSPECT / FAILED, fetched, kept, inserted, updated, unchanged, closed, unresolved, no_description, alerts
+   TEXT[], error, elapsed_ms).
+2. Closing without a new jobs column: after an OK run, close the company's open jobs that no OK run has seen for the
+   last 2 OK runs (count OK runs whose started_at > job.last_seen_at >= 2). SUSPECT/FAILED runs never close anything;
+   the upsert already reopens a job that comes back (closed_at = NULL).
+3. CrawlHealth (pure logic + tests): FAILED = exception; SUSPECT (no closing) = kept 0 while the last OK run had jobs,
+   or kept < 50% of the median of the last 5 OK runs (median >= 10); warnings (alerts, still OK) = unresolved locations
+   > 10% of jobs, jobs without a description > 20%.
+4. CrawlRunService: crawlOne (crawl + health + closing + record, failures recorded), runAll (enabled + supported
+   companies grouped by serverKey, one virtual thread per server, waits for all; refuses to start while a run is
+   going), @Scheduled(cron) entry that also starts the Opus gap fill afterwards (only new gap jobs).
+   CrawlScheduleProperties `jobagent.crawl.schedule.*` (enabled, cron "0 0 */6 * * *", gap-fill, gap-fill-parallelism
+   10, close-after-misses 2). @EnableScheduling on JobagentApplication.
+5. Edits: RequirementsService.rebuild guarded by a ReentrantLock (parallel crawls each trigger extraction; extraction
+   stays single-threaded), CrawlController (POST /admin/crawl[/{slug}] through CrawlRunService; GET /admin/health =
+   each company's last run, status, alerts, open jobs), adapters' serverKey, application.yaml.
+6. Tests, then the user restarts, runs POST /admin/crawl (manual full run), checks /admin/health.
+STATUS 2026-10-06: built in the scratchpad, 246 tests green; SQL checked on the real DB in a rolled-back transaction
+(closing: OK run 0, SUSPECT run 0, 2nd OK run closes 67 of 68 Amex test jobs). Claude applied the edits to EXISTING
+files (JobBoardAdapter.serverKey + Workday/Eightfold/Oracle overrides, CrawlService.serverKey + CrawlResult.seenAt,
+RequirementsService ReentrantLock, CrawlController under /admin with /crawl, /crawl/{slug}, /crawl/{slug}/preview,
+/health, JobagentApplication @EnableScheduling, application.yaml jobagent.crawl.schedule, 3 adapter tests) and created
+7 EMPTY new files for the user to paste: V19__create_crawl_runs.sql, crawl/CrawlScheduleProperties, CrawlHealth,
+CrawlRunRepository, CrawlRunService, test CrawlHealthTest, CrawlRunServiceTest. THE REPO DOES NOT COMPILE until they
+are pasted (CrawlController uses CrawlRunService). Code is in the scratchpad work copy too.
+Microsoft DISABLED 2026-10-06 at the user's request (UPDATE companies SET enabled = false WHERE slug = 'microsoft';
+done directly in the DB, no migration) so the first full run excludes it; re-enable when handling Microsoft.
+FIRST FULL RUN 2026-10-06 16:40 (manual, 33 companies on 15 servers): 32 OK in ~10 min (JPMorgan slowest 8 min), 155
+new jobs; Qualcomm throttled (429, pace up to 9 s/request) and the user STOPPED the app mid-crawl (safe: a crawl saves
+only after fetching everything; no Qualcomm crawl_runs row). Scheduler DISABLED in application.yaml
+(jobagent.crawl.schedule.enabled: false, user: enable when deployed). Next: incremental details (plan below).
+
+### Incremental details plan (AGREED with the user 2026-10-06: "the best middle ground"; build NEXT, after the first
+full crawl finishes; before or after the scheduler commit, to decide then)
+Problem (seen in the first full run, 2026-10-06 11:10): detail platforms (Workday, Eightfold, Oracle, SmartRecruiters)
+make one detail request per job on EVERY crawl, although ~95% of jobs are unchanged (Adobe: 74 detail calls, 71
+unchanged; Qualcomm ~640 requests per crawl and it throttled us hard on the 2nd crawl within a day; JPMorgan 8 min).
+Rule (user's refinement): for each job in the list
+- NEW job (not stored for this company + external id) -> fetch the detail;
+- KNOWN job whose LIST fields changed (title, locations, posted date... whatever the list itself returns) -> fetch the
+  detail right away (no waiting);
+- KNOWN job, list fields unchanged, detail fetched < 7 days ago -> NO request: rebuild the job from the list entry +
+  the stored detail;
+- KNOWN job, list fields unchanged, detail 7+ days old (or stored without a description) -> fetch again.
+Trade-off accepted: a description edited with no visible list change is noticed within 7 days instead of 6 hours.
+Implementation notes (verify while building):
+- New columns (V20): jobs.list_hash (fingerprint of the STABLE list fields only; e.g. Workday's "postedOn: Posted 3 Days
+  Ago" changes daily and must be left out) and jobs.detail_fetched_at.
+- Reuse = call the adapter's existing toRawJob(config, summary, storedDetail) with the stored detail JSON; check per
+  adapter that jobs.raw holds the detail JSON when a detail was fetched (Eightfold: raw = detail; Oracle: raw = detail;
+  Workday, SmartRecruiters: check) or store it separately.
+- A lookup the adapters get (e.g. a DetailCache from JobRepository: externalId -> listHash, detailFetchedAt, raw);
+  adapters stay free of SQL. Max age configurable (jobagent.crawl.detail-max-age, default 7d).
+- Report per crawl: details fetched vs reused (CrawlResult + crawl_runs), so the saving is measurable (resume number).
+- Expected: a 6-hourly run drops from ~9 min to 1-2 min, ~90% fewer requests (Qualcomm ~640 -> ~60).
+STATUS 2026-10-06: built in the scratchpad, 251 tests green. V20 (jobs.list_hash, jobs.detail_fetched_at backfilled
+from last_seen_at for detail-platform jobs with a description; crawl_runs.details_fetched / details_reused) dry-run on
+the real DB: every stored detail is reusable (Qualcomm 584/584, JPMorgan 325/325...). DetailCache (new file): load(company)
+= fresh details by external id; Known.reusable(id, listHash) = stored detail when the job is known, its list fingerprint
+unchanged (or never recorded) and the detail < jobagent.crawl.detail-max-age-days (7); fingerprint(parts...) = SHA-256.
+Claude edited existing files: RawJob (+listHash, DetailSource NONE/FETCHED/REUSED, old 11-arg constructor kept,
+withDetail), NormalizedJob (+listHash, detailFetched), JobNormalizer, JobRepository.upsert (list_hash and
+detail_fetched_at kept when null), CrawlService (counts + log "details fetched N / reused M"), CrawlRunRepository /
+CrawlRunService / CrawlController (details counts), the 4 adapters (DetailCache injected; listHash per adapter with
+stable fields only: Workday title, locationsText, remoteType, bulletFields, department (NOT postedOn); Eightfold name,
+department, locations, standardizedLocations, workLocationOption, postedTs; Oracle Title, PostedDate, locations,
+JobFamily, JobFunction, workplace; SmartRecruiters name, location, releasedDate, department, function,
+typeOfEmployment; Workday reuse wraps the stored jobPostingInfo back as {"jobPostingInfo": raw}), adapter tests,
+application.yaml (jobagent.crawl.detail-max-age-days: 7). New EMPTY files for the user: V20, crawl/DetailCache,
+crawl/DetailCacheTest. Repo does not compile until pasted.
+RESULT 2026-10-06 17:09 (2nd full manual run, user pasted V20/DetailCache/DetailCacheTest, 251 tests): 33 companies on 15
+servers, 155 s total (was ~10 min + Qualcomm stuck at 9 s/request), 33 OK / 0 suspect / 0 failed; details fetched 16 =
+exactly the 16 new jobs, reused 2,472 (99.4% of detail requests saved); 91 jobs closed (2nd good crawl that missed them:
+Amazon 28, ServiceNow 11, Adobe 7, Sarvam 7...); Qualcomm 59 list pages + 10 details, 2 throttles (pace 3 s), 155 s.
+5,300 open jobs. NOT committed yet (scheduler + incremental details).
 
 ### ROADMAP (agreed 2026-10-05; work strictly in this order, one milestone at a time)
 | # | Milestone | Status |

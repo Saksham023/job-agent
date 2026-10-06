@@ -25,4 +25,13 @@ public interface JobBoardAdapter {
      * @throws RuntimeException on HTTP or parse failures; the crawl service records the failure per company
      */
     List<RawJob> fetchJobs(Company company);
+
+    /**
+     * The server this company's crawl talks to. Companies on the same server are crawled one after another (never
+     * two request streams from us to one server at once); different servers are crawled in parallel. Default: the
+     * platform, right for platforms whose one API serves every company (api.lever.co, boards-api.greenhouse.io...).
+     */
+    default String serverKey(Company company) {
+        return platform();
+    }
 }

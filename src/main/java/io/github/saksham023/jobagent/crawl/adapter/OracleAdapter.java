@@ -1,6 +1,7 @@
 package io.github.saksham023.jobagent.crawl.adapter;
 
 import io.github.saksham023.jobagent.company.Company;
+import io.github.saksham023.jobagent.crawl.DetailCache;
 import io.github.saksham023.jobagent.crawl.JobBoardAdapter;
 import io.github.saksham023.jobagent.crawl.RawJob;
 import io.github.saksham023.jobagent.crawl.RawLocation;
@@ -44,9 +45,11 @@ public class OracleAdapter implements JobBoardAdapter {
     private static final int MAX_PAGES = 50;                          // safety stop: 5,000 postings
 
     private final RestClient http;
+    private final DetailCache detailCache;
 
-    public OracleAdapter(RestClient crawlRestClient) {
+    public OracleAdapter(RestClient crawlRestClient, DetailCache detailCache) {
         this.http = crawlRestClient;
+        this.detailCache = detailCache;
     }
 
     @Override
@@ -54,13 +57,28 @@ public class OracleAdapter implements JobBoardAdapter {
         return "oracle";
     }
 
+    /** Each tenant has its own host (jpmc.fa.oraclecloud.com, edbz.fa.us2.oraclecloud.com). */
+    @Override
+    public String serverKey(Company company) {
+        return OracleConfig.from(company).host();
+    }
+
     @Override
     public List<RawJob> fetchJobs(Company company) {
         OracleConfig config = OracleConfig.from(company);
         String locationId = config.locationId() != null ? config.locationId() : discoverLocationId(company, config);
+        DetailCache.Known known = detailCache.load(company.id());
         List<RawJob> jobs = new ArrayList<>();
         for (JsonNode summary : listRequisitions(company, config, locationId)) {
-            jobs.add(toRawJob(config, summary, fetchDetail(company, config, text(summary, "Id"))));
+            String listHash = listHash(summary);
+            JsonNode stored = known.reusable(text(summary, "Id"), listHash);
+            if (stored != null) {
+                jobs.add(toRawJob(config, summary, stored).withDetail(listHash, RawJob.DetailSource.REUSED));
+                continue;
+            }
+            JsonNode detail = fetchDetail(company, config, text(summary, "Id"));
+            jobs.add(toRawJob(config, summary, detail).withDetail(listHash,
+                    detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
         }
         return jobs;
     }
@@ -132,6 +150,13 @@ public class OracleAdapter implements JobBoardAdapter {
     }
 
     // ---------------------------------------------------------------- mapping
+
+    /** The list entry's stable fields (not Relevancy, Distance or the hot/trending flags). */
+    static String listHash(JsonNode summary) {
+        return DetailCache.fingerprint(summary.path("Title"), summary.path("PostedDate"), summary.path("PrimaryLocation"),
+                summary.path("secondaryLocations"), summary.path("JobFamily"), summary.path("JobFunction"),
+                summary.path("WorkplaceTypeCode"), summary.path("WorkplaceType"));
+    }
 
     /** @param detail the requisition detail, or null (then only the list's facts, no description) */
     static RawJob toRawJob(OracleConfig config, JsonNode summary, JsonNode detail) {

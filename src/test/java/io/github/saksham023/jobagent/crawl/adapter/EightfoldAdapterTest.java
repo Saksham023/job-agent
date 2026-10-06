@@ -159,4 +159,10 @@ class EightfoldAdapterTest {
     private static HttpClientErrorException tooManyRequests() {
         return HttpClientErrorException.create(HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", new HttpHeaders(), new byte[0], null);
     }
+
+    @Test
+    void eachEightfoldCompanyIsItsOwnServer() {
+        assertThat(new EightfoldAdapter(null, null).serverKey(company("""
+                {"host": "careers.qualcomm.com", "domain": "qualcomm.com"}"""))).isEqualTo("careers.qualcomm.com");
+    }
 }

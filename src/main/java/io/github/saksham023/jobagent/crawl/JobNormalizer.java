@@ -73,7 +73,9 @@ public class JobNormalizer {
                 raw.postedAt(),
                 raw.sourceUpdatedAt(),
                 contentHash(title, raw.department(), locationTexts, description),
-                raw.raw()
+                raw.raw(),
+                raw.listHash(),
+                raw.detail() == RawJob.DetailSource.FETCHED
         );
     }
 

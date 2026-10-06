@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 
 /**
@@ -46,6 +47,7 @@ public class RequirementsService {
     public record RebuildResult(int extracted, int skipped, long elapsedMs) {
     }
 
+    private final ReentrantLock rebuildLock = new ReentrantLock();
     private final RequirementsRepository repository;
     private final ExperienceExtractor experienceExtractor;
     private final JobClassifier jobClassifier;
@@ -65,6 +67,15 @@ public class RequirementsService {
      * @param all true: re-extract every open job; false: only new, changed, or older-version ones
      */
     public RebuildResult rebuild(boolean all) {
+        rebuildLock.lock();                    // parallel crawls each trigger extraction; it runs one at a time
+        try {
+            return rebuildLocked(all);
+        } finally {
+            rebuildLock.unlock();
+        }
+    }
+
+    private RebuildResult rebuildLocked(boolean all) {
         long startNanos = System.nanoTime();
         List<JobText> jobs = repository.findJobsToExtract(all ? Integer.MAX_VALUE : EXTRACTOR_VERSION);
 

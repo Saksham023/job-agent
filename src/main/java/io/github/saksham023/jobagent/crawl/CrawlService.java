@@ -75,6 +75,9 @@ public class CrawlService {
      * @param unchanged           known jobs seen again with the same content (0 for a preview)
      * @param extracted           jobs whose requirements were (re)extracted after saving (0 for a preview)
      * @param unresolvedLocations location segments we could not resolve, most frequent first, across ALL jobs
+     * @param seenAt              the crawl's start: last_seen_at of every job it saw (crawl_runs.started_at)
+     * @param detailsFetched      detail requests made (detail platforms)
+     * @param detailsReused       stored details reused instead of a request
      */
     public record CrawlResult(
             String company,
@@ -91,7 +94,10 @@ public class CrawlService {
             int extracted,
             Map<String, Long> unresolvedLocations,
             List<NormalizedJob> keptJobs,
-            long elapsedMs
+            long elapsedMs,
+            Instant seenAt,
+            int detailsFetched,
+            int detailsReused
     ) {
     }
 
@@ -105,7 +111,12 @@ public class CrawlService {
         return run(company, true);
     }
 
-    /** True when an adapter exists for this company's platform (e.g. false for "workday" until Milestone 6). */
+    /** The server the company's crawl talks to (see JobBoardAdapter.serverKey). */
+    public String serverKey(Company company) {
+        return adapterFor(company).serverKey(company);
+    }
+
+    /** True when an adapter exists for this company's platform. */
     public boolean isSupported(Company company) {
         return adaptersByPlatform.containsKey(company.platform());
     }
@@ -134,16 +145,20 @@ public class CrawlService {
         int extracted = inserted + updated > 0 ? extractRequirements(company) : 0;
 
         long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
-        log.info("{}: {} fetched {} via {}, kept {} in {}, other {}, unresolved {}, skipped {}{} ({} ms)",
+        int detailsFetched = (int) rawJobs.stream().filter(j -> j.detail() == RawJob.DetailSource.FETCHED).count();
+        int detailsReused = (int) rawJobs.stream().filter(j -> j.detail() == RawJob.DetailSource.REUSED).count();
+        log.info("{}: {} fetched {} via {}, kept {} in {}, other {}, unresolved {}, skipped {}{}{} ({} ms)",
                 company.slug(), save ? "CRAWL" : "PREVIEW", rawJobs.size(), adapter.platform(), kept.size(),
                 wantedCountries, otherCountries, unresolved, skipped,
                 save ? ", inserted " + inserted + ", updated " + updated + ", unchanged " + unchanged
                         + ", extracted " + extracted : "",
+                detailsFetched + detailsReused > 0
+                        ? ", details fetched " + detailsFetched + " / reused " + detailsReused : "",
                 elapsedMs);
 
         return new CrawlResult(company.slug(), adapter.platform(), save, rawJobs.size(), skipped, kept.size(),
                 otherCountries, unresolved, inserted, updated, unchanged, extracted,
-                unresolvedLocationCounts(normalized), kept, elapsedMs);
+                unresolvedLocationCounts(normalized), kept, elapsedMs, seenAt, detailsFetched, detailsReused);
     }
 
     /**

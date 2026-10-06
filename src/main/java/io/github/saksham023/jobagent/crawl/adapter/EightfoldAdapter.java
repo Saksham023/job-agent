@@ -1,6 +1,7 @@
 package io.github.saksham023.jobagent.crawl.adapter;
 
 import io.github.saksham023.jobagent.company.Company;
+import io.github.saksham023.jobagent.crawl.DetailCache;
 import io.github.saksham023.jobagent.crawl.JobBoardAdapter;
 import io.github.saksham023.jobagent.crawl.RawJob;
 import io.github.saksham023.jobagent.crawl.RawLocation;
@@ -80,8 +81,11 @@ public class EightfoldAdapter implements JobBoardAdapter {
 
     private final RestClient http;
 
-    public EightfoldAdapter(RestClient crawlRestClient) {
+    private final DetailCache detailCache;
+
+    public EightfoldAdapter(RestClient crawlRestClient, DetailCache detailCache) {
         this.http = crawlRestClient;
+        this.detailCache = detailCache;
     }
 
     @Override
@@ -89,17 +93,34 @@ public class EightfoldAdapter implements JobBoardAdapter {
         return "eightfold";
     }
 
+    /** Each company has its own host (careers.qualcomm.com, apply.careers.microsoft.com). */
+    @Override
+    public String serverKey(Company company) {
+        return EightfoldConfig.from(company).host();
+    }
+
     @Override
     public List<RawJob> fetchJobs(Company company) {
         EightfoldConfig config = EightfoldConfig.from(company);
         Pace pace = new Pace(config.delay());
+        DetailCache.Known known = detailCache.load(company.id());
         List<RawJob> jobs = new ArrayList<>();
         int listOnly = 0;
         for (JsonNode summary : listPositions(company, config, pace)) {
-            boolean wanted = config.wantsDetail(text(summary, "department"));
-            JsonNode detail = wanted ? fetchDetail(company, config, pace, text(summary, "id")) : null;
-            listOnly += wanted ? 0 : 1;
-            jobs.add(toRawJob(config, summary, detail));
+            String listHash = listHash(summary);
+            if (!config.wantsDetail(text(summary, "department"))) {
+                listOnly++;
+                jobs.add(toRawJob(config, summary, null).withDetail(listHash, RawJob.DetailSource.NONE));
+                continue;
+            }
+            JsonNode stored = known.reusable(text(summary, "id"), listHash);
+            if (stored != null) {
+                jobs.add(toRawJob(config, summary, stored).withDetail(listHash, RawJob.DetailSource.REUSED));
+                continue;
+            }
+            JsonNode detail = fetchDetail(company, config, pace, text(summary, "id"));
+            jobs.add(toRawJob(config, summary, detail).withDetail(listHash,
+                    detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
         }
         log.info("{}: {} jobs, {} saved without a detail (detailDepartments); crawl finished at one request every {} s",
                 company.slug(), jobs.size(), listOnly, pace.delay().toMillis() / 1000.0);
@@ -175,6 +196,12 @@ public class EightfoldAdapter implements JobBoardAdapter {
     }
 
     // ---------------------------------------------------------------- mapping
+
+    /** The search entry's stable fields: name, department, locations, work option, posting time. */
+    static String listHash(JsonNode summary) {
+        return DetailCache.fingerprint(summary.path("name"), summary.path("department"), summary.path("locations"),
+                summary.path("standardizedLocations"), summary.path("workLocationOption"), summary.path("postedTs"));
+    }
 
     /** @param detail the position_details data, or null (then the search summary is used, without a description) */
     static RawJob toRawJob(EightfoldConfig config, JsonNode summary, JsonNode detail) {

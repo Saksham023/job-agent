@@ -18,6 +18,8 @@ import java.util.List;
  * @param countryCodes distinct ISO alpha-2 codes of RESOLVED places, e.g. ["IN"]
  * @param description  plain text (HTML already converted), or null
  * @param contentHash  SHA-256 of the fields a human cares about; changes when the posting's content changes
+ * @param listHash     the list entry's fingerprint (detail platforms), or null
+ * @param detailFetched the detail was downloaded in this crawl (sets jobs.detail_fetched_at)
  */
 public record NormalizedJob(
         long companyId,
@@ -36,7 +38,9 @@ public record NormalizedJob(
         Instant postedAt,
         Instant sourceUpdatedAt,
         String contentHash,
-        JsonNode raw
+        JsonNode raw,
+        String listHash,
+        boolean detailFetched
 ) {
 
     public NormalizedJob {

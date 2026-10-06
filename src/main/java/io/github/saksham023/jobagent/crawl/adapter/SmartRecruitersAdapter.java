@@ -1,6 +1,7 @@
 package io.github.saksham023.jobagent.crawl.adapter;
 
 import io.github.saksham023.jobagent.company.Company;
+import io.github.saksham023.jobagent.crawl.DetailCache;
 import io.github.saksham023.jobagent.crawl.JobBoardAdapter;
 import io.github.saksham023.jobagent.crawl.RawJob;
 import io.github.saksham023.jobagent.crawl.RawLocation;
@@ -45,8 +46,11 @@ public class SmartRecruitersAdapter implements JobBoardAdapter {
 
     private final RestClient http;
 
-    public SmartRecruitersAdapter(RestClient crawlRestClient) {
+    private final DetailCache detailCache;
+
+    public SmartRecruitersAdapter(RestClient crawlRestClient, DetailCache detailCache) {
         this.http = crawlRestClient;
+        this.detailCache = detailCache;
     }
 
     @Override
@@ -58,10 +62,18 @@ public class SmartRecruitersAdapter implements JobBoardAdapter {
     public List<RawJob> fetchJobs(Company company) {
         SmartRecruitersConfig config = SmartRecruitersConfig.from(company);
 
+        DetailCache.Known known = detailCache.load(company.id());
         List<RawJob> jobs = new ArrayList<>();
         for (JsonNode summary : listPostings(company, config)) {
+            String listHash = listHash(summary);
+            JsonNode stored = known.reusable(text(summary, "id"), listHash);      // stored raw = the detail
+            if (stored != null) {
+                jobs.add(toRawJob(config, stored, stored).withDetail(listHash, RawJob.DetailSource.REUSED));
+                continue;
+            }
             JsonNode detail = fetchDetail(company, config, text(summary, "id"));
-            jobs.add(toRawJob(config, detail != null ? detail : summary, detail));
+            jobs.add(toRawJob(config, detail != null ? detail : summary, detail).withDetail(listHash,
+                    detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
             pause();
         }
         return jobs;
@@ -106,6 +118,12 @@ public class SmartRecruitersAdapter implements JobBoardAdapter {
     }
 
     /** @param posting the detail when available, else the list summary; @param detail may be null */
+    /** The list entry's stable fields. */
+    static String listHash(JsonNode summary) {
+        return DetailCache.fingerprint(summary.path("name"), summary.path("location"), summary.path("releasedDate"),
+                summary.path("department"), summary.path("function"), summary.path("typeOfEmployment"));
+    }
+
     private RawJob toRawJob(SmartRecruitersConfig config, JsonNode posting, JsonNode detail) {
         String id = text(posting, "id");
         String department = text(posting.path("department"), "label");

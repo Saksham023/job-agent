@@ -89,4 +89,12 @@ class OracleAdapterTest {
         Company broken = new Company(2, "x", "X", "oracle", JSON.readTree("{\"host\": \"h\"}"), null, true, null, null, null);
         assertThatThrownBy(() -> OracleConfig.from(broken)).hasMessageContaining("config.host and config.siteNumber");
     }
+
+    @Test
+    void eachOracleTenantIsItsOwnServer() {
+        Company jpmc = new Company(1, "jpmorgan", "JPMorgan", "oracle",
+                JSON.readTree("""
+                        {"host": "jpmc.fa.oraclecloud.com", "siteNumber": "CX_1001"}"""), null, true, null, null, null);
+        assertThat(new OracleAdapter(null, null).serverKey(jpmc)).isEqualTo("jpmc.fa.oraclecloud.com");
+    }
 }

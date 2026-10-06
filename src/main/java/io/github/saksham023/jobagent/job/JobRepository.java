@@ -25,10 +25,12 @@ public class JobRepository {
     private static final String UPSERT = """
             INSERT INTO jobs (company_id, external_id, title, department, function, locations, cities, country_codes, places,
                               remote, employment_type, url, description, posted_at, source_updated_at,
-                              content_hash, raw, first_seen_at, last_seen_at, content_changed_at, closed_at)
+                              content_hash, raw, first_seen_at, last_seen_at, content_changed_at, closed_at,
+                              list_hash, detail_fetched_at)
             VALUES (:companyId, :externalId, :title, :department, :function, :locations, :cities, :countryCodes,
                     CAST(:places AS jsonb), :remote, :employmentType, :url, :description, :postedAt,
-                    :sourceUpdatedAt, :contentHash, CAST(:raw AS jsonb), :seenAt, :seenAt, :seenAt, NULL)
+                    :sourceUpdatedAt, :contentHash, CAST(:raw AS jsonb), :seenAt, :seenAt, :seenAt, NULL,
+                    :listHash, CASE WHEN CAST(:detailFetched AS boolean) THEN CAST(:seenAt AS timestamptz) END)
             ON CONFLICT (company_id, external_id) DO UPDATE SET
                 title              = EXCLUDED.title,
                 department         = EXCLUDED.department,
@@ -51,7 +53,9 @@ public class JobRepository {
                                          ELSE jobs.content_changed_at
                                      END,
                 content_hash       = EXCLUDED.content_hash,
-                closed_at          = NULL
+                closed_at          = NULL,
+                list_hash          = coalesce(EXCLUDED.list_hash, jobs.list_hash),
+                detail_fetched_at  = coalesce(EXCLUDED.detail_fetched_at, jobs.detail_fetched_at)
             RETURNING first_seen_at = :seenAt AS inserted,
                       content_changed_at = :seenAt AS changed
             """;
@@ -89,6 +93,8 @@ public class JobRepository {
                 .param("contentHash", job.contentHash())
                 .param("raw", job.raw() == null ? null : jsonMapper.writeValueAsString(job.raw()))
                 .param("seenAt", toOffset(seenAt))
+                .param("listHash", job.listHash())
+                .param("detailFetched", job.detailFetched())
                 .query((rs, rowNum) -> {
                     if (rs.getBoolean("inserted")) {
                         return UpsertOutcome.INSERTED;

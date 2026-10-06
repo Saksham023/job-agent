@@ -123,4 +123,26 @@ class WorkdayAdapterTest {
 
         assertThatThrownBy(() -> WorkdayConfig.from(company)).hasMessage("acme: config.site is missing");
     }
+
+    @Test
+    void tenantsOnOneWorkdayClusterShareAServer() {
+        Company adobe = new Company(1, "adobe", "Adobe", "workday", json("""
+                {"host": "adobe.wd5.myworkdayjobs.com", "tenant": "adobe", "site": "external_experienced"}"""),
+                null, true, null, null, null);
+        assertThat(new WorkdayAdapter(null, null, null).serverKey(adobe)).isEqualTo("wd5.myworkdayjobs.com");
+    }
+
+    @Test
+    void theListFingerprintIgnoresTheDailyChangingPostedOn() {
+        JsonNode monday = json("""
+                {"title": "Senior Staff Engineer", "externalPath": "/job/Bangalore/Senior-Staff-Engineer_R120924",
+                 "locationsText": "Bangalore", "postedOn": "Posted 3 Days Ago", "bulletFields": ["R120924"]}""");
+        JsonNode tuesday = json(monday.toString().replace("Posted 3 Days Ago", "Posted 4 Days Ago"));
+        JsonNode moved = json(monday.toString().replace("Bangalore\"", "Pune\""));
+        String hash = WorkdayAdapter.listHash(new WorkdayAdapter.Summary(monday, "Engineering"));
+        assertThat(WorkdayAdapter.listHash(new WorkdayAdapter.Summary(tuesday, "Engineering"))).isEqualTo(hash);
+        assertThat(WorkdayAdapter.listHash(new WorkdayAdapter.Summary(moved, "Engineering"))).isNotEqualTo(hash);
+        assertThat(WorkdayAdapter.externalId("/job/Bangalore/Senior-Staff-Engineer_R120924"))
+                .isEqualTo("Senior-Staff-Engineer_R120924");
+    }
 }

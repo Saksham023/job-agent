@@ -1,6 +1,7 @@
 package io.github.saksham023.jobagent.crawl.adapter;
 
 import io.github.saksham023.jobagent.company.Company;
+import io.github.saksham023.jobagent.crawl.DetailCache;
 import io.github.saksham023.jobagent.crawl.JobBoardAdapter;
 import io.github.saksham023.jobagent.crawl.RawJob;
 import io.github.saksham023.jobagent.crawl.RawLocation;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 import java.net.URI;
 import java.time.Duration;
@@ -58,15 +60,24 @@ public class WorkdayAdapter implements JobBoardAdapter {
 
     private final RestClient http;
     private final LocationParser locationParser;
+    private final DetailCache detailCache;
 
-    public WorkdayAdapter(RestClient crawlRestClient, LocationParser locationParser) {
+    public WorkdayAdapter(RestClient crawlRestClient, LocationParser locationParser, DetailCache detailCache) {
         this.http = crawlRestClient;
         this.locationParser = locationParser;
+        this.detailCache = detailCache;
     }
 
     @Override
     public String platform() {
         return "workday";
+    }
+
+    /** The Workday cluster: "adobe.wd5.myworkdayjobs.com" -> "wd5.myworkdayjobs.com" (tenants share it). */
+    @Override
+    public String serverKey(Company company) {
+        String host = WorkdayConfig.from(company).host();
+        return host.substring(host.indexOf('.') + 1);
     }
 
     @Override
@@ -80,11 +91,20 @@ public class WorkdayAdapter implements JobBoardAdapter {
         }
         log.info("{}: Workday country filter {}", company.slug(), countryFilter);
 
+        DetailCache.Known known = detailCache.load(company.id());
         List<RawJob> jobs = new ArrayList<>();
         for (Summary summary : listAll(config, countryFilter)) {
             String path = text(summary.posting(), "externalPath");
+            String listHash = listHash(summary);
+            JsonNode stored = path == null ? null : known.reusable(externalId(path), listHash);
+            if (stored != null) {                                          // stored raw = the detail's jobPostingInfo
+                JsonNode detail = JsonNodeFactory.instance.objectNode().set("jobPostingInfo", stored);
+                jobs.add(toRawJob(config, summary, detail).withDetail(listHash, RawJob.DetailSource.REUSED));
+                continue;
+            }
             JsonNode detail = path == null ? null : fetchDetail(company, config, path);
-            jobs.add(toRawJob(config, summary, detail));
+            jobs.add(toRawJob(config, summary, detail).withDetail(listHash,
+                    detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
             pause();
         }
         return jobs;
@@ -224,6 +244,18 @@ public class WorkdayAdapter implements JobBoardAdapter {
     // ---------------------------------------------------------------- mapping
 
     /** @param detail the detail response, or null when it could not be fetched (then the list summary is used) */
+    /** The list entry's stable fields (not "postedOn": "Posted 3 Days Ago" changes every day). */
+    static String listHash(Summary summary) {
+        JsonNode posting = summary.posting();
+        return DetailCache.fingerprint(posting.path("title"), posting.path("locationsText"), posting.path("remoteType"),
+                posting.path("bulletFields"), summary.department());
+    }
+
+    /** "/job/Bangalore/Senior-Staff-Engineer_R120924" -> "Senior-Staff-Engineer_R120924": one per posting. */
+    static String externalId(String path) {
+        return path.substring(path.lastIndexOf('/') + 1);
+    }
+
     static RawJob toRawJob(WorkdayConfig config, Summary summary, JsonNode detail) {
         JsonNode posting = summary.posting();
         String path = text(posting, "externalPath");
@@ -231,7 +263,7 @@ public class WorkdayAdapter implements JobBoardAdapter {
         Boolean remote = remote(text(posting, "remoteType"));
         String url = info == null ? null : text(info, "externalUrl");
         return new RawJob(
-                path.substring(path.lastIndexOf('/') + 1),            // "Senior-Staff-Engineer_R120924": one per posting
+                externalId(path),
                 info == null ? text(posting, "title") : text(info, "title"),
                 summary.department(),
                 null,
