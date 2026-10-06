@@ -78,6 +78,9 @@ public class CrawlRunService {
         this.runs = runs;
         this.gapFillRunner = gapFillRunner;
         this.properties = properties;
+        log.info("Crawl schedule: {}", properties.enabled()
+                ? "ON (cron " + properties.cron() + ", gap fill " + (properties.gapFill() ? "on" : "off") + ")"
+                : "OFF (companies are crawled only by POST /admin/crawl)");
     }
 
     /** The scheduled run (when enabled): the whole crawl job. */

@@ -249,6 +249,12 @@ small echo server: visitor address = `X-Forwarded-For` (single address); public 
 `Tailscale-Funnel-Request: ?1` (could be used to refuse /admin and /mcp on the public address: offered, not decided).
 RateLimitFilter now uses the LAST entry of a header list. TO DO on the Air: add `export JOBAGENT_CLIENT_IP_HEADER=X-Forwarded-For`
 to ~/jobagent/env (then the deploy's restart picks it up); /tmp/echo.py + its funnel on 8443 are temporary (kill, funnel off).
+RATE LIMIT VERIFIED through Funnel 2026-10-07: 80 parallel requests with curl -6 gave 68x200 + 12x429 (curl alternating IPv4/IPv6 looks
+like two visitors, so a plain test can show all 200). Tailscale OVERWRITES a forged X-Forwarded-For. App on the Air has
+JOBAGENT_CLIENT_IP_HEADER=X-Forwarded-For set and runs the new jar. Startup now logs "Crawl schedule: ON/OFF" and
+"Skill learning schedule: ON/OFF" (before, nothing was logged until a run happened). User is adding the two scheduler env
+vars to ~/jobagent/env (JOBAGENT_CRAWL_SCHEDULE_ENABLED, JOBAGENT_SKILLS_LEARNING_ENABLED) + launchctl kickstart. NOTE:
+Microsoft is enabled=true on the Air, so the first scheduled crawl (00/06/12/18) would start its slow first load.
 Funnel DNS status 2026-10-07: https://jobserver.tail8cf172.ts.net/ Funnel on, Air has funnel/https capabilities, but
 public DNS (8.8.8.8, 1.1.1.1) answers NOERROR with no A/AAAA records yet; stopgap idea: Cloudflare quick tunnel (asks first).
 

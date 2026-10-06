@@ -77,6 +77,9 @@ public class SkillLearningService {
         this.requirements = requirements;
         this.gazetteer = gazetteer;
         this.properties = properties;
+        log.info("Skill learning schedule: {}", properties.enabled()
+                ? "ON (cron " + properties.cron() + ", at most " + properties.maxTermsPerRun() + " words per run)"
+                : "OFF (only POST /admin/skills/learn runs it)");
     }
 
     /** The daily run, when enabled. */
