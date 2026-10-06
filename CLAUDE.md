@@ -289,6 +289,13 @@ GRACEFUL SHUTDOWN + PER-COMPANY GAP FILL (2026-10-07, user asked for both; built
   a crawl of a fake site that never answers + SIGTERM -> "waiting up to 60 s for 1 running task", the run recorded as FAILED
   "interrupted: app shutting down" BEFORE Hikari closed, exit code 143 after 7 s. NOT yet tested: the same on the Air through
   the GitHub runner (launchctl print/kill from the runner's context), and a stop during a real Microsoft crawl.
+- EIGHTFOLD NOW FETCHES PAGE BY PAGE (user's idea, 2026-10-07): list page -> that page's descriptions -> batch saved -> next page
+  (private inner class Crawl in EightfoldAdapter; a job shown on two pages after a list shift is kept once; the offset is the
+  number of positions listed; any failure flushes the batch in hand first). So a crawl blocked at list page 20 keeps ~190 jobs.
+  Workday/Oracle/SmartRecruiters still list everything first (their lists are quick and not throttled).
+- IN-PROGRESS GUARD (found while planning the live test): CrawlRunService.crawlOne refuses a company already being crawled
+  ("already being crawled", no run row), because a run is recorded only when it ends and the next schedule slot would otherwise
+  start a SECOND Microsoft crawl while a long one runs. 318 tests.
 - Per-company gap fill: GapFillRunner.fillCompany(companyId, model, parallelism) (blocking, own Run, does not touch
   start()/status()), GapFillRepository.findJobsWithGaps(country, families, companyId); CrawlRunService.runAll queues each
   company's fill (only when it inserted/updated jobs) on ONE single-worker queue, so at most gapFillParallelism Opus calls run at

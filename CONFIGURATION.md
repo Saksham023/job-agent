@@ -176,7 +176,7 @@ and reproducible, put the same `UPDATE` in a new Flyway migration (`src/main/res
 | Eightfold | `location` | no | `India` | location filter sent to the API |
 | Eightfold | `delayMs` | no | `1000` | starting pace per request (slows down by itself on throttling) |
 | Eightfold | `detailDepartments` | no | all | regex; only jobs whose department matches get a detail request, the rest are saved from the list |
-| Eightfold | `saveEvery` | no | `10` | the crawl saves its jobs and logs a progress line after this many jobs, so a crawl that stops part way keeps what it had; a debug line per job shows each job's own timestamp |
+| Eightfold | `saveEvery` | no | `10` | the crawl fetches one list page at a time (each job gets its description right away) and saves its jobs and logs a progress line after this many jobs, so a crawl that stops part way keeps what it had; a debug line per job shows each job's own timestamp |
 | Eightfold | `maxDetailsPerCrawl` | no | no limit | at most this many detail requests per crawl; the rest are saved from the list (or keep an older stored detail) and fetched by the next crawls. For a gentle first load |
 | Oracle | `host`, `siteNumber` | yes | | e.g. `jpmc.fa.oraclecloud.com`, `CX_1001` |
 | Oracle | `country` | no | `India` | location facet entry looked up |

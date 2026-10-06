@@ -21,6 +21,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -119,6 +120,35 @@ class CrawlRunServiceTest {
         assertThat(run[0].outcomes()).extracting(CrawlRunService.RunOutcome::company).containsExactly("fast", "slow");
         assertThat(run[0].gapFills()).hasSize(2);
         assertThat(RunStatus.combine(run[0].gapFills()).done()).isEqualTo(5);
+    }
+
+    @Test
+    void aCompanyThatIsBeingCrawledIsNotCrawledASecondTimeAtOnce() throws Exception {
+        Company slow = company(2, "slow");
+        CrawlService crawlService = mock(CrawlService.class);
+        CountDownLatch inside = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(crawlService.crawl(slow)).thenAnswer(call -> {
+            inside.countDown();
+            release.await(10, TimeUnit.SECONDS);
+            return result("slow");
+        });
+        CrawlRunService service = service(crawlService, mock(GapFillRunner.class), new ShutdownSignal(), slow);
+        CrawlRunService.RunOutcome[] first = new CrawlRunService.RunOutcome[1];
+        Thread running = new Thread(() -> first[0] = service.crawlOne(slow, "manual"));
+        running.start();
+        assertThat(inside.await(5, TimeUnit.SECONDS)).isTrue();
+
+        CrawlRunService.RunOutcome second = service.crawlOne(slow, "schedule");        // the next schedule slot
+
+        assertThat(second.error()).isEqualTo("already being crawled");
+        assertThat(second.result()).isNull();
+        release.countDown();
+        running.join(10_000);
+        assertThat(first[0].error()).isNull();                                          // the first crawl went on undisturbed
+        verify(crawlService, times(1)).crawl(slow);
+        // and once it is finished the company can be crawled again
+        assertThat(service.crawlOne(slow, "manual").error()).isNull();
     }
 
     @Test

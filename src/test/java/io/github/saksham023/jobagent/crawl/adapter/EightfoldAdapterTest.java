@@ -247,6 +247,50 @@ class EightfoldAdapterTest {
     }
 
     @Test
+    void descriptionsAreFetchedPageByPageAndAJobShownOnTwoPagesIsKeptOnce() {
+        Company company = company("""
+                {"host": "apply.careers.microsoft.com", "domain": "microsoft.com", "delayMs": 0, "saveEvery": 2}""");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // ordered: page 1, its two descriptions, THEN page 2 (the list shifted: job 2 shows up again), its one new description
+        server.expect(requestTo(containsString("start=0"))).andRespond(withSuccess(positions(1, 2, 4), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=1"))).andRespond(withSuccess(detailOf(1), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=2"))).andRespond(withSuccess(detailOf(2), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("start=2"))).andRespond(withSuccess(positions(2, 3, 4), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=3"))).andRespond(withSuccess(detailOf(3), MediaType.APPLICATION_JSON));
+        DetailCache cache = mock(DetailCache.class);
+        when(cache.load(1L)).thenReturn(DetailCache.Known.NONE);
+        List<List<String>> batches = new java.util.ArrayList<>();
+
+        new EightfoldAdapter(builder.build(), cache, new ShutdownSignal()).fetchJobs(company,
+                batch -> batches.add(batch.stream().map(RawJob::externalId).toList()));
+
+        server.verify();
+        assertThat(batches).containsExactly(List.of("1", "2"), List.of("3"));
+    }
+
+    @Test
+    void aListPageThatFailsKeepsTheJobsOfTheEarlierPages() {
+        Company company = company("""
+                {"host": "apply.careers.microsoft.com", "domain": "microsoft.com", "delayMs": 0, "saveEvery": 10}""");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(containsString("start=0"))).andRespond(withSuccess(positions(1, 2, 4), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=1"))).andRespond(withSuccess(detailOf(1), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=2"))).andRespond(withSuccess(detailOf(2), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("start=2"))).andRespond(withServerError());
+        DetailCache cache = mock(DetailCache.class);
+        when(cache.load(1L)).thenReturn(DetailCache.Known.NONE);
+        List<RawJob> sunk = new java.util.ArrayList<>();
+
+        assertThatThrownBy(() -> new EightfoldAdapter(builder.build(), cache, new ShutdownSignal()).fetchJobs(company, sunk::addAll))
+                .isInstanceOf(org.springframework.web.client.HttpServerErrorException.class);
+
+        server.verify();
+        assertThat(sunk).extracting(RawJob::externalId).containsExactly("1", "2");   // below saveEvery, still handed over
+    }
+
+    @Test
     void detailDepartmentsLimitTheDetailRequests() {
         EightfoldConfig config = EightfoldConfig.from(company("""
                 {"host": "apply.careers.microsoft.com", "domain": "microsoft.com",

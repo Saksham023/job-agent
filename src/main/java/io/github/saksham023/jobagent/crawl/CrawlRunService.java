@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -76,6 +77,7 @@ public class CrawlRunService {
     private final CrawlScheduleProperties properties;
     private final ShutdownSignal shutdown;
     private final AtomicBoolean fullRunGoing = new AtomicBoolean();
+    private final Set<String> crawling = ConcurrentHashMap.newKeySet();       // companies being crawled right now
 
     public CrawlRunService(CompanyRepository companies, CrawlService crawlService, CrawlRunRepository runs,
                            GapFillRunner gapFillRunner, CrawlScheduleProperties properties, ShutdownSignal shutdown) {
@@ -240,8 +242,17 @@ public class CrawlRunService {
 
     /** Crawls one company and records the run; a failure is recorded and returned, not thrown. */
     public RunOutcome crawlOne(Company company, String trigger) {
+        if (!crawling.add(company.slug())) {
+            // a run is recorded only when it ends, so without this a long crawl (Microsoft: hours) would be started a second
+            // time by the next schedule slot, double-hitting a site that already throttles us
+            log.info("{}: already being crawled, not started again", company.slug());
+            return new RunOutcome(company.slug(), crawlService.serverKey(company), null, Status.FAILED,
+                    List.of("already being crawled"), 0, "already being crawled");
+        }
         try (ShutdownSignal.Activity activity = shutdown.track()) {      // a shutdown waits until the run is recorded
             return crawlTracked(company, trigger);
+        } finally {
+            crawling.remove(company.slug());
         }
     }
 
