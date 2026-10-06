@@ -9,8 +9,8 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
-**State (2026-10-06):** M0-M8 DONE and committed (`ae7e2cc` M8); M8a (saved profiles) BUILT AND TESTED LIVE by Claude
-(user said: do 8a yourself, no paste), NOT committed yet; DB already at V16 (applied by Claude's test instance on port
+**State (2026-10-06):** M0-M8 DONE and committed (`ae7e2cc` M8); M8a (saved profiles) DONE: built by Claude
+(user said: do 8a yourself, no paste), user's end-to-end test passed, committed as 91341be; DB already at V16 (applied by Claude's test instance on port
 8081). The user's IntelliJ app on 8080 still runs the OLD code: restart it to get profiles. Commits: ... `1497473` M6, `86df413` M7 (Workday, rules v8), `75e6566` M7b (Eightfold,
 6 more Workday companies, rules v9-v10, family_guessed). Data: 2,340 open India jobs from 29 companies on 6 platforms
 (Greenhouse, Lever, SmartRecruiters, Ashby, Workday, Eightfold); extractor v10; guessed and UNCLASSIFIED families 0.
@@ -26,7 +26,7 @@ Full detail of everything done: section 0c. Plain-language history: section 0b.
    (searches.low_priority_from), edits to JobTools, JudgeProfile, JobJudge, application.yaml, JobToolsTest,
    JobJudgeTest, CLAUDE.md. Ask before committing (the user usually says yes). `.m8-wip/` (git-ignored) can be deleted
    after the commit.
-2. M8a SAVED PROFILES: BUILT 2026-10-06 (see "### M8a status"); next: commit (ask), user restarts the app.
+2. DONE: M8a saved profiles, committed 91341be after the user's end-to-end test.
 3. Real end-to-end demo through Claude in `~/job-search` (match_jobs with wants + families, more_jobs, export_jobs).
 4. Microsoft crawl (see TODO MICROSOFT in M7b status): one test request first; it rate-limited us on 2026-10-06.
 
@@ -167,7 +167,7 @@ stale (store an as-of date and add elapsed time), deleting a profile on request.
 | 6 | Opus extraction-gap filler (status below) | DONE 2026-10-05 (all 145 gap jobs, $3.48) |
 | 7 | Workday adapter (then Eightfold, Oracle) with the generalization check (design below) | Workday + Eightfold DONE (86df413, 75e6566); Microsoft not crawled yet; Oracle later |
 | 8 | Search with the Opus judge: first batch fast, background judging, `more_jobs`, export (design below) = the END-TO-END DEMO | DONE (ae7e2cc); tiers; demo via Claude pending |
-| 8a | Saved profiles / profile IDs (user's idea 2026-10-06; see "### M8a status") | BUILT + live-tested 2026-10-06, not committed |
+| 8a | Saved profiles / profile IDs (user's idea 2026-10-06; see "### M8a status") | DONE (91341be), user-tested |
 | 8b | Self-learning skill dictionary (user's idea 2026-10-05, design below; suggested placement: after M8, user to confirm) | planned |
 | 9 | Operations: scheduler (per-host virtual threads), change tracking + closed jobs, dedup, health alerts, SmartRecruiters incremental details | planned |
 | 10 | Custom adapters by value: Amazon, IBM, Cisco, Google, Apple, then the rest (section 3) | planned |
