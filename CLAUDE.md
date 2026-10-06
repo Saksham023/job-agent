@@ -236,11 +236,14 @@ Built by Claude: .github/workflows/deploy.yml (triggers: push to main + manual o
 ubuntu-latest = JDK 21 tests + jar + web UI build + artifact `release`; job `deploy` on the self-hosted runner of the Air
 (labels self-hosted, macOS, ARM64) downloads it and runs deploy/deploy.sh) and deploy/deploy.sh (keeps jobagent.jar.prev,
 swaps jar + rsync --checksum --delete of web/, launchctl kickstart, waits for actuator health UP, rolls back on failure).
-Script tested with stubs (success, rollback, missing release, same-timestamp UI file). The workflow itself is untested
-until the runner exists. USER STEPS: register the runner on the Air (repo Settings > Actions > Runners > New self-hosted
-runner > macOS ARM64; commands from that page; `./svc.sh install && ./svc.sh start`), set Settings > Actions > General >
-fork PR workflows to require approval, then Actions > deploy > Run workflow. No secrets needed in GitHub (the env file
-with the key and token already lives on the Air).
+Script tested with stubs (success, rollback, missing release, same-timestamp UI file).
+DONE 2026-10-07: runner registered on the Air (name jobserver, labels self-hosted/macOS/ARM64, folder ~/actions-runner,
+installed as a launchd agent with ./svc.sh install + start: runs while the user is logged in, like the app). First run:
+`build` job green on GitHub (1m 13s with actions checkout v7, setup-java v6, setup-node v7, upload-artifact v7,
+download-artifact v8), `deploy` job on the Air green in 1m 18s ("Deployed: the app is healthy"; launchctl kickstart
+worked). Concurrency group "deploy" makes a second push wait for the first run (cancel the stale one if it blocks).
+Optional: pin ubuntu-latest to ubuntu-24.04 (GitHub moves the label to Ubuntu 26 on 2026-10-19). Fork-PR approval
+setting for a public repo: user to confirm. Every push to main now deploys by itself.
 Funnel DNS status 2026-10-07: https://jobserver.tail8cf172.ts.net/ Funnel on, Air has funnel/https capabilities, but
 public DNS (8.8.8.8, 1.1.1.1) answers NOERROR with no A/AAAA records yet; stopgap idea: Cloudflare quick tunnel (asks first).
 
