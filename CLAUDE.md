@@ -9,6 +9,45 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
+### >>> NEXT SESSION: MORNING CHECKLIST (written 2026-10-07 ~03:30 IST, end of a long session) <<<
+WHERE THINGS STAND: everything is deployed on the Air (MacBook Air M1 server, https://jobserver.tail8cf172.ts.net/ public via
+Tailscale Funnel; push to main = test + build on GitHub + deploy by the self-hosted runner with a graceful stop and rollback).
+Repo: `origin/main` = local main (72d6e58); the ONLY local change is CLAUDE.md (decisions + backlog notes, UNCOMMITTED on
+purpose: do not push while the Microsoft crawl runs, every deploy interrupts it; it would resume, but costs time). 318 unit tests.
+Schedulers are ON (crawl 00/06/12/18 IST, skill learning 03:30). Microsoft enabled, first full crawl started by the user by
+hand at ~03:00-03:30 IST (page by page, ~15 s per request, throttled; expected 1.5-2 h; resumes the 38 jobs saved earlier).
+Qualcomm re-enabled (its first scheduled crawl: the 00:00 slot of 2026-10-08, because of minCrawlHours 24).
+WHAT TO CHECK FIRST (ask the user to paste the outputs):
+ 1. Microsoft: `grep -E "microsoft: crawl finished|microsoft: crawl interrupted|HEALTH" ~/jobagent/logs/app.log | tail -5`, then
+    the job count (`SELECT c.slug, count(*) FILTER (WHERE j.closed_at IS NULL) AS open_jobs, count(j.description) AS with_description
+    FROM jobs j JOIN companies c ON c.id = j.company_id WHERE c.slug IN ('microsoft','qualcomm') GROUP BY c.slug;`). Expect ~248 jobs
+    with descriptions. If it ended PARTIAL/FAILED (blocked): just start it again, it reuses what is saved.
+ 2. The first SCHEDULED runs: `grep -E "Skill learning run|Skill review done|Crawl run \(schedule\)|Crawl job \(schedule\)|Gap fill for company|already being crawled" ~/jobagent/logs/app.log | tail -12`.
+    The 03:30 skill learning and the 06:00 crawl. The 06:00 run is the FIRST REAL RUN of the per-company gap fill (only unit-tested
+    so far): look for "Gap fill for company N started". With Microsoft still running at 06:00, "microsoft: already being crawled, not
+    started again" is the expected log line (the in-progress guard).
+ 3. `GET /admin/health` (header X-API-Key) for every company's status and alerts.
+ 4. Microsoft's jobs have NO Opus gap fill yet when the crawl was started with POST /admin/crawl/microsoft (that endpoint skips it); the
+    next full run's final catch-all (or `POST /admin/requirements/fill-gaps`) does it.
+THEN, in this order (user's plan): (a) commit CLAUDE.md after the Microsoft crawl is done; (b) refresh the README numbers (jobs, companies,
+crawl time) now that Microsoft is in; (c) start the LOGIN SYSTEM (backlog item below); (d) the server stats DASHBOARD (see NEW REQUESTS below). Logos were dropped.
+COMPANY LOGOS: TRIED AND DROPPED 2026-10-07 (user: "not worth wasting so much time", everything deleted, nothing was pushed; the UI keeps the
+gradient monograms). What took the time, in case it ever comes back: favicons are 16-48 px and blur when enlarged; logos with their own coloured
+background must fill the tile (rounded corners only) while symbols and wordmarks need a white tile; wordmarks are unreadable at 28-44 px; useful
+sources were Simple Icons (vector, but Amazon/Microsoft/Adobe/Salesforce are missing), Wikidata P8972/P154 files from Wikimedia Commons (vectors)
+and the sites' JSON-LD logo. Do NOT restart this unasked.
+NEW REQUESTS 2026-10-07 (user, after dropping the logos): (1) a DASHBOARD with the stats of the server machine (memory, CPU, ...); (2) how to
+free memory on the Air: macOS idles at 4-5 GB there and the user no longer uses that laptop for anything else. Advice given: look at what really
+uses the memory (`memory_pressure`, `vm_stat`, `top -l 1 -o mem`), turn off Apple Intelligence/Siri, Spotlight indexing, visual effects, unused
+login items; file cache and compressed memory are normal; judge by memory pressure and swap, not by "used". Dashboard design proposed (see the
+reply): GET /admin/system (key-protected: CPU, memory from vm_stat, swap, disk, load, uptime, JVM heap/threads, DB pool, crawls running) + a small
+static page that asks for the API key; wait for the user's go-ahead.
+BACKLOG (all notes in the sections below): login system (JWT, USER/ADMIN roles, admin APIs in the UI, replaces the API key), nightly pg_dump
+backup, README refresh, parked ideas (dedup, similar jobs, more careers sites, ranking tweaks, digests/tracker/outreach, cheaper judge).
+Standing rules unchanged: no em-dashes, short answers with examples, ask before downloads, never push (the user pushes), the user pastes
+live-test outputs, never put the API key or the Claude token in chat/code/git.
+
+(OLD state paragraph from 2026-10-06, kept for history; the real current state is in the checklist above)
 **State (2026-10-06):** M0-M8 DONE and committed (`ae7e2cc` M8); M8a (saved profiles) DONE: built by Claude
 (user said: do 8a yourself, no paste), user's end-to-end test passed, committed as 91341be; DB already at V16 (applied by Claude's test instance on port
 8081). The user's IntelliJ app on 8080 still runs the OLD code: restart it to get profiles. Commits: ... `1497473` M6, `86df413` M7 (Workday, rules v8), `75e6566` M7b (Eightfold,
@@ -305,12 +344,21 @@ GRACEFUL SHUTDOWN + PER-COMPANY GAP FILL (2026-10-07, user asked for both; built
   NOTE: POST /admin/crawl/{slug} (one company) does NOT run the gap fill; the Opus gap fill for Microsoft then comes from the
   next full run (its final catch-all) or `POST /admin/requirements/fill-gaps`. Per-company gap fill after a full run is only
   unit-tested so far: watch the 06:00 scheduled run for "Gap fill for company ... started".
-- OPEN (2026-10-07): finish the Microsoft crawl (consider delayMs 15000, detailDepartments, weekly cadence afterwards); decide
-  Qualcomm (enabled=false); check the first scheduled runs (skill learning 03:30, crawl 06:00); nightly pg_dump backup on the Air
-  (the Air DB is the only live copy; not built); refresh the README numbers after Microsoft; optional: MCP from outside home via
-  https://jobserver.tail8cf172.ts.net/mcp with the key header. Parked ideas: dedup, similar jobs, more careers sites
-  (IBM, Cisco, Google, Apple, Morgan Stanley/UKG), ranking tweaks, digests/tracker/outreach, cheaper judge via the API.
-- Per-company gap fill: GapFillRunner.fillCompany(companyId, model, parallelism) (blocking, own Run, does not touch
+- USER'S DECISIONS 2026-10-07 (after the live tests): Qualcomm RE-ENABLED (its first scheduled crawl is the 00:00 slot of
+  2026-10-08, because its last crawl started 2026-10-06 14:09 UTC and minCrawlHours is 24); nightly pg_dump backup = BACKLOG, not
+  needed now ("test project"); README numbers get refreshed on 2026-10-08, after the Microsoft crawl is complete; MCP from outside
+  home: the user tests it themselves (do not remind); schedulers are ON (crawl 00/06/12/18, skills 03:30). Microsoft crawl
+  restarted by the user after the push (do NOT push while it runs: every deploy interrupts it; it then resumes by itself).
+  STILL TO WATCH: the first scheduled runs (03:30 skills, 06:00 crawl with the per-company gap fill, only unit-tested so far),
+  and POST /admin/crawl/{slug} does not run the gap fill.
+- BACKLOG ITEM (user, 2026-10-07, "not now, tomorrow"): LOGIN SYSTEM replacing the API key as the way into the admin side. Users
+  create an account and sign in; two roles, USER and ADMIN; JWTs; an admin sees admin controls IN THE WEB UI (start a crawl, gap
+  fill, skill learning, health, etc.: every /admin API exposed through the UI) and the admin endpoints are blocked for everyone
+  else, so no terminal curl is needed any more. Open design points to settle when it is started: users table + password hashing
+  (BCrypt/Argon2), Spring Security + JWT (expiry, refresh), how the first admin is created, sign-up abuse on a public site (rate
+  limit, maybe email verification), whether the API key stays for scripts and the MCP connection (the MCP client needs a header
+  token), CORS is not an issue (UI and API share one origin), and the /api/v1 job board stays public.
+- Per-company gap fill: GapFillRunner.fillCompany- Per-company gap fill: GapFillRunner.fillCompany(companyId, model, parallelism) (blocking, own Run, does not touch
   start()/status()), GapFillRepository.findJobsWithGaps(country, families, companyId); CrawlRunService.runAll queues each
   company's fill (only when it inserted/updated jobs) on ONE single-worker queue, so at most gapFillParallelism Opus calls run at
   once; it starts the moment that company's crawl ends. crawlJob then still runs the old global gap fill once as a catch-all and
