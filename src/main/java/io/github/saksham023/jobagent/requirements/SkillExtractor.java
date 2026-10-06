@@ -50,19 +50,48 @@ public class SkillExtractor {
 
     private record Alias(String skill, Category category, String word, Pattern pattern, boolean ambiguous) {}
 
+    /** A skill spelling learned from job postings (table learned_skills), used on top of skills.csv. */
+    public record LearnedSkill(String skill, Category category, String alias, boolean ambiguous) {
+    }
+
+    /** The whole dictionary at one moment; replaced in one step when learned skills change. */
+    private record Dictionary(List<Alias> aliases, Map<String, SkillName> skillsByName) {
+    }
+
     private record Found(String skill, Category category, int start) {}
 
     /** "in Go", "with Spring", "using Excel": the word right before an ambiguous alias that makes it a name. */
     private static final Pattern NAME_CONTEXT = Pattern.compile("(?i)\\b(?:in|with|using)\\s+$");
 
-    private final List<Alias> aliases;
-    private final Map<String, SkillName> skillsByName;
+    private final List<Alias> seed;
+    private volatile Dictionary dictionary;
 
     public SkillExtractor() {
-        this.aliases = load("classify/skills.csv");
-        this.skillsByName = indexByName(aliases);
+        this.seed = load("classify/skills.csv");
+        this.dictionary = new Dictionary(seed, indexByName(seed));
         log.info("Skill dictionary loaded: {} skills, {} aliases",
-                aliases.stream().map(Alias::skill).distinct().count(), aliases.size());
+                seed.stream().map(Alias::skill).distinct().count(), seed.size());
+    }
+
+    /**
+     * Uses these learned spellings on top of skills.csv from now on (replacing the previous learned set). The CSV
+     * always wins: a learned spelling that already names a CSV skill is ignored.
+     */
+    public void useLearned(List<LearnedSkill> learned) {
+        Map<String, SkillName> seedNames = indexByName(seed);
+        List<Alias> all = new ArrayList<>(seed);
+        int used = 0;
+        for (LearnedSkill skill : learned) {
+            SkillName existing = seedNames.get(nameKey(skill.alias()));
+            if (existing != null && !existing.skill().equals(skill.skill())) {
+                continue;
+            }
+            all.add(alias(skill.skill(), skill.category(), skill.alias(), skill.ambiguous()));
+            used++;
+        }
+        this.dictionary = new Dictionary(List.copyOf(all), indexByName(all));
+        log.info("Skill dictionary: {} learned spellings on top of skills.csv ({} skills in total)", used,
+                all.stream().map(Alias::skill).distinct().count());
     }
 
     /**
@@ -121,12 +150,17 @@ public class SkillExtractor {
      * "Spring". Unlike text scanning, ambiguous names count here (in a skill list "go" means the language).
      */
     public Optional<SkillName> canonical(String name) {
-        return name == null ? Optional.empty() : Optional.ofNullable(skillsByName.get(nameKey(name)));
+        return name == null ? Optional.empty() : Optional.ofNullable(dictionary.skillsByName().get(nameKey(name)));
     }
 
     /** Every canonical skill name of one category, in dictionary order ("Java", "Python", "Go"...). */
     public List<String> canonicalNames(Category category) {
-        return aliases.stream().filter(a -> a.category() == category).map(Alias::skill).distinct().toList();
+        return dictionary.aliases().stream().filter(a -> a.category() == category).map(Alias::skill).distinct().toList();
+    }
+
+    /** Every canonical skill name, in dictionary order (the CSV first, then learned ones). */
+    public List<String> allCanonicalNames() {
+        return dictionary.aliases().stream().map(Alias::skill).distinct().toList();
     }
 
     // ---------------------------------------------------------------- matching
@@ -138,7 +172,7 @@ public class SkillExtractor {
         }
         List<Found> clear = new ArrayList<>();
         List<Found> ambiguous = new ArrayList<>();
-        for (Alias alias : aliases) {
+        for (Alias alias : dictionary.aliases()) {
             if (normalize(alias.skill()).equals(company)) {
                 continue;                                               // a company's own product
             }
@@ -198,13 +232,16 @@ public class SkillExtractor {
                     continue;
                 }
                 boolean ambiguous = alias.startsWith("~");
-                String word = ambiguous ? alias.substring(1) : alias;
-                // a slash separates skills ("Python/Java", "Java/Go"), so it is not part of the guards
-                String regex = "(?<![\\w+#.-])" + Pattern.quote(word) + (ambiguous ? "(?![\\w+#&-])" : "(?![\\w+#])");
-                Pattern pattern = ambiguous ? Pattern.compile(regex) : Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
-                aliases.add(new Alias(skill, category, word, pattern, ambiguous));
+                aliases.add(alias(skill, category, ambiguous ? alias.substring(1) : alias, ambiguous));
             }
         }
         return List.copyOf(aliases);
+    }
+
+    private static Alias alias(String skill, Category category, String word, boolean ambiguous) {
+        // a slash separates skills ("Python/Java", "Java/Go"), so it is not part of the guards
+        String regex = "(?<![\\w+#.-])" + Pattern.quote(word) + (ambiguous ? "(?![\\w+#&-])" : "(?![\\w+#])");
+        Pattern pattern = ambiguous ? Pattern.compile(regex) : Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
+        return new Alias(skill, category, word, pattern, ambiguous);
     }
 }

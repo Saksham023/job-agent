@@ -165,7 +165,7 @@ stale (store an as-of date and add elapsed time), deleting a profile on request.
 | 2 | Oracle Recruiting Cloud adapter (JPMorgan, Goldman, TI, Amex, Oracle; ~600 jobs): same check | DONE (Oracle itself skipped) |
 | 3 | Scheduler (per-host virtual threads) + closed jobs + health checks/alerts (core of M9) | NEXT: design agreed, building (see plan) |
 | 4 | Embeddings TEST | DONE 2026-10-06: NO gain for ranking, not adopted (eval/embeddings/REPORT.md) |
-| 5 | 8b self-learning skill dictionary (strong resume story) | later |
+| 5 | 8b self-learning skill dictionary (strong resume story) | DONE (scheduler off by default) |
 | 6 | README with measured numbers, then the user pushes the repo | last |
 DROPPED (user, 2026-10-06): a per-profile "seen jobs" list / "new since last search" flag (NOT even backlog); new jobs
 are already ranked in by every new search (rule score order, only new jobs judged) and that is the wanted behaviour.
@@ -362,6 +362,51 @@ rule score without tiers 50. DECISION: embeddings NOT added to ranking (tiers ca
 "similar jobs" in the web UI. For the resume profile ~20% of the unreached candidates are APPLY (many Amazon SDE).
 Labeling trick used: a searches row whose candidate_ids are exactly the jobs to judge, then GET /admin/search/{id}/more on
 an instance with huge ready-target/stop-after-nos judges them all (rows kept; harmless).
+
+### Self-learning skill dictionary plan (final plan item 5; user 2026-10-06: "create the plan, then implement and test
+end to end"; Claude writes ALL the code, like the web UI)
+Problem: skills.csv is hand-made; real skills missing today (probe on 5,300 jobs): Lambda, ECS, RDS, EMR, Glue, Athena,
+API Gateway, Dynatrace, New Relic, Alteryx, Artifactory, SAML, DHCP, SharePoint, SAS, tool calling... Code cannot tell a
+skill from a word, so: code finds CANDIDATES, Opus DECIDES, code CHECKS and APPLIES.
+1. Mine (code, free): in non-intro posting lines, lists (comma / slash / "and" / "or" / parentheses, after cues like
+   "such as", "experience with") that already contain >= 2 KNOWN skills; their other items are candidates. Slash words
+   that are known as a whole stay whole (CI/CD, TCP/IP, PL/SQL). Drop items too long, without letters, company names,
+   cities, a small generic stoplist. Keep per term: jobs, distinct companies, up to 5 example sentences from different
+   companies, first/last seen. Table skill_candidates (status NEW / NEW_SKILL / ALIAS / REJECTED + the decision).
+2. Review (Opus, ~$1): terms seen at >= 3 companies, 20 per call; Opus gets our categories, every existing canonical
+   name and each term's sentences; answers per term NOT_A_SKILL / ALIAS (of an existing skill) / NEW_SKILL (name,
+   category, spellings, ambiguous flag) + reason. Every decision is stored, so a term is never asked twice (unless it
+   is re-opened).
+3. Check (code): ALIAS target must exist; NEW_SKILL category valid, name not already a skill (else alias); every
+   spelling must occur in the term's sentences and must not belong to another skill. Failing answers are stored as
+   rejected with the reason.
+4. Apply: learned_skills table (canonical, category, alias, ambiguous, active, source term) loaded by SkillExtractor ON
+   TOP of skills.csv (the CSV is never edited; undo = deactivate); the dictionary is swapped atomically; only jobs whose
+   text contains a new spelling are re-extracted (rebuild of just those).
+5. Admin endpoints /admin/skills/{mine,candidates,review,apply,learned,undo}; tests; live end-to-end run with numbers
+   (skills added, jobs gaining skills, unknown resume skills now recognized). Later: run monthly after crawls.
+STATUS 2026-10-06: BUILT by Claude and tested end to end (270 unit tests; live on the real DB). Code: V21
+(skill_candidates, learned_skills), package `skills` (SkillMiner: lists with >= 2 known skills, NOT_FIRST / NOT_LAST /
+NOT_ALONE word lists, known slash terms kept whole; SkillReviewer: prompt + JSON schema + checks; SkillLearningRepository;
+SkillLearningService: mine / review / apply / undo, loads learned spellings at startup; SkillLearningController), and
+SkillExtractor.useLearned (atomic Dictionary snapshot, the CSV always wins, allCanonicalNames). Re-extraction marks only
+jobs mentioning a new spelling as a WHOLE word (Postgres regex; a substring filter re-extracted 5,296 jobs on the first
+apply). LIVE RUN: mine 6 s over 5,300 jobs -> 3,377 terms, 254 at 3+ companies; Opus review 13 calls $1.44 -> 121 new
+skills, 39 aliases, 94 rejected (all sensible: generic words, fillers, job titles); apply -> 113 new skills, 197
+spellings (188 used: the CSV wins clashes), jobs with no recognized skill 1,375 -> 1,144, average skills per job 4.19 ->
+5.49, Dynatrace 0 -> 20 of 21 mentioning jobs; undo of "Artificial Intelligence" (accepted from "AI" in one batch while
+the term itself was rejected in another) -> 1,012 jobs -> 0. A second mining run finds ~40 more undecided terms (more
+known skills make more lists qualify); decided terms are never asked again.
+SIMPLIFIED (user 2026-10-06: "one endpoint, a scheduler, disabled by default"): SkillLearningService.learn() runs mine ->
+Opus review + checks -> apply in order; ONE endpoint POST /admin/skills/learn; @Scheduled daily 03:30 when
+jobagent.skills.learning.enabled (false by default; SkillLearningProperties: cron, min-companies 3, max-terms-per-run
+300 = cost cap, batch-size 20, parallelism 4, model opus). The mine/candidates/review/apply/learned/undo endpoints and
+undo were removed. Live run of /learn: 220 s, 109 words to Opus ($0.63): 48 new skills (Agile, LDAP, SMTP, IPv6, AWS
+Step Functions, Llama, ChatGPT, Cursor...), 14 other names, 47 rejected; 70 spellings; 2,861 jobs re-extracted.
+Totals after both runs: 195 learned skills (255 spellings); jobs with no skill 1,375 -> 964, avg skills 4.19 -> 5.80,
+Opus $2.07 total. Repeat runs: only status NEW words go to Opus (decided words never again; failed batches stay NEW
+and retry); mining rescans all open jobs each run on purpose (free, keeps the 3-company counts right). 270 tests.
+Committed.
 
 ### ROADMAP (agreed 2026-10-05; work strictly in this order, one milestone at a time)
 | # | Milestone | Status |
