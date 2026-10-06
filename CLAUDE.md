@@ -296,6 +296,20 @@ GRACEFUL SHUTDOWN + PER-COMPANY GAP FILL (2026-10-07, user asked for both; built
 - IN-PROGRESS GUARD (found while planning the live test): CrawlRunService.crawlOne refuses a company already being crawled
   ("already being crawled", no run row), because a run is recorded only when it ends and the next schedule slot would otherwise
   start a SECOND Microsoft crawl while a long one runs. 318 tests.
+- LIVE TESTS 2026-10-07 (Air, real Microsoft): crawl of 248 jobs page by page: ~12.6 s per description at pace 12 s, 3 throttles
+  in 6 min then pace at the 15 s cap with two 429s in a row; page 2 gave only 8 new jobs (list shifted by 2, duplicates skipped).
+  A push during the crawl: deploy log "Stopping com.jobagent.app (pid 8583): SIGTERM, up to 80 s", app log "crawl interrupted,
+  the app is shutting down; 38 of 248 jobs were saved" (38 = 30 saved + 8 flushed from the batch in hand), crawl_runs row PARTIAL
+  (kept 38, inserted 38, error "...CrawlStoppedException: interrupted"), DB: 38 Microsoft jobs, all with descriptions. The
+  graceful stop works end to end through the GitHub runner. Microsoft needs a restart of the crawl (it reuses the 38).
+  NOTE: POST /admin/crawl/{slug} (one company) does NOT run the gap fill; the Opus gap fill for Microsoft then comes from the
+  next full run (its final catch-all) or `POST /admin/requirements/fill-gaps`. Per-company gap fill after a full run is only
+  unit-tested so far: watch the 06:00 scheduled run for "Gap fill for company ... started".
+- OPEN (2026-10-07): finish the Microsoft crawl (consider delayMs 15000, detailDepartments, weekly cadence afterwards); decide
+  Qualcomm (enabled=false); check the first scheduled runs (skill learning 03:30, crawl 06:00); nightly pg_dump backup on the Air
+  (the Air DB is the only live copy; not built); refresh the README numbers after Microsoft; optional: MCP from outside home via
+  https://jobserver.tail8cf172.ts.net/mcp with the key header. Parked ideas: dedup, similar jobs, more careers sites
+  (IBM, Cisco, Google, Apple, Morgan Stanley/UKG), ranking tweaks, digests/tracker/outreach, cheaper judge via the API.
 - Per-company gap fill: GapFillRunner.fillCompany(companyId, model, parallelism) (blocking, own Run, does not touch
   start()/status()), GapFillRepository.findJobsWithGaps(country, families, companyId); CrawlRunService.runAll queues each
   company's fill (only when it inserted/updated jobs) on ONE single-worker queue, so at most gapFillParallelism Opus calls run at
