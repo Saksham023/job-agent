@@ -13,7 +13,7 @@ import java.util.List;
  */
 public final class CrawlHealth {
 
-    public enum Status { OK, SUSPECT, FAILED }
+    public enum Status { OK, SUSPECT, FAILED, PARTIAL }
 
     /** The verdict: a status and the alerts that explain it (empty when all is well). */
     public record Verdict(Status status, List<String> alerts) {

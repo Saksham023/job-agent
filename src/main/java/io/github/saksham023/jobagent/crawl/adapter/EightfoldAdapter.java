@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
@@ -42,6 +43,7 @@ import static io.github.saksham023.jobagent.crawl.adapter.JsonFields.value;
  * Optional config.detailDepartments (a regex, case-insensitive) limits the detail requests to jobs whose department
  * matches; every other job is still saved from the list (title, department, location, date), just without a
  * description. It is data, not code: change it per company in companies.config.
+ * Optional config.saveEvery (default 10): the crawl saves its jobs and logs its progress after this many jobs.
  * Optional config.maxDetailsPerCrawl caps the detail requests of one crawl (for a first load of a company that
  * throttles): the remaining jobs are saved from the list (or with their older stored detail) and, having no
  * description, are fetched by the next crawl. A detail that cannot be fetched also keeps an older stored one.
@@ -57,6 +59,7 @@ public class EightfoldAdapter implements JobBoardAdapter {
     static final Duration MAX_DELAY = Duration.ofSeconds(15);
     static final Duration COOL_DOWN = Duration.ofSeconds(10);              // x the signals in a row, before the retry
     static final int MAX_THROTTLED_TRIES = 5;
+    static final int MAX_FAILED_DETAILS_IN_A_ROW = 3;                      // then the crawl stops: the site is blocking us
 
     /**
      * The pause between requests for ONE crawl: starts at the config delay and only grows (by SLOW_DOWN_STEP per
@@ -102,47 +105,109 @@ public class EightfoldAdapter implements JobBoardAdapter {
         return EightfoldConfig.from(company).host();
     }
 
+    /** Everything at once (preview, tests): the batches of the streaming crawl collected into one list. */
     @Override
     public List<RawJob> fetchJobs(Company company) {
+        List<RawJob> all = new ArrayList<>();
+        all.addAll(fetchJobs(company, all::addAll));
+        return all;
+    }
+
+    /**
+     * The crawl. Every config.saveEvery jobs (default 10) the finished jobs go to the sink (the crawl service saves
+     * them at once) and a progress line is logged; a debug line per job gives each job's own timestamp. Returns
+     * nothing at the end: every job has been passed to the sink. If MAX_FAILED_DETAILS_IN_A_ROW detail requests in a
+     * row fail, the jobs so far are passed on and the crawl stops with an error (the site is blocking us; the next
+     * crawl continues from what was saved).
+     */
+    @Override
+    public List<RawJob> fetchJobs(Company company, Consumer<List<RawJob>> sink) {
         EightfoldConfig config = EightfoldConfig.from(company);
         Pace pace = new Pace(config.delay());
         DetailCache.Known known = detailCache.load(company.id());
-        List<RawJob> jobs = new ArrayList<>();
-        int listOnly = 0;
-        int fetched = 0;
-        int deferred = 0;
-        for (JsonNode summary : listPositions(company, config, pace)) {
+        long start = System.nanoTime();
+        log.info("{}: crawl started; one request every {} s at first, saving and logging every {} jobs{}", company.slug(),
+                config.delay().toMillis() / 1000.0, config.saveEvery(), config.maxDetailsPerCrawl() == null ? ""
+                        : ", at most " + config.maxDetailsPerCrawl() + " descriptions this crawl");
+
+        List<JsonNode> summaries = listPositions(company, config, pace);
+        log.info("{}: {} jobs listed in {}; now the descriptions", company.slug(), summaries.size(), since(start));
+
+        List<RawJob> batch = new ArrayList<>();
+        int done = 0, listOnly = 0, reused = 0, fetched = 0, deferred = 0, failedInARow = 0;
+        long batchStart = System.nanoTime();
+        for (JsonNode summary : summaries) {
             String id = text(summary, "id");
             String listHash = listHash(summary);
+            RawJob job;
+            boolean attempted = false;                              // a description request was made for this job
+            boolean detailFailed = false;
             if (!config.wantsDetail(text(summary, "department"))) {
                 listOnly++;
-                jobs.add(toRawJob(config, summary, null).withDetail(listHash, RawJob.DetailSource.NONE));
-                continue;
-            }
-            JsonNode stored = known.reusable(id, listHash);
-            if (stored != null) {
-                jobs.add(toRawJob(config, summary, stored).withDetail(listHash, RawJob.DetailSource.REUSED));
-                continue;
-            }
-            JsonNode detail = null;
-            if (config.maxDetailsPerCrawl() == null || fetched < config.maxDetailsPerCrawl()) {
-                fetched++;
-                detail = fetchDetail(company, config, pace, id);
+                job = toRawJob(config, summary, null).withDetail(listHash, RawJob.DetailSource.NONE);
             } else {
-                deferred++;                                         // the next crawl fetches it
+                JsonNode stored = known.reusable(id, listHash);
+                if (stored != null) {
+                    reused++;
+                    job = toRawJob(config, summary, stored).withDetail(listHash, RawJob.DetailSource.REUSED);
+                } else {
+                    JsonNode detail = null;
+                    if (config.maxDetailsPerCrawl() == null || fetched < config.maxDetailsPerCrawl()) {
+                        fetched++;
+                        attempted = true;
+                        long requestStart = System.nanoTime();
+                        detail = fetchDetail(company, config, pace, id);
+                        detailFailed = detail == null;
+                        log.debug("{}: job {} ({}/{}) {} in {} s", company.slug(), id, done + 1, summaries.size(),
+                                detail == null ? "NO DESCRIPTION" : "description fetched",
+                                (System.nanoTime() - requestStart) / 1_000_000_000.0);
+                    } else {
+                        deferred++;                                     // the next crawl fetches it
+                    }
+                    if (detail != null) {
+                        job = toRawJob(config, summary, detail).withDetail(listHash, RawJob.DetailSource.FETCHED);
+                    } else {                                            // keep an older detail rather than none
+                        JsonNode older = known.anyAge(id);
+                        job = toRawJob(config, summary, older).withDetail(listHash,
+                                older == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.REUSED);
+                    }
+                }
             }
-            if (detail != null) {
-                jobs.add(toRawJob(config, summary, detail).withDetail(listHash, RawJob.DetailSource.FETCHED));
-            } else {                                                // keep an older detail rather than none
-                JsonNode older = known.anyAge(id);
-                jobs.add(toRawJob(config, summary, older).withDetail(listHash,
-                        older == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.REUSED));
+            batch.add(job);
+            done++;
+            if (attempted) {
+                failedInARow = detailFailed ? failedInARow + 1 : 0;
+            }
+
+            boolean blocked = failedInARow >= MAX_FAILED_DETAILS_IN_A_ROW;
+            if (batch.size() >= config.saveEvery() || blocked) {
+                sink.accept(List.copyOf(batch));
+                log.info("{}: {}/{} jobs saved ({} descriptions fetched, {} reused, {} list only, {} left for the next crawl); "
+                                + "last {} took {}; {} since the crawl started; one request every {} s",
+                        company.slug(), done, summaries.size(), fetched, reused, listOnly, deferred, batch.size(),
+                        since(batchStart), since(start), pace.delay().toMillis() / 1000.0);
+                batch.clear();
+                batchStart = System.nanoTime();
+            }
+            if (blocked) {
+                throw new IllegalStateException(company.slug() + ": " + failedInARow + " description requests in a row "
+                        + "failed, the site seems to be blocking us; stopping, the next crawl continues (" + done + " of "
+                        + summaries.size() + " jobs were saved)");
             }
         }
-        log.info("{}: {} jobs, {} saved without a detail (detailDepartments), {} details left for the next crawl "
-                        + "(maxDetailsPerCrawl); crawl finished at one request every {} s",
-                company.slug(), jobs.size(), listOnly, deferred, pace.delay().toMillis() / 1000.0);
-        return jobs;
+        if (!batch.isEmpty()) {
+            sink.accept(List.copyOf(batch));
+        }
+        log.info("{}: crawl finished: {} jobs in {} ({} descriptions fetched, {} reused, {} list only, {} left for the next "
+                        + "crawl); one request every {} s at the end", company.slug(), done, since(start), fetched, reused,
+                listOnly, deferred, pace.delay().toMillis() / 1000.0);
+        return List.of();
+    }
+
+    /** "5 min 12 s" for the time since the given System.nanoTime(). */
+    private static String since(long startNanos) {
+        long seconds = (System.nanoTime() - startNanos) / 1_000_000_000;
+        return seconds >= 60 ? seconds / 60 + " min " + seconds % 60 + " s" : seconds + " s";
     }
 
     // ---------------------------------------------------------------- requests
@@ -156,7 +221,10 @@ public class EightfoldAdapter implements JobBoardAdapter {
             JsonNode data = data(company, get(company, pace, uri));
             JsonNode items = data.path("positions");
             items.forEach(positions::add);
-            if (items.isEmpty() || positions.size() >= data.path("count").asInt()) {
+            int total = data.path("count").asInt();
+            log.info("{}: list page {} of {}: {} of {} jobs listed", company.slug(), page + 1, Math.max(1, (total + 9) / 10),
+                    positions.size(), total);
+            if (items.isEmpty() || positions.size() >= total) {
                 return positions;
             }
         }
@@ -297,7 +365,7 @@ public class EightfoldAdapter implements JobBoardAdapter {
      * detail request; absent = all).
      */
     record EightfoldConfig(String host, String domain, String location, Duration delay, Pattern detailDepartments,
-                           Integer maxDetailsPerCrawl) {
+                           Integer maxDetailsPerCrawl, int saveEvery) {
 
         static EightfoldConfig from(Company company) {
             String host = text(company.config(), "host");
@@ -309,10 +377,12 @@ public class EightfoldAdapter implements JobBoardAdapter {
             JsonNode delayMs = company.config().path("delayMs");
             String detailDepartments = text(company.config(), "detailDepartments");
             JsonNode maxDetails = company.config().path("maxDetailsPerCrawl");
+            JsonNode saveEvery = company.config().path("saveEvery");
             return new EightfoldConfig(host, domain, location != null ? location : "India",
                     Duration.ofMillis(delayMs.isNumber() ? delayMs.asLong() : 1000),
                     detailDepartments == null ? null : Pattern.compile(detailDepartments, Pattern.CASE_INSENSITIVE),
-                    maxDetails.isNumber() ? maxDetails.asInt() : null);
+                    maxDetails.isNumber() ? maxDetails.asInt() : null,
+                    saveEvery.isNumber() && saveEvery.asInt() >= 1 ? saveEvery.asInt() : 10);
         }
 
         /** True when every job gets a detail, or the department matches detailDepartments. */

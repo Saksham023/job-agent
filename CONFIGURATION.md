@@ -160,6 +160,7 @@ and reproducible, put the same `UPDATE` in a new Flyway migration (`src/main/res
 | Eightfold | `location` | no | `India` | location filter sent to the API |
 | Eightfold | `delayMs` | no | `1000` | starting pace per request (slows down by itself on throttling) |
 | Eightfold | `detailDepartments` | no | all | regex; only jobs whose department matches get a detail request, the rest are saved from the list |
+| Eightfold | `saveEvery` | no | `10` | the crawl saves its jobs and logs a progress line after this many jobs, so a crawl that stops part way keeps what it had; a debug line per job shows each job's own timestamp |
 | Eightfold | `maxDetailsPerCrawl` | no | no limit | at most this many detail requests per crawl; the rest are saved from the list (or keep an older stored detail) and fetched by the next crawls. For a gentle first load |
 | Oracle | `host`, `siteNumber` | yes | | e.g. `jpmc.fa.oraclecloud.com`, `CX_1001` |
 | Oracle | `country` | no | `India` | location facet entry looked up |
@@ -174,3 +175,11 @@ Not settings, but tuned by editing files (then `POST /admin/requirements/rebuild
 `src/main/resources/classify/*.csv` (skills, title and department families, keywords, skill implications) and
 `src/main/resources/geo/*.csv` (countries, states, cities). Skills learned by the app live in the `learned_skills` table
 on top of `skills.csv` (the CSV wins on conflicts).
+
+## 4. Crawl results to know
+
+A company's crawl ends as one of: **OK** (complete, may close vanished jobs), **SUSPECT** (saved, but the count collapsed, nothing closed),
+**PARTIAL** (an Eightfold crawl that saved some jobs and then stopped, for example because the site kept blocking
+descriptions; the saved jobs stay, nothing is closed, the next crawl continues from them), **FAILED** (nothing saved).
+Eightfold crawls stop after 3 description requests in a row fail (the site is blocking us). If the app is restarted
+in the middle of a crawl (for example by a deploy), the jobs already saved stay too, but no run is recorded for it.

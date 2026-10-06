@@ -70,7 +70,7 @@ public class CrawlController {
     @PostMapping("/crawl")
     public CrawlJob crawlAll() {
         CrawlRunService.CrawlJobReport r = crawlRunService.crawlJob("manual");
-        return new CrawlJob(r.skipped(), r.ok(), r.suspect(), r.failed(), r.newJobs(), r.updatedJobs(), r.closedJobs(),
+        return new CrawlJob(r.skipped(), r.ok(), r.suspect(), r.failed(), r.partial(), r.newJobs(), r.updatedJobs(), r.closedJobs(),
                 r.jobsExtracted(), r.detailsFetched(), r.detailsReused(), r.gapFill(), r.note(), r.seconds(),
                 r.companies().stream().map(CompanyCrawl::of).toList());
     }
@@ -125,12 +125,12 @@ public class CrawlController {
     }
 
     /** The whole crawl job: totals, the gap fill's numbers (null when it did not run: see note), and every company. */
-    record CrawlJob(List<String> skipped, long companiesOk, long companiesSuspect, long companiesFailed, int newJobs, int updatedJobs,
+    record CrawlJob(List<String> skipped, long companiesOk, long companiesSuspect, long companiesFailed, long companiesPartial, int newJobs, int updatedJobs,
                     int closedJobs, int jobsExtracted, int detailsFetched, int detailsReused,
                     GapFillRunner.RunStatus gapFill, String note, long seconds, List<CompanyCrawl> companies) {
     }
 
-    /** One company's crawl: OK, SUSPECT (saved, nothing closed) or FAILED, with the health alerts and the numbers. */
+    /** One company's crawl: OK, SUSPECT (saved, nothing closed), PARTIAL (stopped part way, what was saved stays) or FAILED, with the health alerts and the numbers. */
     record CompanyCrawl(String company, String server, String status, List<String> alerts, String error,
                         CrawlReport report) {
         static CompanyCrawl of(CrawlRunService.RunOutcome o) {

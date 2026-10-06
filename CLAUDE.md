@@ -258,6 +258,20 @@ Microsoft is enabled=true on the Air, so the first scheduled crawl (00/06/12/18)
 Funnel DNS status 2026-10-07: https://jobserver.tail8cf172.ts.net/ Funnel on, Air has funnel/https capabilities, but
 public DNS (8.8.8.8, 1.1.1.1) answers NOERROR with no A/AAAA records yet; stopgap idea: Cloudflare quick tunnel (asks first).
 
+### Incremental saving + Eightfold progress logging (2026-10-07, user's request)
+Built by Claude, tests added (CrawlServiceTest 5, EightfoldAdapterTest +2): JobBoardAdapter.fetchJobs(company, sink) default =
+fetchJobs(company); EightfoldAdapter overrides it: every config.saveEvery (default 10) jobs the batch goes to the sink
+(CrawlService.Progress normalizes, saves in its own transaction, extracts requirements) and an INFO line is logged; INFO line
+per list page; DEBUG line per job with its own timing (debug is on for our package); a stop rule: 3 failed description requests
+in a row flush the batch and throw (site blocking us). CrawlService.run uses Progress for ALL adapters (quick adapters hand
+everything over once = same as before); a failure after something was saved throws PartialCrawlException (partial CrawlResult);
+CrawlRunService.crawlOne records it as status PARTIAL (new CrawlHealth.Status; V24 widens the crawl_runs CHECK; verified on the
+real DB in a rolled-back transaction; closes nothing; counted in CrawlJobReport.partial and /admin/crawl companiesPartial).
+A restart mid-crawl keeps the saved batches but records no run (nothing runs to write it).
+QUESTION ANSWERED for the user: the Opus gap fill runs only AFTER runAll (all companies) finishes, so a 3-hour Microsoft crawl
+delays the gap fill of every company (rules-based extraction already ran per company). Proposed fix (not built, user to decide):
+an interim gap fill after N minutes of a long run, then the final one at the end; or run it per company after its crawl.
+
 ### FINAL PLAN (user, 2026-10-06; project nearing its end: only these, in this order; nothing else deleted below)
 | Order | Item | Status |
 |---|---|---|

@@ -3,6 +3,7 @@ package io.github.saksham023.jobagent.crawl;
 import io.github.saksham023.jobagent.company.Company;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * One implementation per job-board platform (Greenhouse, Lever, Workday...).
@@ -25,6 +26,16 @@ public interface JobBoardAdapter {
      * @throws RuntimeException on HTTP or parse failures; the crawl service records the failure per company
      */
     List<RawJob> fetchJobs(Company company);
+
+    /**
+     * Like {@link #fetchJobs(Company)}, for adapters whose crawl is long (one request per job on a site that throttles):
+     * they pass finished jobs to the sink in batches while they go, so the crawl service can save them at once, and
+     * return only the jobs NOT yet passed (usually none). If the crawl then fails, what was passed is already saved.
+     * The default passes nothing and returns everything, which is right for every adapter that is quick.
+     */
+    default List<RawJob> fetchJobs(Company company, Consumer<List<RawJob>> sink) {
+        return fetchJobs(company);
+    }
 
     /**
      * The server this company's crawl talks to. Companies on the same server are crawled one after another (never

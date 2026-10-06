@@ -29,6 +29,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -39,7 +40,7 @@ class EightfoldAdapterTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final EightfoldConfig MICROSOFT =
-            new EightfoldConfig("apply.careers.microsoft.com", "microsoft.com", "India", Duration.ZERO, null, null);
+            new EightfoldConfig("apply.careers.microsoft.com", "microsoft.com", "India", Duration.ZERO, null, null, 10);
 
     private static JsonNode json(String text) {
         return JSON.readTree(text);
@@ -100,6 +101,7 @@ class EightfoldAdapterTest {
         assertThat(config.base()).isEqualTo("https://careers.qualcomm.com");
         assertThat(config.detailDepartments()).isNull();
         assertThat(config.maxDetailsPerCrawl()).isNull();
+        assertThat(config.saveEvery()).isEqualTo(10);
 
         assertThatThrownBy(() -> EightfoldConfig.from(company("{\"host\": \"careers.qualcomm.com\"}")))
                 .hasMessage("acme: config.host and config.domain are required");
@@ -132,6 +134,70 @@ class EightfoldAdapterTest {
                 tuple("1", "<p>A</p>", RawJob.DetailSource.FETCHED),
                 tuple("2", "<p>B</p>", RawJob.DetailSource.REUSED),        // too old to reuse normally, kept over nothing
                 tuple("3", null, RawJob.DetailSource.NONE));                // no description: the next crawl fetches it
+    }
+
+    private static String positions(int from, int to, int total) {
+        StringBuilder items = new StringBuilder();
+        for (int id = from; id <= to; id++) {
+            items.append(id > from ? "," : "").append("{\"id\": ").append(id)
+                    .append(", \"name\": \"Job ").append(id).append("\", \"locations\": [\"India\"], ")
+                    .append("\"standardizedLocations\": [\"IN\"]}");
+        }
+        return "{\"status\": 200, \"data\": {\"count\": " + total + ", \"positions\": [" + items + "]}}";
+    }
+
+    private static String detailOf(int id) {
+        return "{\"status\": 200, \"data\": {\"id\": " + id + ", \"name\": \"Job " + id
+                + "\", \"jobDescription\": \"<p>Description " + id + "</p>\"}}";
+    }
+
+    @Test
+    void jobsGoToTheSinkInBatchesWhileTheCrawlRuns() {
+        Company company = company("""
+                {"host": "apply.careers.microsoft.com", "domain": "microsoft.com", "delayMs": 0, "saveEvery": 2}""");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(containsString("/api/pcsx/search"))).andRespond(withSuccess(positions(1, 5, 5), MediaType.APPLICATION_JSON));
+        for (int id = 1; id <= 5; id++) {
+            server.expect(requestTo(containsString("position_id=" + id)))
+                    .andRespond(withSuccess(detailOf(id), MediaType.APPLICATION_JSON));
+        }
+        DetailCache cache = mock(DetailCache.class);
+        when(cache.load(1L)).thenReturn(DetailCache.Known.NONE);
+        List<List<String>> batches = new java.util.ArrayList<>();
+
+        List<RawJob> rest = new EightfoldAdapter(builder.build(), cache).fetchJobs(company,
+                batch -> batches.add(batch.stream().map(RawJob::externalId).toList()));
+
+        server.verify();
+        assertThat(batches).containsExactly(List.of("1", "2"), List.of("3", "4"), List.of("5"));
+        assertThat(rest).isEmpty();                                  // everything went to the sink
+    }
+
+    @Test
+    void theCrawlStopsAfterThreeFailedDescriptionsInARowButKeepsWhatItHas() {
+        Company company = company("""
+                {"host": "apply.careers.microsoft.com", "domain": "microsoft.com", "delayMs": 0}""");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(containsString("/api/pcsx/search"))).andRespond(withSuccess(positions(1, 6, 6), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=1"))).andRespond(withSuccess(detailOf(1), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=2"))).andRespond(withServerError());
+        server.expect(requestTo(containsString("position_id=3"))).andRespond(withSuccess(detailOf(3), MediaType.APPLICATION_JSON));  // resets the count
+        server.expect(requestTo(containsString("position_id=4"))).andRespond(withServerError());
+        server.expect(requestTo(containsString("position_id=5"))).andRespond(withServerError());
+        server.expect(requestTo(containsString("position_id=6"))).andRespond(withServerError());       // the third in a row
+        DetailCache cache = mock(DetailCache.class);
+        when(cache.load(1L)).thenReturn(DetailCache.Known.NONE);
+        List<RawJob> sunk = new java.util.ArrayList<>();
+
+        assertThatThrownBy(() -> new EightfoldAdapter(builder.build(), cache).fetchJobs(company, sunk::addAll))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("3 description requests in a row");
+
+        server.verify();
+        assertThat(sunk).extracting(RawJob::externalId).containsExactly("1", "2", "3", "4", "5", "6");   // saved before stopping
+        assertThat(sunk).extracting(RawJob::description).containsExactly("<p>Description 1</p>", null,
+                "<p>Description 3</p>", null, null, null);
     }
 
     @Test

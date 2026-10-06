@@ -50,7 +50,7 @@ public class CrawlRunService {
      * @param note    why the gap fill did not run, when it did not
      */
     public record CrawlJobReport(List<RunOutcome> companies, List<String> skipped, long ok, long suspect, long failed,
-                                 int newJobs,
+                                 long partial, int newJobs,
                                  int updatedJobs, int closedJobs, int jobsExtracted, int detailsFetched,
                                  int detailsReused, GapFillRunner.RunStatus gapFill, String note, long seconds) {
     }
@@ -119,14 +119,15 @@ public class CrawlRunService {
         }
         List<CrawlResult> results = outcomes.stream().map(RunOutcome::result).filter(Objects::nonNull).toList();
         CrawlJobReport report = new CrawlJobReport(outcomes, run.skipped(), count(outcomes, Status.OK), count(outcomes, Status.SUSPECT),
-                count(outcomes, Status.FAILED), results.stream().mapToInt(CrawlResult::inserted).sum(),
+                count(outcomes, Status.FAILED), count(outcomes, Status.PARTIAL),
+                results.stream().mapToInt(CrawlResult::inserted).sum(),
                 results.stream().mapToInt(CrawlResult::updated).sum(), outcomes.stream().mapToInt(RunOutcome::closed).sum(),
                 results.stream().mapToInt(CrawlResult::extracted).sum(),
                 results.stream().mapToInt(CrawlResult::detailsFetched).sum(),
                 results.stream().mapToInt(CrawlResult::detailsReused).sum(), gapFill, note,
                 (System.nanoTime() - start) / 1_000_000_000);
-        log.info("Crawl job ({}) finished in {} s: {} OK, {} suspect, {} failed; {} new, {} updated, {} closed; gap fill {}",
-                trigger, report.seconds(), report.ok(), report.suspect(), report.failed(), report.newJobs(),
+        log.info("Crawl job ({}) finished in {} s: {} OK, {} suspect, {} failed, {} partial; {} new, {} updated, {} closed; gap fill {}",
+                trigger, report.seconds(), report.ok(), report.suspect(), report.failed(), report.partial(), report.newJobs(),
                 report.updatedJobs(), report.closedJobs(), gapFill == null ? note
                         : gapFill.done() + " jobs, $" + String.format(Locale.ROOT, "%.2f", gapFill.costUsd()));
         return report;
@@ -166,9 +167,10 @@ public class CrawlRunService {
             }                                                       // close() waits for every server's thread
 
             List<RunOutcome> ordered = toCrawl.stream().map(c -> outcomes.get(c.slug())).toList();
-            log.info("Crawl run ({}) finished in {} s: {} OK, {} suspect, {} failed; {} new jobs, {} closed", trigger,
+            log.info("Crawl run ({}) finished in {} s: {} OK, {} suspect, {} failed, {} partial; {} new jobs, {} closed", trigger,
                     (System.nanoTime() - start) / 1_000_000_000,
                     count(ordered, Status.OK), count(ordered, Status.SUSPECT), count(ordered, Status.FAILED),
+                    count(ordered, Status.PARTIAL),
                     ordered.stream().filter(o -> o.result() != null).mapToInt(o -> o.result().inserted()).sum(),
                     ordered.stream().mapToInt(RunOutcome::closed).sum());
             return new Run(ordered, List.copyOf(skipped));
@@ -214,6 +216,17 @@ public class CrawlRunService {
                 log.info("{}: closed {} jobs no longer listed", company.slug(), closed);
             }
             return new RunOutcome(company.slug(), server, result, verdict.status(), verdict.alerts(), closed, null);
+        } catch (CrawlService.PartialCrawlException e) {
+            // some jobs were saved before the crawl stopped: they stay, the run is PARTIAL and closes nothing
+            CrawlResult partial = e.partial();
+            int noDescription = (int) partial.keptJobs().stream().filter(job -> job.description() == null).count();
+            List<String> alerts = List.of("partial: " + e.getMessage());
+            runs.insert(new CrawlRun(company.id(), trigger, partial.seenAt(), Instant.now(), Status.PARTIAL, partial.fetched(),
+                    partial.kept(), partial.inserted(), partial.updated(), partial.unchanged(), partial.unresolved(),
+                    noDescription, partial.detailsFetched(), partial.detailsReused(), alerts, e.getCause().toString(),
+                    partial.elapsedMs()));
+            log.warn("{}: HEALTH crawl PARTIAL: {}", company.slug(), e.getMessage());
+            return new RunOutcome(company.slug(), server, partial, Status.PARTIAL, alerts, 0, e.getCause().toString());
         } catch (RuntimeException e) {
             List<String> alerts = List.of("crawl failed: " + e.getMessage());
             long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
