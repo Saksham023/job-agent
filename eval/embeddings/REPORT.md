@@ -131,16 +131,9 @@ easily flip it.
 - The profile text and the job text were built one way (title + requirements, wants + skills). A different text
   or a larger model might do better, but the gap to beat is zero, so a large improvement would be needed to matter.
 
-## How to re-run
+## Code
 
-1. Have the app's classes compiled (`./mvnw compile`) and Postgres running.
-2. In `eval/embeddings/`: resolve the libraries (`mvn dependency:build-classpath -Dmdep.outputFile=cp.txt`),
-   compile with `javac -d out -cp "$(cat cp.txt):../../target/classes" src/main/java/lab/*.java`.
-3. `java -cp "out:$(cat cp.txt):../../target/classes" lab.Lab embed` (models in `~/.cache/job-agent/models/`),
-   then `lab.Lab rank <searchId>...` for the test searches.
-4. `python3 score.py pool <searchId>...` lists the jobs Opus still has to judge (`todo-*.txt`); judge them (the
-   experiment created one search per test set containing only those jobs and let the search worker judge it all),
-   then `python3 score.py score <searchId>...`.
-
-Test searches used: set 1 `35c89870-4473-4d78-bb80-d13938edef6c`, set 2 `0e60e802-dc87-4f67-8c2c-1c1dc3180766`,
-set 3 `2f27677e-913e-425a-8ca8-eaf53cb07cbf` (their verdicts are stored in the `judgments` table).
+The experiment code (embedding program, scoring script, rankings and pool files) was removed after the decision; it
+is in git history (commit f7939b6, folder eval/embeddings/). The downloaded models were deleted too. The Opus
+verdicts stay in the `judgments` table. Test searches: set 1 `35c89870-4473-4d78-bb80-d13938edef6c`, set 2
+`0e60e802-dc87-4f67-8c2c-1c1dc3180766`, set 3 `2f27677e-913e-425a-8ca8-eaf53cb07cbf`.

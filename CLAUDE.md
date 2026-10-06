@@ -353,7 +353,7 @@ UI: counts from /facets, options with 0 dimmed, companies sorted by live count (
 the current results. 257 tests.
 
 ### Embeddings experiment (2026-10-06, user: run it, use Opus as the truth, stay under $20, write a plain report)
-Result: eval/embeddings/REPORT.md (+ code: Lab.java/Embedder.java (ONNX Runtime + DJL tokenizer, mean/CLS pooling),
+Result: eval/embeddings/REPORT.md (code + models DELETED at the user request; code in git f7939b6: Lab.java/Embedder.java (ONNX Runtime + DJL tokenizer, mean/CLS pooling),
 score.py, rankings/pools/results JSON). Models in ~/.cache/job-agent/models (all-MiniLM-L6-v2 90 MB 17 ms/job,
 bge-small-en-v1.5 133 MB 65 ms/job). 3 test sets (resume p-p1nqs0fb 855 candidates, Milestone 5 profile 785, made-up ML
 engineer p-9tk1dew8 1,136), pooled labeling (top 50 of 18 orders + 40 random), 454 Opus judgments $12.77. "Opus checks
