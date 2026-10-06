@@ -19,7 +19,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("jobagent.search")
 public record SearchProperties(
         @DefaultValue("10") int firstBatch,
-        @DefaultValue("30") int readyTarget,
+        @DefaultValue("15") int readyTarget,
         @DefaultValue("20") int stopAfterNos,
         @DefaultValue("4") int parallelism,
         @DefaultValue("10") int pageSize,
@@ -34,7 +34,7 @@ public record SearchProperties(
 
     /** The defaults, for tests. */
     public static SearchProperties defaults() {
-        return new SearchProperties(10, 30, 20, 4, 10, 25, "opus");
+        return new SearchProperties(10, 15, 20, 4, 10, 25, "opus");
     }
 
     /** The requested page size, or the default, kept within 1..maxPageSize. */

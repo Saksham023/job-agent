@@ -25,8 +25,11 @@ public class GapFillRepository {
     }
 
     /**
-     * Open jobs whose family or a secondary family is in scope, that have a gap and no stored answer for this
-     * version of the posting. A newer prompt version does not re-ask: delete the rows to ask again.
+     * Open jobs whose family or a secondary family is in scope, that have a years or family gap and no stored answer
+     * for this version of the posting. A newer prompt version does not re-ask: delete the rows to ask again.
+     * A missing main language alone does not start a call: the rules find every language a posting names, so such a
+     * gap is a posting that names none ("at least one programming language"), which the model cannot fill either
+     * (M6: 137 asked, 0 filled; 2026-10-06: 0 of 804 fillable). It is still asked when the job is called anyway.
      */
     private static final String SELECT_JOBS_WITH_GAPS = """
             SELECT j.id, j.title, j.department, j.function, j.description, j.employment_type,
@@ -42,8 +45,7 @@ public class GapFillRepository {
               AND j.country_codes @> ARRAY[CAST(:country AS text)]
               AND f.job_id IS NULL
               AND (r.family = ANY(:families) OR r.secondary_families && CAST(:families AS text[]))
-              AND (r.years_confidence IN ('NONE', 'LOW') OR r.family = 'UNCLASSIFIED' OR r.family_guessed
-                   OR cardinality(r.primary_languages) = 0)
+              AND (r.years_confidence IN ('NONE', 'LOW') OR r.family = 'UNCLASSIFIED' OR r.family_guessed)
             ORDER BY j.id
             """;
 

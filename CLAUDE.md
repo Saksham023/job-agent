@@ -158,6 +158,48 @@ stale (store an as-of date and add elapsed time), deleting a profile on request.
 2. **Microsoft**: still open, see "TODO MICROSOFT" in the M7b status below.
 3. DONE: Eightfold work committed in 75e6566.
 
+### FINAL PLAN (user, 2026-10-06; project nearing its end: only these, in this order; nothing else deleted below)
+| Order | Item | Status |
+|---|---|---|
+| 1 | Amazon adapter (~2,300 India jobs): crawl, run extraction BEFORE any rule change, measure gaps, fix rules | DONE (see Amazon status); commit pending |
+| 2 | Oracle Recruiting Cloud adapter (JPMorgan, Goldman, TI, Amex, Oracle; ~600 jobs): same check | NEXT |
+| 3 | Scheduler (per-host virtual threads) + closed jobs + health checks/alerts (core of M9) | must |
+| 4 | Embeddings TEST (never tested in job-agent; vectors only in code-mcp): build, measure vs the answer key; keep only if it helps | later |
+| 5 | 8b self-learning skill dictionary (strong resume story) | later |
+| 6 | README with measured numbers, then the user pushes the repo | last |
+DROPPED (user, 2026-10-06): a per-profile "seen jobs" list / "new since last search" flag (NOT even backlog); new jobs
+are already ranked in by every new search (rule score order, only new jobs judged) and that is the wanted behaviour.
+SKIPPED: Microsoft crawl, Morgan Stanley/UKG CSRF, other custom adapters, dedup, digests, tracker, outreach drafts, web UI,
+cheaper judge via Anthropic API, small backlog fixes. Pending small change: jobagent.search.ready-target 30 -> 15
+(application.yaml + SearchProperties default), tests green, NOT committed yet.
+
+### Amazon status (2026-10-06): adapter pasted by the user, crawled; rules v11 ready (not yet rebuilt in the DB)
+- AmazonAdapter (platform "amazon"): GET amazon.jobs/en/search.json?normalized_country_code[]=IND&result_limit=100&
+  offset=N&sort=recent; full text in the list (description + basic + preferred qualifications appended under their own
+  <h3> headings), no detail calls; structured locations (JSON strings inside the array; VIRTUAL = remote). V17 seeds the
+  company. Crawl: 2,312 jobs, 0 unresolved locations, 131 s (incl. extraction). AmazonAdapterTest (3).
+- Generalization check BEFORE rule edits: SWE 515 (50 guessed), UNCLASSIFIED 148, years NONE 280 / LOW 192 (mostly
+  non-tech roles that state none), tech jobs without a main language 508 = CORRECT (Amazon writes "at least one
+  programming language"; 0 of them name a language). Real problems: team names after the comma decided the family
+  ("SDE II, Sales Abuse Prevention" -> SALES, "Sr Manager Software Dev, Alexa Growth" -> MARKETING) and unknown Amazon
+  role words (SDM, "Manager III, Software Dev", System/Network Development Engineer, SysDev/SysDE, BIE).
+- Rules v11 (Claude edited existing files; EXTRACTOR_VERSION=11): JobClassifier matches title rules on the ROLE PART
+  (before the first comma) first, whole title only if the role part matches nothing; secondaries still from the whole
+  title. title-families.csv: ENG_MANAGEMENT += sdm / software dev manager / manager [iii] software dev; new INFRA_DEVOPS
+  line for system/network development engineers + sysdev/sysde (SWE secondary via "system|tools|compiler|application
+  development engineer" + sysdev in the SWE line); ANALYTICS += bie. Offline diff over all 4,652 jobs (harness in the
+  scratchpad, classifier only): 133 changed (110 Amazon), all reviewed and sensible (55 SDMs -> ENG_MANAGEMENT, SysDE /
+  NDE -> INFRA, BIE -> ANALYTICS, team names no longer decide; elsewhere: recruiter -> HR, procurement -> OPERATIONS,
+  Tools/Compiler Development Engineers no longer guessed); no hardware job gains a SWE secondary. 2 classifier tests.
+- GapFillRepository: a missing main language ALONE no longer starts an Opus call (0 of 804 such gaps fillable; M6
+  asked 137, filled 0); it is still asked when the job is called for years/family. Saves ~400 calls on Amazon.
+- DONE 2026-10-06: user rebuilt v11 (4,652 jobs, 152 s) and ran the gap fill: 249 Amazon jobs, 0 failed, years 46,
+  families 181, languages 0, 10 rejected (all "12-24 months" -> 1 year: the check wants the minimum's number in the quote;
+  non-tech roles, left as is), $5.55. Amazon now: UNCLASSIFIED 0, guessed 0, 731 jobs in SWE/DATA_ML/INFRA searches.
+  Opus families checked (BIE -> ANALYTICS, Applied Science Manager -> ENG_MANAGEMENT, SDE2 -> SWE...): sensible.
+  Then 2 spellings added to the rules (same answers as Opus, 13 jobs): "business intel(ligence)", "sde\d?" (SDE2).
+  229 tests green. NOT committed yet (Amazon adapter + v11 + gap-fill change + ready-target 15).
+
 ### ROADMAP (agreed 2026-10-05; work strictly in this order, one milestone at a time)
 | # | Milestone | Status |
 |---|---|---|

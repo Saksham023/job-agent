@@ -93,7 +93,7 @@ public class JobClassifier {
         Map<JobFamily, Integer> votes = new EnumMap<>(JobFamily.class);
         List<String> reasons = new ArrayList<>();
 
-        List<Hit<JobFamily>> titleHits = allMatches(titleRules, title);
+        List<Hit<JobFamily>> titleHits = titleHits(title);
         Optional<Hit<JobFamily>> departmentHit = firstMatch(departmentRules, department)
                 .or(() -> firstMatch(departmentRules, function));
 
@@ -129,7 +129,9 @@ public class JobClassifier {
         int score = votes.getOrDefault(family, 0);
         List<KeywordCount> secondaryEvidence = new ArrayList<>(keywordCounts);
         secondaryEvidence.addAll(keywordCounts(description, secondaryKeywordSets));
-        List<JobFamily> secondary = secondaryFamilies(family, titleHits, departmentHit, descriptionHit,
+        // the main family comes from the role part, but any rule matching the whole title may add a secondary family
+        // ("AI Engineer, FDE" is also software engineering)
+        List<JobFamily> secondary = secondaryFamilies(family, allMatches(titleRules, title), departmentHit, descriptionHit,
                 secondaryEvidence, reasons);
         boolean engineeringLike = family.isTech() || family == JobFamily.SALES_ENGINEERING;
         if (departmentDecides && engineeringLike && family != JobFamily.SOFTWARE_ENGINEERING
@@ -223,6 +225,24 @@ public class JobClassifier {
     }
 
     /** Every rule that matches, in file order, one per value (the first rule's text for each). */
+    /**
+     * The title rules on the ROLE part of the title, before the first comma, when it matches any: "Software
+     * Development Engineer II, Sales Abuse Prevention" is software engineering, whatever the team after the comma
+     * is called (Amazon and others name the team there). Otherwise ("Manager, Software Engineering") the whole title.
+     * Only the main family: secondary families still come from every rule that matches the whole title.
+     */
+    private List<Hit<JobFamily>> titleHits(String title) {
+        String role = rolePart(title);
+        List<Hit<JobFamily>> hits = role == null ? List.of() : allMatches(titleRules, role);
+        return hits.isEmpty() ? allMatches(titleRules, title) : hits;
+    }
+
+    /** The title before its first comma, or null when it has none. */
+    static String rolePart(String title) {
+        int comma = title == null ? -1 : title.indexOf(',');
+        return comma > 0 ? title.substring(0, comma) : null;
+    }
+
     private static <T> List<Hit<T>> allMatches(List<Rule<T>> rules, String text) {
         if (text == null || text.isBlank()) {
             return List.of();

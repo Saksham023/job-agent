@@ -301,4 +301,38 @@ class JobClassifierTest {
         assertThat(classify("Principal Software Development Engineer - Agentic Systems", null).specialization())
                 .isEqualTo(Specialization.AI_ENGINEERING);
     }
+
+    @Test
+    void theRolePartBeforeTheCommaDecidesNotTheTeamName() {
+        // Amazon names the team after the comma: its words must not decide the family
+        assertThat(classify("Software Development Engineer II, Sales Abuse Prevention", "Software Development").family())
+                .isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(classify("SDE II - Multimedia, Hardware Compute Group", "Software Development").family())
+                .isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        // no rule in the role part: the whole title counts
+        assertThat(classify("Manager, Software Engineering", null).family()).isEqualTo(JobFamily.ENG_MANAGEMENT);
+        // the rest of the title still adds secondary families
+        assertThat(classify("AI Engineer, FDE (Forward Deployed Engineer)", null).secondaryFamilies())
+                .contains(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(JobClassifier.rolePart("BIE II, Amazon Now")).isEqualTo("BIE II");
+        assertThat(JobClassifier.rolePart("Backend Engineer")).isNull();
+    }
+
+    @Test
+    void amazonRoleWords() {
+        assertThat(classify("Manager III, Software Dev, TITANS", null).family()).isEqualTo(JobFamily.ENG_MANAGEMENT);
+        assertThat(classify("SDM III,  Selling Partner Services Tech", null).family()).isEqualTo(JobFamily.ENG_MANAGEMENT);
+        assertThat(classify("Software Dev Manager III, Amazon Pharmacy", null).family()).isEqualTo(JobFamily.ENG_MANAGEMENT);
+        Classification sysDe = classify("System Development Engineer II, Customer Experience Infrastructure", null);
+        assertThat(sysDe.family()).isEqualTo(JobFamily.INFRA_DEVOPS);
+        assertThat(sysDe.secondaryFamilies()).contains(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(classify("Network Development Engineer, Capacity Restoration Team", null).family())
+                .isEqualTo(JobFamily.INFRA_DEVOPS);
+        assertThat(classify("BIE II, Amazon Now Quick Commerce", null).family()).isEqualTo(JobFamily.ANALYTICS);
+        assertThat(classify("Business Intel Engineer I, FinOps", null).family()).isEqualTo(JobFamily.ANALYTICS);
+        assertThat(classify("SDE2, Amazon", null).family()).isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        // a hardware "development engineer" gets no software secondary
+        assertThat(classify("PERC Rule Deck Development Engineer", "Engineering").secondaryFamilies())
+                .doesNotContain(JobFamily.SOFTWARE_ENGINEERING);
+    }
 }

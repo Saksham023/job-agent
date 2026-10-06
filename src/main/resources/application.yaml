@@ -36,7 +36,7 @@ jobagent:
     round-up-from: 0.5    # 1.5 years -> 2, 1.4 -> 1
   search:
     first-batch: 10       # candidates judged before the first answer (in parallel)
-    ready-target: 30      # the background judge keeps this many APPLY jobs ready, refilling after each more_jobs
+    ready-target: 15      # the background judge keeps this many APPLY jobs ready, refilling after each more_jobs
     stop-after-nos: 20    # ...and stops for good after this many NO verdicts in a row
     parallelism: 4
     page-size: 10         # jobs per answer when not asked for a number

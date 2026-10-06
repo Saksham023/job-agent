@@ -18,7 +18,7 @@ SUPPORT,\b(?:technical |product )?support engineer\b|\bescalation engineer\b|\b(
 # --- administering a tool or system is IT work, not software engineering ("Jira Administrator") ---
 INFRA_DEVOPS,\b(?:jira|confluence|atlassian|lms|servicenow|salesforce|system|systems|linux|windows|network|it) administrator\b|\bsysadmin\b
 # --- managing engineers ---
-ENG_MANAGEMENT,\bengineering manager\b|\bmanager[ ,-]+(?:software (?:development )?)?engineering\b|\bhead of engineering\b|\bengrg mgmt\b|\bengineering director\b|\bdirector[ ,-]+(?:of )?engineering\b|\bvp[ ,-]+(?:of )?engineering\b|\bcto\b
+ENG_MANAGEMENT,\bengineering manager\b|\bmanager[ ,-]+(?:software (?:development )?)?engineering\b|\bhead of engineering\b|\bengrg mgmt\b|\bengineering director\b|\bdirector[ ,-]+(?:of )?engineering\b|\bvp[ ,-]+(?:of )?engineering\b|\bcto\b|\bsdm\b|\bsoftware dev(?:elopment)?\.? manager\b|\bmanager(?: i{1,3})?\W+software dev
 # --- product and marketing before security/data ("Product Manager - Security AI", "Product Marketing") ---
 MARKETING,\bproduct marketing\b
 PRODUCT,\bproduct (?:manager|management|owner|lead|head)\b|\bhead of product\b|\b(?:apm|associate product manager)\b
@@ -32,13 +32,16 @@ QA,\b(?:qa|quality assurance|sdet|test(?:ing)? engineer|automation test|test aut
 DATA_ML,\b(?:machine learning|ml|ai engineer|ai/ml|ml/ai|aiml|ai researcher|data scien\w*|applied scientist|research scientist|llm|nlp|computer vision|mlops|deep learning)\b
 DATA_ML,\bdata engineer
 INFRA_DEVOPS,\b(?:sre|site reliability|devops|platform engineer|infrastructure engineer|cloud engineer|network(?:ing)? engineer|systems engineer|kubernetes|database administrator|dba)\b
+# --- Amazon's infrastructure engineers (System Development Engineer, SysDev, Network Development Engineer); the
+# "system development engineer" rule below keeps SOFTWARE_ENGINEERING as their secondary family ---
+INFRA_DEVOPS,\bsys(?:tems?)? ?dev(?:elopment)?\.? engineer\b|\bsysdev\b|\bsysde\b|\bnetwork dev(?:elopment)? engineer\b
 # --- software engineering role words ---
 SOFTWARE_ENGINEERING,\b(?:software|backend|back-end|frontend|front-end|full[ -]?stack|mobile|android|ios|web|forward deployed|deployment) (?:engineer|developer|development)|\bfde\b|\bsoftware [\w/&+-]+ (?:engineer|developer)\b
-SOFTWARE_ENGINEERING,\b(?:sde|swe|mts|smts|lmts|pmts|amts|member of (?:the )?technical staff|developer|programmer)\b
+SOFTWARE_ENGINEERING,\b(?:sde\d?|swe|mts|smts|lmts|pmts|amts|member of (?:the )?technical staff|developer|programmer|sysdev)\b|\b(?:system|systems|tools|compiler|application) development engineer\b
 # --- non-tech families ---
 DESIGN,\b(?:designer|design lead|design manager|product design|ux|ui/ux|user experience|user research)\b
 PROGRAM_MANAGEMENT,\b(?:program(?:me)? manage(?:r|ment)|project manager|tpm|scrum master|delivery manager|pmo)\b
-ANALYTICS,\b(?:business analyst|data analyst|analytics|business intelligence|bi analyst|mis)\b
+ANALYTICS,\b(?:business analyst|data analyst|analytics|business intel(?:ligence)?|bi analyst|bie|mis)\b
 LEGAL,\b(?:legal|counsel|lawyer|attorney|paralegal|company secretary)\b
 FINANCE,\b(?:finance|financial|accountant|accounts payable|accounts receivable|accounting|audit|tax|treasury|fp&a|controller|payroll|chartered accountant|credit and collections|billing|revenue manager)\b
 RISK_COMPLIANCE,\b(?:risk|compliance|fraud|aml|kyc|regulatory|governance|ethics|investigations?|forensics?)\b
