@@ -95,6 +95,6 @@ class OracleAdapterTest {
         Company jpmc = new Company(1, "jpmorgan", "JPMorgan", "oracle",
                 JSON.readTree("""
                         {"host": "jpmc.fa.oraclecloud.com", "siteNumber": "CX_1001"}"""), null, true, null, null, null);
-        assertThat(new OracleAdapter(null, null).serverKey(jpmc)).isEqualTo("jpmc.fa.oraclecloud.com");
+        assertThat(new OracleAdapter(null, null, null).serverKey(jpmc)).isEqualTo("jpmc.fa.oraclecloud.com");
     }
 }

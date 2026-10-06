@@ -268,7 +268,7 @@ everything over once = same as before); a failure after something was saved thro
 CrawlRunService.crawlOne records it as status PARTIAL (new CrawlHealth.Status; V24 widens the crawl_runs CHECK; verified on the
 real DB in a rolled-back transaction; closes nothing; counted in CrawlJobReport.partial and /admin/crawl companiesPartial).
 A restart mid-crawl keeps the saved batches but records no run (nothing runs to write it).
-GRACEFUL SHUTDOWN + PER-COMPANY GAP FILL (2026-10-07, user asked for both; built by Claude, 308 tests):
+GRACEFUL SHUTDOWN + PER-COMPANY GAP FILL (2026-10-07, user asked for both; built by Claude, 315 tests):
 - common/ShutdownSignal (SmartLifecycle, phase MAX_VALUE = stops first): isStopping(), track() (work the shutdown waits for, up
   to jobagent.shutdown.wait-seconds 60). application.yaml: spring.lifecycle.timeout-per-shutdown-phase 90s, server.shutdown
   graceful. EightfoldAdapter(RestClient, DetailCache, ShutdownSignal): checks the flag before every job, its waits are
@@ -281,6 +281,14 @@ GRACEFUL SHUTDOWN + PER-COMPANY GAP FILL (2026-10-07, user asked for both; built
   USER STEP on the Air (not done yet): give the service file ExitTimeOut 90 (launchd's default would kill sooner):
   `/usr/libexec/PlistBuddy -c "Add :ExitTimeOut integer 90" ~/Library/LaunchAgents/com.jobagent.app.plist` then
   `launchctl bootout gui/$(id -u)/com.jobagent.app` and `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jobagent.app.plist`.
+- ALL slow adapters (Workday, Oracle, SmartRecruiters, Amazon, as well as Eightfold) now take a ShutdownSignal, check it between
+  jobs/pages, wait through crawl/adapter/Pauses.pause (interruptible) and hand jobs to the sink through crawl/adapter/Batcher
+  (25 per batch; Amazon one page of 100 per batch; Eightfold has its own saveEvery batching + logging). Greenhouse/Lever/Ashby:
+  one quick request, nothing to interrupt. AdapterStopTest (7) covers stop + batches for four of them with mock servers.
+  REAL BOOT TEST done (fresh database jobagent_boot, dropped afterwards): 24 migrations from scratch, schedule lines logged,
+  a crawl of a fake site that never answers + SIGTERM -> "waiting up to 60 s for 1 running task", the run recorded as FAILED
+  "interrupted: app shutting down" BEFORE Hikari closed, exit code 143 after 7 s. NOT yet tested: the same on the Air through
+  the GitHub runner (launchctl print/kill from the runner's context), and a stop during a real Microsoft crawl.
 - Per-company gap fill: GapFillRunner.fillCompany(companyId, model, parallelism) (blocking, own Run, does not touch
   start()/status()), GapFillRepository.findJobsWithGaps(country, families, companyId); CrawlRunService.runAll queues each
   company's fill (only when it inserted/updated jobs) on ONE single-worker queue, so at most gapFillParallelism Opus calls run at

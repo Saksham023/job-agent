@@ -129,7 +129,7 @@ class WorkdayAdapterTest {
         Company adobe = new Company(1, "adobe", "Adobe", "workday", json("""
                 {"host": "adobe.wd5.myworkdayjobs.com", "tenant": "adobe", "site": "external_experienced"}"""),
                 null, true, null, null, null);
-        assertThat(new WorkdayAdapter(null, null, null).serverKey(adobe)).isEqualTo("wd5.myworkdayjobs.com");
+        assertThat(new WorkdayAdapter(null, null, null, null).serverKey(adobe)).isEqualTo("wd5.myworkdayjobs.com");
     }
 
     @Test

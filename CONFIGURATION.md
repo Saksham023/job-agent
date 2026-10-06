@@ -110,6 +110,11 @@ Use it for your own scripts: `curl -H 'X-API-Key: <key>' '.../api/v1/jobs?size=5
 | `spring.lifecycle.timeout-per-shutdown-phase` | `90s` | Spring's limit for the whole wind-down; keep it above `wait-seconds` |
 | `server.shutdown` | `graceful` | web requests already in flight finish before the web server stops |
 
+Stopping in an orderly way works for every crawl that makes many requests: Eightfold, Workday, Oracle, SmartRecruiters and
+Amazon check the flag between jobs and in their waits, and hand their jobs to the database in batches while they go (Eightfold:
+`saveEvery`, default 10; the others 25 jobs, Amazon one page of 100), so a stop keeps what was fetched. Greenhouse, Lever and
+Ashby fetch everything in one request that takes about a second, so there is nothing to interrupt.
+
 The launchd service file on the server needs a matching `ExitTimeOut` of 90 seconds, otherwise launchd kills the app sooner
 (see the deploy notes in `deploy/deploy.sh`). The deploy script stops the app with SIGTERM and waits up to 80 s (`STOP_WAIT`).
 

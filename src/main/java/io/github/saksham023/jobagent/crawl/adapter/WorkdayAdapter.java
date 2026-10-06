@@ -1,6 +1,8 @@
 package io.github.saksham023.jobagent.crawl.adapter;
 
+import io.github.saksham023.jobagent.common.ShutdownSignal;
 import io.github.saksham023.jobagent.company.Company;
+import io.github.saksham023.jobagent.crawl.CrawlStoppedException;
 import io.github.saksham023.jobagent.crawl.DetailCache;
 import io.github.saksham023.jobagent.crawl.JobBoardAdapter;
 import io.github.saksham023.jobagent.crawl.RawJob;
@@ -26,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import static io.github.saksham023.jobagent.crawl.adapter.JsonFields.isoCountry;
 import static io.github.saksham023.jobagent.crawl.adapter.JsonFields.text;
@@ -62,7 +65,11 @@ public class WorkdayAdapter implements JobBoardAdapter {
     private final LocationParser locationParser;
     private final DetailCache detailCache;
 
-    public WorkdayAdapter(RestClient crawlRestClient, LocationParser locationParser, DetailCache detailCache) {
+    private final ShutdownSignal shutdown;
+
+    public WorkdayAdapter(RestClient crawlRestClient, LocationParser locationParser, DetailCache detailCache,
+                          ShutdownSignal shutdown) {
+        this.shutdown = shutdown;
         this.http = crawlRestClient;
         this.locationParser = locationParser;
         this.detailCache = detailCache;
@@ -82,6 +89,14 @@ public class WorkdayAdapter implements JobBoardAdapter {
 
     @Override
     public List<RawJob> fetchJobs(Company company) {
+        List<RawJob> all = new ArrayList<>();
+        all.addAll(fetchJobs(company, all::addAll));
+        return all;
+    }
+
+    /** Jobs go to the sink in batches while the details are fetched; a stop saves the batch in hand and ends the crawl. */
+    @Override
+    public List<RawJob> fetchJobs(Company company, Consumer<List<RawJob>> sink) {
         WorkdayConfig config = WorkdayConfig.from(company);
 
         JsonNode unfiltered = listPage(config, Map.of(), 0);
@@ -92,31 +107,35 @@ public class WorkdayAdapter implements JobBoardAdapter {
         log.info("{}: Workday country filter {}", company.slug(), countryFilter);
 
         DetailCache.Known known = detailCache.load(company.id());
-        List<RawJob> jobs = new ArrayList<>();
-        for (Summary summary : listAll(config, countryFilter)) {
-            String path = text(summary.posting(), "externalPath");
-            if (path == null) {                               // seen at Mastercard: a posting without its own page
-                log.warn("{}: skipping a posting without externalPath: '{}'", company.slug(), text(summary.posting(), "title"));
-                continue;
+        Batcher batcher = new Batcher(sink);
+        try {
+            for (Summary summary : listAll(config, countryFilter)) {
+                Pauses.checkStopping(shutdown::isStopping);
+                String path = text(summary.posting(), "externalPath");
+                if (path == null) {                               // seen at Mastercard: a posting without its own page
+                    log.warn("{}: skipping a posting without externalPath: '{}'", company.slug(), text(summary.posting(), "title"));
+                    continue;
+                }
+                String listHash = listHash(summary);
+                JsonNode stored = known.reusable(externalId(path), listHash);
+                if (stored != null) {                                          // stored raw = the detail's jobPostingInfo
+                    JsonNode detail = JsonNodeFactory.instance.objectNode().set("jobPostingInfo", stored);
+                    batcher.add(toRawJob(config, summary, detail).withDetail(listHash, RawJob.DetailSource.REUSED));
+                    continue;
+                }
+                JsonNode detail = fetchDetail(company, config, path);
+                batcher.add(toRawJob(config, summary, detail).withDetail(listHash,
+                        detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
+                pause();
             }
-            String listHash = listHash(summary);
-            JsonNode stored = known.reusable(externalId(path), listHash);
-            if (stored != null) {                                          // stored raw = the detail's jobPostingInfo
-                JsonNode detail = JsonNodeFactory.instance.objectNode().set("jobPostingInfo", stored);
-                jobs.add(toRawJob(config, summary, detail).withDetail(listHash, RawJob.DetailSource.REUSED));
-                continue;
-            }
-            JsonNode detail = fetchDetail(company, config, path);
-            jobs.add(toRawJob(config, summary, detail).withDetail(listHash,
-                    detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
-            pause();
+        } catch (CrawlStoppedException e) {
+            batcher.flush();
+            throw e;
         }
-        return jobs;
+        batcher.flush();
+        return List.of();
     }
 
-    // ---------------------------------------------------------------- listing
-
-    /** Every posting matching the filter, each with its category when the tenant has a category facet. */
     private List<Summary> listAll(WorkdayConfig config, Map<String, List<String>> filter) {
         JsonNode first = listPage(config, filter, 0);
         int total = first.path("total").asInt();
@@ -314,13 +333,8 @@ public class WorkdayAdapter implements JobBoardAdapter {
         return date == null ? null : LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant();
     }
 
-    private static void pause() {
-        try {
-            Thread.sleep(DELAY);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while crawling", e);
-        }
+    private void pause() {
+        Pauses.pause(DELAY, shutdown::isStopping);
     }
 
     /**

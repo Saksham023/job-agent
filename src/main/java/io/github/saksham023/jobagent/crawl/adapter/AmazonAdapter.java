@@ -1,5 +1,6 @@
 package io.github.saksham023.jobagent.crawl.adapter;
 
+import io.github.saksham023.jobagent.common.ShutdownSignal;
 import io.github.saksham023.jobagent.company.Company;
 import io.github.saksham023.jobagent.crawl.JobBoardAdapter;
 import io.github.saksham023.jobagent.crawl.RawJob;
@@ -17,10 +18,11 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import static io.github.saksham023.jobagent.crawl.adapter.JsonFields.isoCountry;
 import static io.github.saksham023.jobagent.crawl.adapter.JsonFields.text;
@@ -45,9 +47,12 @@ public class AmazonAdapter implements JobBoardAdapter {
     private final RestClient http;
     private final JsonMapper jsonMapper;
 
-    public AmazonAdapter(RestClient crawlRestClient, JsonMapper jsonMapper) {
+    private final ShutdownSignal shutdown;
+
+    public AmazonAdapter(RestClient crawlRestClient, JsonMapper jsonMapper, ShutdownSignal shutdown) {
         this.http = crawlRestClient;
         this.jsonMapper = jsonMapper;
+        this.shutdown = shutdown;
     }
 
     @Override
@@ -57,23 +62,37 @@ public class AmazonAdapter implements JobBoardAdapter {
 
     @Override
     public List<RawJob> fetchJobs(Company company) {
+        List<RawJob> all = new ArrayList<>();
+        all.addAll(fetchJobs(company, all::addAll));
+        return all;
+    }
+
+    /** One page of jobs (100) is one batch for the sink; a stop between pages keeps the pages already handed over. */
+    @Override
+    public List<RawJob> fetchJobs(Company company, Consumer<List<RawJob>> sink) {
         AmazonConfig config = AmazonConfig.from(company);
-        Map<String, RawJob> jobs = new LinkedHashMap<>();          // by id: a new posting can shift a job to the next page
+        Set<String> seen = new HashSet<>();                        // by id: a new posting can shift a job to the next page
         for (int page = 0; page < MAX_PAGES; page++) {
             int offset = page * PAGE_SIZE;
-            sleep(page == 0 ? Duration.ZERO : config.delay());
+            Pauses.pause(page == 0 ? Duration.ZERO : config.delay(), shutdown::isStopping);
             JsonNode body = http.get().uri(URI.create(BASE + "/en/search.json?normalized_country_code[]="
                             + config.countryCode() + "&result_limit=" + PAGE_SIZE + "&offset=" + offset + "&sort=recent"))
                     .retrieve().body(JsonNode.class);
             if (body == null || !body.path("jobs").isArray()) {
                 throw new IllegalStateException(company.slug() + ": Amazon response has no 'jobs' array");
             }
+            List<RawJob> batch = new ArrayList<>();
             for (JsonNode job : body.path("jobs")) {
                 RawJob raw = toRawJob(job, jsonMapper);
-                jobs.putIfAbsent(raw.externalId(), raw);
+                if (seen.add(raw.externalId())) {
+                    batch.add(raw);
+                }
+            }
+            if (!batch.isEmpty()) {
+                sink.accept(batch);
             }
             if (body.path("jobs").isEmpty() || offset + PAGE_SIZE >= body.path("hits").asInt()) {
-                return new ArrayList<>(jobs.values());
+                return List.of();
             }
         }
         throw new IllegalStateException(company.slug() + ": more than " + MAX_PAGES + " pages; stopping to be safe");
@@ -147,15 +166,6 @@ public class AmazonAdapter implements JobBoardAdapter {
             return LocalDate.parse(date.strip().replaceAll("\\s+", " "), POSTED).atStartOfDay(INDIA).toInstant();
         } catch (DateTimeParseException e) {
             return null;
-        }
-    }
-
-    private static void sleep(Duration duration) {
-        try {
-            Thread.sleep(duration);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while crawling", e);
         }
     }
 

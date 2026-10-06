@@ -1,6 +1,8 @@
 package io.github.saksham023.jobagent.crawl.adapter;
 
+import io.github.saksham023.jobagent.common.ShutdownSignal;
 import io.github.saksham023.jobagent.company.Company;
+import io.github.saksham023.jobagent.crawl.CrawlStoppedException;
 import io.github.saksham023.jobagent.crawl.DetailCache;
 import io.github.saksham023.jobagent.crawl.JobBoardAdapter;
 import io.github.saksham023.jobagent.crawl.RawJob;
@@ -16,6 +18,7 @@ import tools.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static io.github.saksham023.jobagent.crawl.adapter.JsonFields.isoCountry;
 import static io.github.saksham023.jobagent.crawl.adapter.JsonFields.text;
@@ -48,9 +51,12 @@ public class SmartRecruitersAdapter implements JobBoardAdapter {
 
     private final DetailCache detailCache;
 
-    public SmartRecruitersAdapter(RestClient crawlRestClient, DetailCache detailCache) {
+    private final ShutdownSignal shutdown;
+
+    public SmartRecruitersAdapter(RestClient crawlRestClient, DetailCache detailCache, ShutdownSignal shutdown) {
         this.http = crawlRestClient;
         this.detailCache = detailCache;
+        this.shutdown = shutdown;
     }
 
     @Override
@@ -60,23 +66,38 @@ public class SmartRecruitersAdapter implements JobBoardAdapter {
 
     @Override
     public List<RawJob> fetchJobs(Company company) {
+        List<RawJob> all = new ArrayList<>();
+        all.addAll(fetchJobs(company, all::addAll));
+        return all;
+    }
+
+    /** Jobs go to the sink in batches while the details are fetched; a stop saves the batch in hand and ends the crawl. */
+    @Override
+    public List<RawJob> fetchJobs(Company company, Consumer<List<RawJob>> sink) {
         SmartRecruitersConfig config = SmartRecruitersConfig.from(company);
 
         DetailCache.Known known = detailCache.load(company.id());
-        List<RawJob> jobs = new ArrayList<>();
-        for (JsonNode summary : listPostings(company, config)) {
-            String listHash = listHash(summary);
-            JsonNode stored = known.reusable(text(summary, "id"), listHash);      // stored raw = the detail
-            if (stored != null) {
-                jobs.add(toRawJob(config, stored, stored).withDetail(listHash, RawJob.DetailSource.REUSED));
-                continue;
+        Batcher batcher = new Batcher(sink);
+        try {
+            for (JsonNode summary : listPostings(company, config)) {
+                Pauses.checkStopping(shutdown::isStopping);
+                String listHash = listHash(summary);
+                JsonNode stored = known.reusable(text(summary, "id"), listHash);      // stored raw = the detail
+                if (stored != null) {
+                    batcher.add(toRawJob(config, stored, stored).withDetail(listHash, RawJob.DetailSource.REUSED));
+                    continue;
+                }
+                JsonNode detail = fetchDetail(company, config, text(summary, "id"));
+                batcher.add(toRawJob(config, detail != null ? detail : summary, detail).withDetail(listHash,
+                        detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
+                pause();
             }
-            JsonNode detail = fetchDetail(company, config, text(summary, "id"));
-            jobs.add(toRawJob(config, detail != null ? detail : summary, detail).withDetail(listHash,
-                    detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
-            pause();
+        } catch (CrawlStoppedException e) {
+            batcher.flush();
+            throw e;
         }
-        return jobs;
+        batcher.flush();
+        return List.of();
     }
 
     /** Every page of the list endpoint, until offset reaches totalFound. */
@@ -177,13 +198,8 @@ public class SmartRecruitersAdapter implements JobBoardAdapter {
         return html.isEmpty() ? null : html.toString();
     }
 
-    private static void pause() {
-        try {
-            Thread.sleep(DETAIL_DELAY);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while crawling", e);
-        }
+    private void pause() {
+        Pauses.pause(DETAIL_DELAY, shutdown::isStopping);
     }
 
     /**

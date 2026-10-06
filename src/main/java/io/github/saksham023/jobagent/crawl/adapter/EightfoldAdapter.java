@@ -1,7 +1,7 @@
 package io.github.saksham023.jobagent.crawl.adapter;
 
-import io.github.saksham023.jobagent.company.Company;
 import io.github.saksham023.jobagent.common.ShutdownSignal;
+import io.github.saksham023.jobagent.company.Company;
 import io.github.saksham023.jobagent.crawl.CrawlStoppedException;
 import io.github.saksham023.jobagent.crawl.DetailCache;
 import io.github.saksham023.jobagent.crawl.JobBoardAdapter;
@@ -375,24 +375,8 @@ public class EightfoldAdapter implements JobBoardAdapter {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    /** Sleeps in slices of at most half a second, so a shutdown is noticed quickly. */
     private static void sleep(Duration duration, BooleanSupplier stopping) {
-        long end = System.nanoTime() + duration.toNanos();
-        while (true) {
-            if (stopping.getAsBoolean()) {
-                throw new CrawlStoppedException();
-            }
-            long left = end - System.nanoTime();
-            if (left <= 0) {
-                return;
-            }
-            try {
-                Thread.sleep(Math.min(Duration.ofNanos(left).toMillis() + 1, 500));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("Interrupted while crawling", e);
-            }
-        }
+        Pauses.pause(duration, stopping);
     }
 
     /**
