@@ -316,6 +316,42 @@ exactly the 16 new jobs, reused 2,472 (99.4% of detail requests saved); 91 jobs 
 Amazon 28, ServiceNow 11, Adobe 7, Sarvam 7...); Qualcomm 59 list pages + 10 details, 2 throttles (pace 3 s), 155 s.
 5,300 open jobs. NOT committed yet (scheduler + incremental details).
 
+### Web UI (user's idea 2026-10-06; built BEFORE the remaining plan items 4-6, which stay as they are)
+User: a beautiful, AI-free search UI over the jobs table (no credits used): pick companies, job families, experience
+range, locations, skills from lists (no free typing except the experience numbers and a title keyword), multi-select.
+The user left ALL design + code to Claude ("I won't be intervening; don't give me the files") and allowed every npm
+download (React, Vite, Tailwind, Framer Motion...). Node v20.20.2 / npm 10.8.2 installed.
+Design (Claude's):
+- Backend: public read-only API, package `api`, under /api/v1 (separate from /admin): GET /meta (companies with open
+  counts + last crawl, families with labels/groups/counts, top cities, top required skills, totals incl. new this
+  week), GET /jobs (filters: company*, family* (primary or secondary), minYears/maxYears = HARD overlap with the job's
+  range, includeUnstated (default true; years count as stated only when years_confidence HIGH/MEDIUM: LOW is a title
+  guess), city* (+ remote), skill* (job requires ALL), q (title/company keyword), postedWithinDays, sort newest|company|
+  experience, page/size), GET /jobs/{id} (description + requirements), GET /stats (per company, per family, new per
+  day). Plain SQL reads with JdbcClient.
+- Frontend: web/ (Vite + React + TypeScript, Tailwind v4, Framer Motion, TanStack Query, react-router for URL state,
+  lucide icons). One page: hero with live stats + quick searches, filter panel (multi-select lists with counts,
+  experience from/to + presets, posted-within segments, sort), animated result cards, job drawer with description and
+  requirements, dark/light theme, filters in the URL (shareable). Dev: Vite proxy /api -> localhost:8080.
+STATUS 2026-10-06: BUILT by Claude, verified in the browser pane (desktop, light/dark, phone 375 px, drawer, filters,
+82 results for SWE + 0-3 + Bengaluru + Java; no horizontal scroll). Backend: package `api` (JobSearch = validated filters
+-> WHERE clause; PublicJobRepository; PublicApiController /api/v1/meta, /jobs, /jobs/{id}); JobSearchTest (5); 256
+tests green; search 5-12 ms, meta ~30 ms on 5,300 jobs. Note: Spring's named-parameter parser reads an array slice
+[1:6] as a parameter ":6", write [1 : 6]. Frontend: web/ (brand "JobRadar"; Vite 8, React 19, TS 7, Tailwind 4,
+framer-motion 14, TanStack Query 5, react-router 7, lucide); src/lib (api.ts types + calls, filters.ts URL state
+?family=&min=&max=&unstated=no&company=&city=&skill=&posted=&sort=&job=, format.ts), components (Header, Hero with
+presets + count-up stats, CompanyStrip, FilterPanel, ResultsBar, JobList infinite scroll, JobCard, JobDrawer, ...).
+web/node_modules and web/dist are git-ignored. Run: restart the app (8080), then `npm --prefix web run dev` ->
+http://localhost:5173 (or the "web" config in .claude/launch.json; API_TARGET env overrides the API address).
+Build: `npm --prefix web run build` -> web/dist. NOT committed yet.
+FACETED COUNTS (user's request 2026-10-06: counts in the filter lists must follow the other filters): GET /api/v1/facets
+(same params as /jobs) -> families / companies / cities / remote / top 80 skills with live counts, ~25 ms.
+JobSearch.without(Facet): an "any of" list (family, company, location) ignores its OWN selection for its counts (pick
+Amazon, other companies still show what they would add); skills are "all of", so their counts keep the selected skills.
+Family counts include secondary families (= what the family filter returns), so SWE shows 1,426, not the 1,079 primary.
+UI: counts from /facets, options with 0 dimmed, companies sorted by live count (selected first), skill suggestions from
+the current results. 257 tests.
+
 ### ROADMAP (agreed 2026-10-05; work strictly in this order, one milestone at a time)
 | # | Milestone | Status |
 |---|---|---|

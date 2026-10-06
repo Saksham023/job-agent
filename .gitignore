@@ -47,3 +47,7 @@ logs/
 
 ### Generated labeling page (job descriptions; rebuild from eval/pool.csv) ###
 eval/label-jobs.html
+
+### web UI ###
+web/node_modules/
+web/dist/
