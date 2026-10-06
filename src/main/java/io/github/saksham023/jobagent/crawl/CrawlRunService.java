@@ -1,6 +1,7 @@
 package io.github.saksham023.jobagent.crawl;
 
 import io.github.saksham023.jobagent.company.Company;
+import io.github.saksham023.jobagent.common.ShutdownSignal;
 import io.github.saksham023.jobagent.company.CompanyRepository;
 import io.github.saksham023.jobagent.crawl.CrawlHealth.Status;
 import io.github.saksham023.jobagent.crawl.CrawlHealth.Verdict;
@@ -16,6 +17,7 @@ import tools.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -55,8 +57,11 @@ public class CrawlRunService {
                                  int detailsReused, GapFillRunner.RunStatus gapFill, String note, long seconds) {
     }
 
-    /** One full run: the companies crawled, and the ones skipped because they were crawled too recently. */
-    public record Run(List<RunOutcome> outcomes, List<String> skipped) {
+    /**
+     * One full run: the companies crawled, the ones skipped because they were crawled too recently, and the gap fill of
+     * each company that had new or changed jobs (run right after that company's crawl).
+     */
+    public record Run(List<RunOutcome> outcomes, List<String> skipped, List<GapFillRunner.RunStatus> gapFills) {
     }
 
     /** What one company crawl ended with; result is null when it failed. */
@@ -69,15 +74,17 @@ public class CrawlRunService {
     private final CrawlRunRepository runs;
     private final GapFillRunner gapFillRunner;
     private final CrawlScheduleProperties properties;
+    private final ShutdownSignal shutdown;
     private final AtomicBoolean fullRunGoing = new AtomicBoolean();
 
     public CrawlRunService(CompanyRepository companies, CrawlService crawlService, CrawlRunRepository runs,
-                           GapFillRunner gapFillRunner, CrawlScheduleProperties properties) {
+                           GapFillRunner gapFillRunner, CrawlScheduleProperties properties, ShutdownSignal shutdown) {
         this.companies = companies;
         this.crawlService = crawlService;
         this.runs = runs;
         this.gapFillRunner = gapFillRunner;
         this.properties = properties;
+        this.shutdown = shutdown;
         log.info("Crawl schedule: {}", properties.enabled()
                 ? "ON (cron " + properties.cron() + ", gap fill " + (properties.gapFill() ? "on" : "off") + ")"
                 : "OFF (companies are crawled only by POST /admin/crawl)");
@@ -86,7 +93,7 @@ public class CrawlRunService {
     /** The scheduled run (when enabled): the whole crawl job. */
     @Scheduled(cron = "${jobagent.crawl.schedule.cron:0 0 */6 * * *}")
     void scheduledRun() {
-        if (!properties.enabled()) {
+        if (!properties.enabled() || shutdown.isStopping()) {
             return;
         }
         try {
@@ -105,18 +112,21 @@ public class CrawlRunService {
         long start = System.nanoTime();
         Run run = runAll(trigger);
         List<RunOutcome> outcomes = run.outcomes();
-        GapFillRunner.RunStatus gapFill = null;
+        List<GapFillRunner.RunStatus> fills = new ArrayList<>(run.gapFills());
         String note = null;
         if (!properties.gapFill()) {
             note = "gap fill switched off (jobagent.crawl.schedule.gap-fill)";
-        } else {
+        } else if (!shutdown.isStopping()) {
+            // each company was filled right after its own crawl; this catch-all asks about whatever is still unasked
+            // (a company whose fill failed, jobs from earlier runs)
             try {
-                gapFill = gapFillRunner.runAndWait(properties.gapFillModel(), null, properties.gapFillParallelism());
+                fills.add(gapFillRunner.runAndWait(properties.gapFillModel(), null, properties.gapFillParallelism()));
             } catch (RuntimeException e) {
                 note = "gap fill not run: " + e.getMessage();
                 log.warn("Gap fill after the crawl: {}", e.getMessage());
             }
         }
+        GapFillRunner.RunStatus gapFill = fills.isEmpty() ? null : GapFillRunner.RunStatus.combine(fills);
         List<CrawlResult> results = outcomes.stream().map(RunOutcome::result).filter(Objects::nonNull).toList();
         CrawlJobReport report = new CrawlJobReport(outcomes, run.skipped(), count(outcomes, Status.OK), count(outcomes, Status.SUSPECT),
                 count(outcomes, Status.FAILED), count(outcomes, Status.PARTIAL),
@@ -161,22 +171,55 @@ public class CrawlRunService {
                     byServer.keySet());
 
             Map<String, RunOutcome> outcomes = new ConcurrentHashMap<>();
-            try (ExecutorService servers = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("crawl-", 1).factory())) {
-                byServer.forEach((server, group) -> servers.submit(() ->
-                        group.forEach(company -> outcomes.put(company.slug(), crawlOne(company, trigger)))));
-            }                                                       // close() waits for every server's thread
+            List<GapFillRunner.RunStatus> gapFills = Collections.synchronizedList(new ArrayList<>());
+            // Resources close in reverse order: first the crawl threads (one per server) finish, then the gap fill queue
+            // drains. A company's gap fill is queued the moment its crawl ends, so a slow company never delays it.
+            try (ExecutorService gapFillQueue = Executors.newSingleThreadExecutor(Thread.ofVirtual().name("gap-fill-queue-", 1).factory());
+                 ExecutorService servers = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("crawl-", 1).factory())) {
+                byServer.forEach((server, group) -> servers.submit(() -> group.forEach(company -> {
+                    if (shutdown.isStopping()) {
+                        return;                                      // the app is shutting down: start nothing new
+                    }
+                    RunOutcome outcome = crawlOne(company, trigger);
+                    outcomes.put(company.slug(), outcome);
+                    queueGapFill(gapFillQueue, company, outcome, gapFills);
+                })));
+            }
 
-            List<RunOutcome> ordered = toCrawl.stream().map(c -> outcomes.get(c.slug())).toList();
+            List<RunOutcome> ordered = toCrawl.stream().map(c -> outcomes.get(c.slug())).filter(Objects::nonNull).toList();
             log.info("Crawl run ({}) finished in {} s: {} OK, {} suspect, {} failed, {} partial; {} new jobs, {} closed", trigger,
                     (System.nanoTime() - start) / 1_000_000_000,
                     count(ordered, Status.OK), count(ordered, Status.SUSPECT), count(ordered, Status.FAILED),
                     count(ordered, Status.PARTIAL),
                     ordered.stream().filter(o -> o.result() != null).mapToInt(o -> o.result().inserted()).sum(),
                     ordered.stream().mapToInt(RunOutcome::closed).sum());
-            return new Run(ordered, List.copyOf(skipped));
+            return new Run(ordered, List.copyOf(skipped), List.copyOf(gapFills));
         } finally {
             fullRunGoing.set(false);
         }
+    }
+
+    /**
+     * Queues the gap fill of one company's jobs. One queue, one worker: the fills run one after another, so the model is
+     * never asked more than gapFillParallelism questions at once, whatever number of companies finish together.
+     */
+    private void queueGapFill(ExecutorService queue, Company company, RunOutcome outcome,
+                              List<GapFillRunner.RunStatus> gapFills) {
+        CrawlResult result = outcome.result();
+        if (!properties.gapFill() || result == null || result.inserted() + result.updated() == 0) {
+            return;
+        }
+        ShutdownSignal.Activity activity = shutdown.track();       // a shutdown waits for a fill that has been queued
+        queue.submit(() -> {
+            try (activity) {
+                if (!shutdown.isStopping()) {
+                    gapFills.add(gapFillRunner.fillCompany(company.id(), properties.gapFillModel(),
+                            properties.gapFillParallelism()));
+                }
+            } catch (RuntimeException e) {
+                log.warn("{}: gap fill failed: {}", company.slug(), e.getMessage());
+            }
+        });
     }
 
     /**
@@ -197,6 +240,12 @@ public class CrawlRunService {
 
     /** Crawls one company and records the run; a failure is recorded and returned, not thrown. */
     public RunOutcome crawlOne(Company company, String trigger) {
+        try (ShutdownSignal.Activity activity = shutdown.track()) {      // a shutdown waits until the run is recorded
+            return crawlTracked(company, trigger);
+        }
+    }
+
+    private RunOutcome crawlTracked(Company company, String trigger) {
         String server = crawlService.serverKey(company);
         Instant started = Instant.now();
         long startNanos = System.nanoTime();

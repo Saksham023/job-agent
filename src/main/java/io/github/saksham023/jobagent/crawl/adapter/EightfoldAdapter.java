@@ -1,6 +1,8 @@
 package io.github.saksham023.jobagent.crawl.adapter;
 
 import io.github.saksham023.jobagent.company.Company;
+import io.github.saksham023.jobagent.common.ShutdownSignal;
+import io.github.saksham023.jobagent.crawl.CrawlStoppedException;
 import io.github.saksham023.jobagent.crawl.DetailCache;
 import io.github.saksham023.jobagent.crawl.JobBoardAdapter;
 import io.github.saksham023.jobagent.crawl.RawJob;
@@ -21,6 +23,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -89,9 +92,12 @@ public class EightfoldAdapter implements JobBoardAdapter {
 
     private final DetailCache detailCache;
 
-    public EightfoldAdapter(RestClient crawlRestClient, DetailCache detailCache) {
+    private final ShutdownSignal shutdown;
+
+    public EightfoldAdapter(RestClient crawlRestClient, DetailCache detailCache, ShutdownSignal shutdown) {
         this.http = crawlRestClient;
         this.detailCache = detailCache;
+        this.shutdown = shutdown;
     }
 
     @Override
@@ -136,64 +142,77 @@ public class EightfoldAdapter implements JobBoardAdapter {
         List<RawJob> batch = new ArrayList<>();
         int done = 0, listOnly = 0, reused = 0, fetched = 0, deferred = 0, failedInARow = 0;
         long batchStart = System.nanoTime();
-        for (JsonNode summary : summaries) {
-            String id = text(summary, "id");
-            String listHash = listHash(summary);
-            RawJob job;
-            boolean attempted = false;                              // a description request was made for this job
-            boolean detailFailed = false;
-            if (!config.wantsDetail(text(summary, "department"))) {
-                listOnly++;
-                job = toRawJob(config, summary, null).withDetail(listHash, RawJob.DetailSource.NONE);
-            } else {
-                JsonNode stored = known.reusable(id, listHash);
-                if (stored != null) {
-                    reused++;
-                    job = toRawJob(config, summary, stored).withDetail(listHash, RawJob.DetailSource.REUSED);
+        try {
+            for (JsonNode summary : summaries) {
+                if (shutdown.isStopping()) {
+                    throw new CrawlStoppedException();
+                }
+                String id = text(summary, "id");
+                String listHash = listHash(summary);
+                RawJob job;
+                boolean attempted = false;                              // a description request was made for this job
+                boolean detailFailed = false;
+                if (!config.wantsDetail(text(summary, "department"))) {
+                    listOnly++;
+                    job = toRawJob(config, summary, null).withDetail(listHash, RawJob.DetailSource.NONE);
                 } else {
-                    JsonNode detail = null;
-                    if (config.maxDetailsPerCrawl() == null || fetched < config.maxDetailsPerCrawl()) {
-                        fetched++;
-                        attempted = true;
-                        long requestStart = System.nanoTime();
-                        detail = fetchDetail(company, config, pace, id);
-                        detailFailed = detail == null;
-                        log.debug("{}: job {} ({}/{}) {} in {} s", company.slug(), id, done + 1, summaries.size(),
-                                detail == null ? "NO DESCRIPTION" : "description fetched",
-                                (System.nanoTime() - requestStart) / 1_000_000_000.0);
+                    JsonNode stored = known.reusable(id, listHash);
+                    if (stored != null) {
+                        reused++;
+                        job = toRawJob(config, summary, stored).withDetail(listHash, RawJob.DetailSource.REUSED);
                     } else {
-                        deferred++;                                     // the next crawl fetches it
-                    }
-                    if (detail != null) {
-                        job = toRawJob(config, summary, detail).withDetail(listHash, RawJob.DetailSource.FETCHED);
-                    } else {                                            // keep an older detail rather than none
-                        JsonNode older = known.anyAge(id);
-                        job = toRawJob(config, summary, older).withDetail(listHash,
-                                older == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.REUSED);
+                        JsonNode detail = null;
+                        if (config.maxDetailsPerCrawl() == null || fetched < config.maxDetailsPerCrawl()) {
+                            fetched++;
+                            attempted = true;
+                            long requestStart = System.nanoTime();
+                            detail = fetchDetail(company, config, pace, id);
+                            detailFailed = detail == null;
+                            log.debug("{}: job {} ({}/{}) {} in {} s", company.slug(), id, done + 1, summaries.size(),
+                                    detail == null ? "NO DESCRIPTION" : "description fetched",
+                                    (System.nanoTime() - requestStart) / 1_000_000_000.0);
+                        } else {
+                            deferred++;                                     // the next crawl fetches it
+                        }
+                        if (detail != null) {
+                            job = toRawJob(config, summary, detail).withDetail(listHash, RawJob.DetailSource.FETCHED);
+                        } else {                                            // keep an older detail rather than none
+                            JsonNode older = known.anyAge(id);
+                            job = toRawJob(config, summary, older).withDetail(listHash,
+                                    older == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.REUSED);
+                        }
                     }
                 }
-            }
-            batch.add(job);
-            done++;
-            if (attempted) {
-                failedInARow = detailFailed ? failedInARow + 1 : 0;
-            }
+                batch.add(job);
+                done++;
+                if (attempted) {
+                    failedInARow = detailFailed ? failedInARow + 1 : 0;
+                }
 
-            boolean blocked = failedInARow >= MAX_FAILED_DETAILS_IN_A_ROW;
-            if (batch.size() >= config.saveEvery() || blocked) {
+                boolean blocked = failedInARow >= MAX_FAILED_DETAILS_IN_A_ROW;
+                if (batch.size() >= config.saveEvery() || blocked) {
+                    sink.accept(List.copyOf(batch));
+                    log.info("{}: {}/{} jobs saved ({} descriptions fetched, {} reused, {} list only, {} left for the next crawl); "
+                                    + "last {} took {}; {} since the crawl started; one request every {} s",
+                            company.slug(), done, summaries.size(), fetched, reused, listOnly, deferred, batch.size(),
+                            since(batchStart), since(start), pace.delay().toMillis() / 1000.0);
+                    batch.clear();
+                    batchStart = System.nanoTime();
+                }
+                if (blocked) {
+                    throw new IllegalStateException(company.slug() + ": " + failedInARow + " description requests in a row "
+                            + "failed, the site seems to be blocking us; stopping, the next crawl continues (" + done + " of "
+                            + summaries.size() + " jobs were saved)");
+                }
+            }
+        } catch (CrawlStoppedException e) {
+            // the app is shutting down: hand over the jobs finished since the last batch, then stop
+            if (!batch.isEmpty()) {
                 sink.accept(List.copyOf(batch));
-                log.info("{}: {}/{} jobs saved ({} descriptions fetched, {} reused, {} list only, {} left for the next crawl); "
-                                + "last {} took {}; {} since the crawl started; one request every {} s",
-                        company.slug(), done, summaries.size(), fetched, reused, listOnly, deferred, batch.size(),
-                        since(batchStart), since(start), pace.delay().toMillis() / 1000.0);
-                batch.clear();
-                batchStart = System.nanoTime();
             }
-            if (blocked) {
-                throw new IllegalStateException(company.slug() + ": " + failedInARow + " description requests in a row "
-                        + "failed, the site seems to be blocking us; stopping, the next crawl continues (" + done + " of "
-                        + summaries.size() + " jobs were saved)");
-            }
+            log.info("{}: crawl interrupted, the app is shutting down; {} of {} jobs were saved", company.slug(), done,
+                    summaries.size());
+            throw e;
         }
         if (!batch.isEmpty()) {
             sink.accept(List.copyOf(batch));
@@ -237,6 +256,8 @@ public class EightfoldAdapter implements JobBoardAdapter {
                 + "&domain=" + encode(config.domain()) + "&hl=en");
         try {
             return data(company, get(company, pace, uri));
+        } catch (CrawlStoppedException e) {
+            throw e;
         } catch (RuntimeException e) {
             log.warn("{}: no detail for position {} ({}); keeping it without a description", company.slug(), positionId, e.getMessage());
             return null;
@@ -245,7 +266,8 @@ public class EightfoldAdapter implements JobBoardAdapter {
 
     /** One polite GET at the crawl's current pace. */
     private JsonNode get(Company company, Pace pace, URI uri) {
-        return politely(company.slug(), pace, COOL_DOWN, () -> http.get().uri(uri).retrieve().body(JsonNode.class));
+        return politely(company.slug(), pace, COOL_DOWN, () -> http.get().uri(uri).retrieve().body(JsonNode.class),
+                shutdown::isStopping);
     }
 
     /**
@@ -254,8 +276,13 @@ public class EightfoldAdapter implements JobBoardAdapter {
      * last one is thrown. Other errors (403, 404, bad JSON) are never retried.
      */
     static <T> T politely(String slug, Pace pace, Duration coolDown, Supplier<T> call) {
+        return politely(slug, pace, coolDown, call, () -> false);
+    }
+
+    /** As above; the waits end early with a CrawlStoppedException as soon as stopping says the app is shutting down. */
+    static <T> T politely(String slug, Pace pace, Duration coolDown, Supplier<T> call, BooleanSupplier stopping) {
         for (int signals = 1; ; signals++) {
-            sleep(pace.delay());
+            sleep(pace.delay(), stopping);
             try {
                 return call.get();
             } catch (HttpClientErrorException.TooManyRequests | ResourceAccessException e) {
@@ -267,7 +294,7 @@ public class EightfoldAdapter implements JobBoardAdapter {
                 log.info("{}: throttled ({}); now one request every {} s, retrying in {} s", slug,
                         e instanceof ResourceAccessException ? "connection failed" : "429", slower.toMillis() / 1000.0,
                         wait.toSeconds());
-                sleep(wait);
+                sleep(wait, stopping);
             }
         }
     }
@@ -348,12 +375,23 @@ public class EightfoldAdapter implements JobBoardAdapter {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    private static void sleep(Duration duration) {
-        try {
-            Thread.sleep(duration);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while crawling", e);
+    /** Sleeps in slices of at most half a second, so a shutdown is noticed quickly. */
+    private static void sleep(Duration duration, BooleanSupplier stopping) {
+        long end = System.nanoTime() + duration.toNanos();
+        while (true) {
+            if (stopping.getAsBoolean()) {
+                throw new CrawlStoppedException();
+            }
+            long left = end - System.nanoTime();
+            if (left <= 0) {
+                return;
+            }
+            try {
+                Thread.sleep(Math.min(Duration.ofNanos(left).toMillis() + 1, 500));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while crawling", e);
+            }
         }
     }
 

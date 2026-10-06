@@ -268,9 +268,25 @@ everything over once = same as before); a failure after something was saved thro
 CrawlRunService.crawlOne records it as status PARTIAL (new CrawlHealth.Status; V24 widens the crawl_runs CHECK; verified on the
 real DB in a rolled-back transaction; closes nothing; counted in CrawlJobReport.partial and /admin/crawl companiesPartial).
 A restart mid-crawl keeps the saved batches but records no run (nothing runs to write it).
-QUESTION ANSWERED for the user: the Opus gap fill runs only AFTER runAll (all companies) finishes, so a 3-hour Microsoft crawl
-delays the gap fill of every company (rules-based extraction already ran per company). Proposed fix (not built, user to decide):
-an interim gap fill after N minutes of a long run, then the final one at the end; or run it per company after its crawl.
+GRACEFUL SHUTDOWN + PER-COMPANY GAP FILL (2026-10-07, user asked for both; built by Claude, 308 tests):
+- common/ShutdownSignal (SmartLifecycle, phase MAX_VALUE = stops first): isStopping(), track() (work the shutdown waits for, up
+  to jobagent.shutdown.wait-seconds 60). application.yaml: spring.lifecycle.timeout-per-shutdown-phase 90s, server.shutdown
+  graceful. EightfoldAdapter(RestClient, DetailCache, ShutdownSignal): checks the flag before every job, its waits are
+  sliced (<= 0.5 s) and end with CrawlStoppedException; the batch in hand is flushed first. crawlOne is tracked; an interrupted
+  run is PARTIAL (or FAILED when nothing was saved) with error text "interrupted: app shutting down"; lastCrawlStarts ignores
+  such runs (no 24 h wait after a deploy). runAll starts no new company while stopping; scheduledRun is skipped.
+- deploy/deploy.sh: swaps jar + UI first (the running JVM keeps its open inode), then `launchctl kill SIGTERM`, waits for the
+  pid to exit (STOP_WAIT 80 s, then SIGKILL), then `launchctl kickstart` (no -k; KeepAlive may already have respawned it),
+  health check, rollback. TESTED against a real temporary launchd service (SIGTERM received, wind-down, respawn, healthy).
+  USER STEP on the Air (not done yet): give the service file ExitTimeOut 90 (launchd's default would kill sooner):
+  `/usr/libexec/PlistBuddy -c "Add :ExitTimeOut integer 90" ~/Library/LaunchAgents/com.jobagent.app.plist` then
+  `launchctl bootout gui/$(id -u)/com.jobagent.app` and `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jobagent.app.plist`.
+- Per-company gap fill: GapFillRunner.fillCompany(companyId, model, parallelism) (blocking, own Run, does not touch
+  start()/status()), GapFillRepository.findJobsWithGaps(country, families, companyId); CrawlRunService.runAll queues each
+  company's fill (only when it inserted/updated jobs) on ONE single-worker queue, so at most gapFillParallelism Opus calls run at
+  once; it starts the moment that company's crawl ends. crawlJob then still runs the old global gap fill once as a catch-all and
+  reports everything combined (RunStatus.combine). The skill-learning run does NOT take part in the graceful stop (waited for
+  up to the limit, then cut; its decided words are stored per batch, failed ones retry).
 
 ### FINAL PLAN (user, 2026-10-06; project nearing its end: only these, in this order; nothing else deleted below)
 | Order | Item | Status |

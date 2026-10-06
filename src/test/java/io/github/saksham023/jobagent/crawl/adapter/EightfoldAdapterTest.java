@@ -9,6 +9,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
+import io.github.saksham023.jobagent.common.ShutdownSignal;
+import io.github.saksham023.jobagent.crawl.CrawlStoppedException;
 import io.github.saksham023.jobagent.crawl.DetailCache;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -127,7 +129,7 @@ class EightfoldAdapterTest {
         when(cache.load(1L)).thenReturn(new DetailCache.Known(Map.of("2",
                 new DetailCache.Stored("old-hash", Instant.parse("2026-09-01T00:00:00Z"), olderB)), Instant.now()));
 
-        List<RawJob> jobs = new EightfoldAdapter(builder.build(), cache).fetchJobs(company);
+        List<RawJob> jobs = new EightfoldAdapter(builder.build(), cache, new ShutdownSignal()).fetchJobs(company);
 
         server.verify();
         assertThat(jobs).extracting(RawJob::externalId, RawJob::description, RawJob::detail).containsExactly(
@@ -166,7 +168,7 @@ class EightfoldAdapterTest {
         when(cache.load(1L)).thenReturn(DetailCache.Known.NONE);
         List<List<String>> batches = new java.util.ArrayList<>();
 
-        List<RawJob> rest = new EightfoldAdapter(builder.build(), cache).fetchJobs(company,
+        List<RawJob> rest = new EightfoldAdapter(builder.build(), cache, new ShutdownSignal()).fetchJobs(company,
                 batch -> batches.add(batch.stream().map(RawJob::externalId).toList()));
 
         server.verify();
@@ -191,13 +193,57 @@ class EightfoldAdapterTest {
         when(cache.load(1L)).thenReturn(DetailCache.Known.NONE);
         List<RawJob> sunk = new java.util.ArrayList<>();
 
-        assertThatThrownBy(() -> new EightfoldAdapter(builder.build(), cache).fetchJobs(company, sunk::addAll))
+        assertThatThrownBy(() -> new EightfoldAdapter(builder.build(), cache, new ShutdownSignal()).fetchJobs(company, sunk::addAll))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("3 description requests in a row");
 
         server.verify();
         assertThat(sunk).extracting(RawJob::externalId).containsExactly("1", "2", "3", "4", "5", "6");   // saved before stopping
         assertThat(sunk).extracting(RawJob::description).containsExactly("<p>Description 1</p>", null,
                 "<p>Description 3</p>", null, null, null);
+    }
+
+    @Test
+    void whenTheAppShutsDownTheCrawlSavesWhatItHasAndStopsMakingRequests() {
+        Company company = company("""
+                {"host": "apply.careers.microsoft.com", "domain": "microsoft.com", "delayMs": 0, "saveEvery": 2}""");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(containsString("/api/pcsx/search"))).andRespond(withSuccess(positions(1, 5, 5), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=1"))).andRespond(withSuccess(detailOf(1), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=2"))).andRespond(withSuccess(detailOf(2), MediaType.APPLICATION_JSON));
+        // no more requests are expected: the shutdown arrives right after the first batch is handed over
+        DetailCache cache = mock(DetailCache.class);
+        when(cache.load(1L)).thenReturn(DetailCache.Known.NONE);
+        ShutdownSignal shutdown = new ShutdownSignal();
+        List<String> sunk = new java.util.ArrayList<>();
+
+        assertThatThrownBy(() -> new EightfoldAdapter(builder.build(), cache, shutdown).fetchJobs(company, batch -> {
+            batch.forEach(job -> sunk.add(job.externalId()));
+            shutdown.stop();                                         // what Spring does on SIGTERM
+        })).isInstanceOf(CrawlStoppedException.class).hasMessage(ShutdownSignal.INTERRUPTED);
+
+        server.verify();
+        assertThat(sunk).containsExactly("1", "2");
+    }
+
+    @Test
+    void aShutdownDuringAWaitEndsTheWaitAtOnceAndKeepsTheJobsFinishedSoFar() {
+        Company company = company("""
+                {"host": "apply.careers.microsoft.com", "domain": "microsoft.com", "delayMs": 5000, "saveEvery": 10}""");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(containsString("/api/pcsx/search"))).andRespond(withSuccess(positions(1, 3, 3), MediaType.APPLICATION_JSON));
+        DetailCache cache = mock(DetailCache.class);
+        when(cache.load(1L)).thenReturn(DetailCache.Known.NONE);
+        ShutdownSignal shutdown = new ShutdownSignal();
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+                .schedule((Runnable) shutdown::stop, 300, java.util.concurrent.TimeUnit.MILLISECONDS);   // the stop comes while it waits its 5 s pace
+        long start = System.nanoTime();
+
+        assertThatThrownBy(() -> new EightfoldAdapter(builder.build(), cache, shutdown).fetchJobs(company, batch -> { }))
+                .isInstanceOf(CrawlStoppedException.class);
+
+        assertThat((System.nanoTime() - start) / 1_000_000).isLessThan(3000);       // not the 5 s (or more) pace
     }
 
     @Test
@@ -268,7 +314,7 @@ class EightfoldAdapterTest {
 
     @Test
     void eachEightfoldCompanyIsItsOwnServer() {
-        assertThat(new EightfoldAdapter(null, null).serverKey(company("""
+        assertThat(new EightfoldAdapter(null, null, null).serverKey(company("""
                 {"host": "careers.qualcomm.com", "domain": "qualcomm.com"}"""))).isEqualTo("careers.qualcomm.com");
     }
 }

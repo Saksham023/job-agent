@@ -45,8 +45,10 @@ flowchart LR
 **1. Crawl job.** Every company's crawl runs on a virtual thread per *server*: companies sharing a server (all Lever
 boards, one Workday cluster) go one after another, so we never send parallel requests to one server; different servers
 run at the same time. For each company: fetch the list, fetch each job's details (or reuse the stored ones, below), save,
-extract requirements with the rules, check the crawl's health, close jobs missing from two good crawls in a row. When
-all companies are done, Opus fills the gaps of new jobs. A company that throttles (Qualcomm, Microsoft) is crawled at
+extract requirements with the rules, check the crawl's health, close jobs missing from two good crawls in a row, and
+let Opus fill the gaps of that company's new jobs right away (so a slow company never holds the others back). A long crawl
+saves its jobs in batches, and when the app is stopped on purpose (a deploy) it saves its batch and records the run as
+partial first. A company that throttles (Qualcomm, Microsoft) is crawled at
 most once a day.
 
 **2. Understanding a job.** Rules first, because they are fast, free and testable: a years-of-experience parser that

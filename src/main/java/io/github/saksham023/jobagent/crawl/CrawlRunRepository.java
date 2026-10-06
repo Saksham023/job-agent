@@ -1,5 +1,6 @@
 package io.github.saksham023.jobagent.crawl;
 
+import io.github.saksham023.jobagent.common.ShutdownSignal;
 import io.github.saksham023.jobagent.crawl.CrawlHealth.Status;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -90,10 +91,15 @@ public class CrawlRunRepository {
                 .single();
     }
 
-    /** When each company's last crawl started (any status), by company id. */
+    /**
+     * When each company's last crawl started (any status), by company id. A crawl that was interrupted by a shutdown
+     * (a deploy) does not count: the company should be crawled again at the next run, not a day later.
+     */
     public Map<Long, Instant> lastCrawlStarts() {
         Map<Long, Instant> starts = new HashMap<>();
-        jdbc.sql("SELECT company_id, max(started_at) AS last FROM crawl_runs GROUP BY company_id")
+        jdbc.sql("SELECT company_id, max(started_at) AS last FROM crawl_runs "
+                        + "WHERE error IS NULL OR position(:interrupted IN error) = 0 GROUP BY company_id")
+                .param("interrupted", ShutdownSignal.INTERRUPTED)
                 .query((rs, n) -> starts.put(rs.getLong("company_id"), rs.getTimestamp("last").toInstant())).list();
         return starts;
     }

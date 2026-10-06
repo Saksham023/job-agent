@@ -25,7 +25,7 @@ Any of them can also be set as an environment variable (Spring's naming: `jobage
 | `detail-max-age-days` | `7` | a known, unchanged job's stored detail is reused until it is this old, then fetched again |
 | `schedule.enabled` | `false` | run the crawl job automatically (manual: `POST /admin/crawl`) |
 | `schedule.cron` | `0 0 */6 * * *` | when (every 6 hours) |
-| `schedule.gap-fill` | `true` | after the crawl, Opus fills gaps of new jobs |
+| `schedule.gap-fill` | `true` | Opus fills the gaps of new jobs: for each company right after its own crawl (so a slow company never delays the others), and once more at the end for anything still unasked |
 | `schedule.gap-fill-model` | `opus` | model for that gap fill |
 | `schedule.gap-fill-parallelism` | `10` | Opus calls at the same time (1 to 10) |
 | `schedule.close-after-misses` | `2` | a job missing from this many good crawls in a row is closed |
@@ -101,6 +101,17 @@ skills, a keyword over 100 characters, a page above 1000; page size is capped at
 
 **A request that carries the API key skips all of this** on `/api/**`: no rate limit, no caps (page size up to 1000).
 Use it for your own scripts: `curl -H 'X-API-Key: <key>' '.../api/v1/jobs?size=500'`.
+
+### Shutdown: `jobagent.shutdown.*` and Spring's own
+
+| Setting | Default | What it does |
+|---|---|---|
+| `jobagent.shutdown.wait-seconds` | `60` | when the app is told to stop (a deploy, a restart), running crawls and gap fills get this long to wind down: a crawl saves its batch and records its run as partial, then the app exits |
+| `spring.lifecycle.timeout-per-shutdown-phase` | `90s` | Spring's limit for the whole wind-down; keep it above `wait-seconds` |
+| `server.shutdown` | `graceful` | web requests already in flight finish before the web server stops |
+
+The launchd service file on the server needs a matching `ExitTimeOut` of 90 seconds, otherwise launchd kills the app sooner
+(see the deploy notes in `deploy/deploy.sh`). The deploy script stops the app with SIGTERM and waits up to 80 s (`STOP_WAIT`).
 
 ### Web UI: `jobagent.web.*`
 
@@ -181,5 +192,7 @@ on top of `skills.csv` (the CSV wins on conflicts).
 A company's crawl ends as one of: **OK** (complete, may close vanished jobs), **SUSPECT** (saved, but the count collapsed, nothing closed),
 **PARTIAL** (an Eightfold crawl that saved some jobs and then stopped, for example because the site kept blocking
 descriptions; the saved jobs stay, nothing is closed, the next crawl continues from them), **FAILED** (nothing saved).
-Eightfold crawls stop after 3 description requests in a row fail (the site is blocking us). If the app is restarted
-in the middle of a crawl (for example by a deploy), the jobs already saved stay too, but no run is recorded for it.
+Eightfold crawls stop after 3 description requests in a row fail (the site is blocking us). When the app is stopped on
+purpose in the middle of a crawl (a deploy or restart), the crawl saves its batch and is recorded as PARTIAL (or FAILED when
+nothing was saved yet) with the note "interrupted: app shutting down"; such a run does not count for `minCrawlHours`, so the
+company is crawled again at the next run. Only a crash, a power cut or a hard kill loses the run record (the saved jobs stay).

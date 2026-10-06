@@ -47,6 +47,7 @@ public class GapFillRepository {
               AND j.description IS NOT NULL AND j.description <> ''
               AND j.country_codes @> ARRAY[CAST(:country AS text)]
               AND f.job_id IS NULL
+              AND (CAST(:companyId AS bigint) IS NULL OR j.company_id = :companyId)
               AND (r.family = ANY(:families) OR r.secondary_families && CAST(:families AS text[]))
               AND (r.years_confidence IN ('NONE', 'LOW') OR r.family = 'UNCLASSIFIED' OR r.family_guessed)
             ORDER BY j.id
@@ -126,9 +127,15 @@ public class GapFillRepository {
 
     /** @param families the job families in scope (names; include UNCLASSIFIED to ask about unclassified jobs) */
     public List<GapJob> findJobsWithGaps(String country, String[] families) {
+        return findJobsWithGaps(country, families, null);
+    }
+
+    /** As above, for one company's jobs only (companyId null = every company). */
+    public List<GapJob> findJobsWithGaps(String country, String[] families, Long companyId) {
         return jdbc.sql(SELECT_JOBS_WITH_GAPS)
                 .param("country", country)
                 .param("families", families)
+                .param("companyId", companyId)
                 .query((rs, rowNum) -> new GapJob(
                         new JobText(rs.getLong("id"), rs.getString("title"), rs.getString("department"),
                                 rs.getString("function"), rs.getString("description"),

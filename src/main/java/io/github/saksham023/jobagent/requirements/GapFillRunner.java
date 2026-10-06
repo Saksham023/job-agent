@@ -1,5 +1,6 @@
 package io.github.saksham023.jobagent.requirements;
 
+import io.github.saksham023.jobagent.common.ShutdownSignal;
 import io.github.saksham023.jobagent.matching.MatchingProperties;
 import io.github.saksham023.jobagent.requirements.GapFillRepository.GapJob;
 import io.github.saksham023.jobagent.requirements.GapFiller.Fill;
@@ -44,20 +45,66 @@ public class GapFillRunner {
     public record RunStatus(String model, String promptVersion, int toFill, int done, int failed, int yearsFilled,
                             int familiesFilled, int languagesFilled, int rejected, double costUsd, boolean running,
                             Instant startedAt, Instant finishedAt, String lastError) {
+
+        /** Several finished runs (one per company, plus a final catch-all) as one: counts and cost added up. */
+        public static RunStatus combine(List<RunStatus> runs) {
+            RunStatus first = runs.get(0);
+            Instant started = runs.stream().map(RunStatus::startedAt).min(Instant::compareTo).orElse(first.startedAt());
+            Instant finished = runs.stream().map(RunStatus::finishedAt).filter(java.util.Objects::nonNull)
+                    .max(Instant::compareTo).orElse(null);
+            String error = runs.stream().map(RunStatus::lastError).filter(java.util.Objects::nonNull)
+                    .reduce((a, b) -> b).orElse(null);
+            return new RunStatus(first.model(), first.promptVersion(),
+                    runs.stream().mapToInt(RunStatus::toFill).sum(), runs.stream().mapToInt(RunStatus::done).sum(),
+                    runs.stream().mapToInt(RunStatus::failed).sum(), runs.stream().mapToInt(RunStatus::yearsFilled).sum(),
+                    runs.stream().mapToInt(RunStatus::familiesFilled).sum(),
+                    runs.stream().mapToInt(RunStatus::languagesFilled).sum(),
+                    runs.stream().mapToInt(RunStatus::rejected).sum(),
+                    Math.round(runs.stream().mapToDouble(RunStatus::costUsd).sum() * 100) / 100.0, false, started, finished,
+                    error);
+        }
     }
 
     private final GapFiller filler;
     private final GapFillRepository repository;
     private final MatchingProperties matching;
     private final GapFillProperties properties;
+    private final ShutdownSignal shutdown;
     private final AtomicReference<Run> current = new AtomicReference<>();
 
     public GapFillRunner(GapFiller filler, GapFillRepository repository, MatchingProperties matching,
-                         GapFillProperties properties) {
+                         GapFillProperties properties, ShutdownSignal shutdown) {
         this.filler = filler;
         this.repository = repository;
         this.matching = matching;
         this.properties = properties;
+        this.shutdown = shutdown;
+    }
+
+    /**
+     * Fills the gaps of ONE company's jobs right now, on the calling thread, and returns when done (the crawl calls this
+     * as soon as a company's crawl ends). It does not take part in start() / status() / "one run at a time": several
+     * calls must not overlap, so the caller queues them (the crawl run does).
+     */
+    public RunStatus fillCompany(long companyId, String model, int parallelism) {
+        if (parallelism < 1 || parallelism > MAX_PARALLELISM) {
+            throw new IllegalArgumentException("parallelism must be between 1 and " + MAX_PARALLELISM);
+        }
+        GapFillPrompt prompt = GapFillPrompt.load();
+        String[] families = properties.families().stream().map(Enum::name).toArray(String[]::new);
+        List<GapJob> todo = new ArrayList<>(repository.findJobsWithGaps(matching.country(), families, companyId));
+        Collections.shuffle(todo, new Random(42));
+        Run run = new Run(model, prompt, todo.size());
+        if (!todo.isEmpty()) {
+            log.info("Gap fill for company {} started: {} jobs, model {}, parallelism {}", companyId, todo.size(), model,
+                    parallelism);
+            run.execute(List.copyOf(todo), parallelism);
+        } else {
+            run.running = false;
+            run.finishedAt = Instant.now();
+            run.finished.countDown();
+        }
+        return run.status();
     }
 
     /**
@@ -137,6 +184,10 @@ public class GapFillRunner {
             Semaphore slots = new Semaphore(parallelism);
             try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
                 for (GapJob job : todo) {
+                    if (shutdown.isStopping()) {
+                        lastError = "Stopped: " + ShutdownSignal.INTERRUPTED + " (the rest is asked next time)";
+                        break;
+                    }
                     if (failed.get() >= FAILURES_BEFORE_GIVING_UP && done.get() == 0) {
                         lastError = "Stopped: the first " + failed.get() + " calls failed. Last error: " + lastError;
                         break;
