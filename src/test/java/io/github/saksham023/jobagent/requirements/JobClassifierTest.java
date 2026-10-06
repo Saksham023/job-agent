@@ -335,4 +335,19 @@ class JobClassifierTest {
         assertThat(classify("PERC Rule Deck Development Engineer", "Engineering").secondaryFamilies())
                 .doesNotContain(JobFamily.SOFTWARE_ENGINEERING);
     }
+
+    @Test
+    void chipTestAndDesignRolesAreHardware() {
+        for (String title : new String[]{"Validation/Characterization Engineer", "ESD Lead", "Senior Digital PD Engineer",
+                "Timing closure expert", "RF Device Modeling Engineer", "AV&V Manager"}) {
+            assertThat(classify(title, "Engineering - Product Dev").family()).as(title).isEqualTo(JobFamily.HARDWARE_ENGINEERING);
+        }
+        assertThat(classify("Software Validation Engineer", null).family()).isNotEqualTo(JobFamily.HARDWARE_ENGINEERING);
+    }
+
+    @Test
+    void repeatedSpacesInTitlesDoNotBreakRules() {
+        assertThat(classify("Principal Software  Architect – Logistics Systems", "Information Technology").family())
+                .isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+    }
 }

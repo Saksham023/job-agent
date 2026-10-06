@@ -161,9 +161,9 @@ stale (store an as-of date and add elapsed time), deleting a profile on request.
 ### FINAL PLAN (user, 2026-10-06; project nearing its end: only these, in this order; nothing else deleted below)
 | Order | Item | Status |
 |---|---|---|
-| 1 | Amazon adapter (~2,300 India jobs): crawl, run extraction BEFORE any rule change, measure gaps, fix rules | DONE (see Amazon status); commit pending |
-| 2 | Oracle Recruiting Cloud adapter (JPMorgan, Goldman, TI, Amex, Oracle; ~600 jobs): same check | NEXT |
-| 3 | Scheduler (per-host virtual threads) + closed jobs + health checks/alerts (core of M9) | must |
+| 1 | Amazon adapter (~2,300 India jobs): crawl, run extraction BEFORE any rule change, measure gaps, fix rules | DONE (28e5513) |
+| 2 | Oracle Recruiting Cloud adapter (JPMorgan, Goldman, TI, Amex, Oracle; ~600 jobs): same check | DONE (Oracle itself skipped) |
+| 3 | Scheduler (per-host virtual threads) + closed jobs + health checks/alerts (core of M9) | NEXT (design with the user first) |
 | 4 | Embeddings TEST (never tested in job-agent; vectors only in code-mcp): build, measure vs the answer key; keep only if it helps | later |
 | 5 | 8b self-learning skill dictionary (strong resume story) | later |
 | 6 | README with measured numbers, then the user pushes the repo | last |
@@ -199,6 +199,35 @@ cheaper judge via Anthropic API, small backlog fixes. Pending small change: joba
   Opus families checked (BIE -> ANALYTICS, Applied Science Manager -> ENG_MANAGEMENT, SDE2 -> SWE...): sensible.
   Then 2 spellings added to the rules (same answers as Opus, 13 jobs): "business intel(ligence)", "sde\d?" (SDE2).
   229 tests green. NOT committed yet (Amazon adapter + v11 + gap-fill change + ready-target 15).
+
+### Oracle status (2026-10-06): Amazon committed (28e5513); OracleAdapter written + tested in the scratchpad (234 tests),
+handed to the user for pasting (OracleAdapter, V18__add_oracle_companies, OracleAdapterTest)
+- API (Candidate Experience REST): facet discovery `recruitingCEJobRequisitions?expand=locationsFacet&finder=findReqs;
+  siteNumber=..,facetsList=LOCATIONS` -> entry named exactly "India" (ids differ: JPM 300000000289360, TI ...361484,
+  GS/Amex ...228786); list `finder=findReqs;siteNumber,locationId,limit=100,offset,sortBy=POSTING_DATES_DESC` (no
+  description); detail `recruitingCEJobRequisitionDetails?expand=all&finder=ById;Id="..",siteNumber=..`
+  (ExternalDescriptionStr + Responsibilities + Qualifications; Corporate/Organization blurbs skipped). Public link
+  https://{host}/hcmUI/CandidateExperience/en/sites/{site}/job/{Id} (200). 1 s per request.
+- Tenants: JPMorgan 317 (jpmc.fa / CX_1001), TI 133 (edbz.fa.us2 / CX), Goldman 87 (hdpc.fa.us2 / LateralHiring),
+  Amex 65 (egug.fa.us2 / CX_1). Oracle itself SKIPPED (facet shows only its top 18 locations, no India; unknown
+  locationId is ignored by the API). robots.txt: 404 on 4 tenants; JPMorgan's /robots.txt answers 403 from its
+  firewall (WAF4SaaS) while the API its careers page calls works normally (told the user).
+- Crawled by the user 2026-10-06: Amex 68, Goldman 86, TI 133, JPMorgan 319 = 606 jobs, 0 unresolved, ~16 min total.
+- Generalization check (before rule edits): SWE 149 (44 guessed), UNCLASSIFIED 40 (bank business roles: credit,
+  wealth, research, HR), no descriptions missing. Goldman's "department" is the LEVEL (Vice President / Associate /
+  Analyst) and its function "Lateral Apply": no vote, the title decides (fine). Bank VP titles without years get the
+  title estimate 12+ (too high for banks, harmless for junior searches; levelScheme idea stays in the backlog).
+  Real rule gaps: TI chip roles counted as SWE (Validation/Characterization, ESD, PD, timing closure, scribe, device
+  modeling, AV&V), and a double space broke "Principal Software  Architect".
+- Rules v12 (Claude edited existing files): JobClassifier collapses repeated spaces in titles; title-families.csv:
+  hardware += those chip words (validation engineer only when not "software"/"data" validation), SWE += "software
+  [solution] architect". Diff over all 5,258 jobs: 23 changed, all intended (22 -> HARDWARE incl. 3 Nvidia system
+  validation jobs Opus had already called hardware; Principal Software Architect -> SWE). 2 tests; 236 green.
+- DONE 2026-10-06: rebuild v12 (5,258 jobs, 173 s), gap fill 94 Oracle jobs (only new jobs are asked: stored answers
+  are re-applied after every rebuild), 0 failed, families 63, years 14, 1 rejected, $2.50. Left UNCLASSIFIED in the
+  whole DB: 5 Goldman placeholder postings ("Contingent Worker India 1", "Industrial Trainee"), correct. Oracle jobs in
+  SWE/DATA_ML/INFRA searches: JPMorgan 113, Goldman 34, TI 18, Amex 17. Totals: 5,258 open jobs, 33 companies, 8
+  platforms (Greenhouse, Lever, SmartRecruiters, Ashby, Workday, Eightfold, Amazon, Oracle).
 
 ### ROADMAP (agreed 2026-10-05; work strictly in this order, one milestone at a time)
 | # | Milestone | Status |

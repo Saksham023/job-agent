@@ -66,6 +66,8 @@ public class JobClassifier {
 
     private static final String TECH = "TECH";
 
+    private static final Pattern SPACES = Pattern.compile("\\s+");
+
     private final List<Rule<JobFamily>> titleRules;
     private final List<Rule<JobFamily>> fallbackTitleRules;
     private final List<Rule<JobFamily>> departmentRules;
@@ -89,7 +91,8 @@ public class JobClassifier {
      * @param department the platform's department, may be null
      * @param function   SmartRecruiters' function label, may be null; used when the department gives no vote
      */
-    public Classification classify(String title, String department, String function, String description) {
+    public Classification classify(String rawTitle, String department, String function, String description) {
+        String title = rawTitle == null ? null : SPACES.matcher(rawTitle.strip()).replaceAll(" ");  // "Software  Architect"
         Map<JobFamily, Integer> votes = new EnumMap<>(JobFamily.class);
         List<String> reasons = new ArrayList<>();
 
