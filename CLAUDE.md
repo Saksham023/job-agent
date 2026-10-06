@@ -188,7 +188,7 @@ Committed.
 | 3 | Scheduler (per-host virtual threads) + closed jobs + health checks/alerts (core of M9) | NEXT: design agreed, building (see plan) |
 | 4 | Embeddings TEST | DONE 2026-10-06: NO gain for ranking, not adopted (eval/embeddings/REPORT.md) |
 | 5 | 8b self-learning skill dictionary (strong resume story) | DONE (scheduler off by default) |
-| 6 | README with measured numbers, then the user pushes the repo | last |
+| 6 | README with measured numbers, then the user pushes the repo | README DONE 2026-10-06 (README.md); push is the user's |
 DROPPED (user, 2026-10-06): a per-profile "seen jobs" list / "new since last search" flag (NOT even backlog); new jobs
 are already ranked in by every new search (rule score order, only new jobs judged) and that is the wanted behaviour.
 SKIPPED: Microsoft crawl, Morgan Stanley/UKG CSRF, other custom adapters, dedup, digests, tracker, outreach drafts, web UI,
