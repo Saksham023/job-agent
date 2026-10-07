@@ -29,6 +29,18 @@ WHAT TO CHECK FIRST (ask the user to paste the outputs):
  3. `GET /admin/health` (header X-API-Key) for every company's status and alerts.
  4. Microsoft's jobs have NO Opus gap fill yet when the crawl was started with POST /admin/crawl/microsoft (that endpoint skips it); the
     next full run's final catch-all (or `POST /admin/requirements/fill-gaps`) does it.
+FINDINGS OF 2026-10-07 13:30 (read-only checks on the Air over SSH, at the user's request): the 06:00 and 12:00 scheduled crawls were both clean
+(32 OK, 0 failed; 06:00: 25 new, 10 closed, gap fill 35 calls $1.02; 12:00: 71 new, 60 closed, gap fill 24 calls $0.42); the 03:30 skill learning
+ran ($0.38, 22 new skills, 1,763 jobs re-extracted); Microsoft's full crawl finished 02:39 (239 jobs, all with descriptions, 71 min, 27 throttle
+signals); per-company gap fill verified in production (e.g. 12:01:05 started for a company with 20 jobs, finished 12:01:19, the catch-all then
+found 0). 0 ERROR lines. Claude calls today: 59 gap fill ($1.43) + ~4 skill learning ($0.38) + 0 judge. The BlackRock/Amazon jobs "posted before
+6 AM" were NOT missed: platforms give only a DATE, the UI shows it as midnight (BlackRock = 05:30 IST, Amazon 00:00 IST), first_seen was 12:00 and
+Amazon's platform job number was higher than every job the 06:00 run saw. REAL BUG FOUND: GET /api/v1/facets could answer HTTP 500 ("Null key for
+a Map not allowed in JSON") while a crawl batch had saved jobs but their requirements were not extracted yet (LEFT JOIN gives a NULL family);
+seen once at 03:27:16 during the Microsoft crawl. FIXED locally in PublicJobRepository.addCount (null names skipped) + test (319 tests), committed,
+NOT pushed (deploy it at a quiet time: not around 00/06/12/18:00).
+IDEA from this: a "Claude usage today" panel in the planned dashboard (calls and cost per source; today only gap fill costs are stored, skill
+learning cost is only in the log, so an llm_calls ledger table would be needed).
 THEN, in this order (user's plan): (a) commit CLAUDE.md after the Microsoft crawl is done; (b) refresh the README numbers (jobs, companies,
 crawl time) now that Microsoft is in; (c) start the LOGIN SYSTEM (backlog item below); (d) the server stats DASHBOARD (see NEW REQUESTS below). Logos were dropped.
 COMPANY LOGOS: TRIED AND DROPPED 2026-10-07 (user: "not worth wasting so much time", everything deleted, nothing was pushed; the UI keeps the

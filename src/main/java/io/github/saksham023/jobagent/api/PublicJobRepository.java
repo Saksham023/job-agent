@@ -117,8 +117,19 @@ public class PublicJobRepository {
 
     private Map<String, Integer> countMap(String sql, Where where) {
         Map<String, Integer> counts = new HashMap<>();
-        jdbc.sql(sql).params(where.params()).query((rs, n) -> counts.put(rs.getString("name"), rs.getInt("jobs"))).list();
+        jdbc.sql(sql).params(where.params()).query((rs, n) -> addCount(counts, rs.getString("name"), rs.getInt("jobs"))).list();
         return counts;
+    }
+
+    /**
+     * Adds one facet count. A job a crawl saved a moment ago may not have its requirements yet, so its family comes back as NULL;
+     * a null key cannot be written as JSON (the whole response would fail), and such a job has no family to count anyway.
+     */
+    static String addCount(Map<String, Integer> counts, String name, int jobs) {
+        if (name != null) {
+            counts.put(name, jobs);
+        }
+        return name;
     }
 
     public Optional<JobDetail> detail(long id) {
