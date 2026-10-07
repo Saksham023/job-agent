@@ -55,13 +55,6 @@ public class DetailCache {
             return listUnchanged ? stored.detail() : null;
         }
 
-        /** True when the job is stored with a detail and its list entry is unchanged (whatever the detail's age). */
-        public boolean unchanged(String externalId, String listHash) {
-            Stored stored = externalId == null ? null : byExternalId.get(externalId);
-            return stored != null && stored.detail() != null
-                    && (stored.listHash() == null || stored.listHash().equals(listHash));
-        }
-
         /** The stored detail whatever its age or list fingerprint, or null: so a job never loses its description. */
         public JsonNode anyAge(String externalId) {
             Stored stored = externalId == null ? null : byExternalId.get(externalId);

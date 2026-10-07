@@ -55,9 +55,6 @@ import static io.github.saksham023.jobagent.crawl.adapter.JsonFields.value;
  * Optional config.maxDetailsPerCrawl caps the detail requests of one crawl (for a first load of a company that
  * throttles): the remaining jobs are saved from the list (or with their older stored detail) and, having no
  * description, are fetched by the next crawl. A detail that cannot be fetched also keeps an older stored one.
- * Optional config.newestSortBy (the PCSX sort value, "timestamp" = newest first) switches on the QUICK CHECK FOR NEW JOBS
- * ({@link #fetchNewestJobs}): the list is read newest first, jobs already stored with an unchanged list entry are skipped,
- * and it stops after the first page with nothing new, or after config.peekMaxPages (default 5) pages.
  * Tenants that need a session cookie and CSRF token (Morgan Stanley, UKG) are not supported yet.
  */
 @Component
@@ -153,30 +150,7 @@ public class EightfoldAdapter implements JobBoardAdapter {
         log.info("{}: crawl started; one request every {} s at first, saving and logging every {} jobs{}", company.slug(),
                 config.delay().toMillis() / 1000.0, config.saveEvery(), config.maxDetailsPerCrawl() == null ? ""
                         : ", at most " + config.maxDetailsPerCrawl() + " descriptions this crawl");
-        new Crawl(company, config, sink, false).run();
-        return List.of();
-    }
-
-    @Override
-    public boolean supportsNewestCheck(Company company) {
-        return EightfoldConfig.from(company).newestSortBy() != null;
-    }
-
-    /**
-     * The quick check: the newest part of the list only. New jobs and jobs whose list entry changed (a repost changes the
-     * posting time) get their description and go to the sink; known unchanged jobs are skipped. The list is read page by
-     * page and the check stops after the first page that brought nothing new, or after peekMaxPages pages (the next check
-     * continues, an hour later). It never learns which jobs have gone, so it is no basis for closing jobs.
-     */
-    @Override
-    public List<RawJob> fetchNewestJobs(Company company, Consumer<List<RawJob>> sink) {
-        EightfoldConfig config = EightfoldConfig.from(company);
-        if (config.newestSortBy() == null) {
-            throw new UnsupportedOperationException(company.slug() + ": config.newestSortBy is not set");
-        }
-        log.info("{}: quick check for new jobs started (newest first, at most {} list pages)", company.slug(),
-                config.peekMaxPages());
-        new Crawl(company, config, sink, true).run();
+        new Crawl(company, config, sink).run();
         return List.of();
     }
 
@@ -192,11 +166,9 @@ public class EightfoldAdapter implements JobBoardAdapter {
         private final List<RawJob> batch = new ArrayList<>();
         private final long start = System.nanoTime();
         private long batchStart = System.nanoTime();
-        private final boolean newestOnly;                           // the quick check: only new / changed jobs
-        private int total, listed, done, listOnly, reused, fetched, deferred, failedInARow, alreadyKnown;
+        private int total, listed, done, listOnly, reused, fetched, deferred, failedInARow;
 
-        Crawl(Company company, EightfoldConfig config, Consumer<List<RawJob>> sink, boolean newestOnly) {
-            this.newestOnly = newestOnly;
+        Crawl(Company company, EightfoldConfig config, Consumer<List<RawJob>> sink) {
             this.company = company;
             this.config = config;
             this.sink = sink;
@@ -208,25 +180,15 @@ public class EightfoldAdapter implements JobBoardAdapter {
             try {
                 for (int page = 0; page < MAX_PAGES; page++) {
                     JsonNode items = listPage(page);
-                    int newOnThisPage = 0;
                     for (JsonNode summary : items) {
                         String id = text(summary, "id");
                         if (id != null && !seen.add(id)) {
                             continue;                           // the list shifted and showed this job on two pages
                         }
-                        if (newestOnly && known.unchanged(id, listHash(summary))) {
-                            alreadyKnown++;                     // stored with the same list entry: nothing to do
-                            continue;
-                        }
-                        newOnThisPage++;
                         process(summary);
                     }
                     if (items.isEmpty() || listed >= total) {
                         finish();
-                        return;
-                    }
-                    if (newestOnly && (newOnThisPage == 0 || page + 1 >= config.peekMaxPages())) {
-                        finish();                               // nothing new on this page (or enough pages): stop
                         return;
                     }
                 }
@@ -246,8 +208,7 @@ public class EightfoldAdapter implements JobBoardAdapter {
         /** The next page of the search: its positions. The offset is how many positions the list has shown so far. */
         private JsonNode listPage(int page) {
             URI uri = URI.create(config.base() + "/api/pcsx/search?domain=" + encode(config.domain()) + "&query=&location="
-                    + encode(config.location()) + "&start=" + listed
-                    + (newestOnly ? "&sort_by=" + encode(config.newestSortBy()) : ""));
+                    + encode(config.location()) + "&start=" + listed);
             JsonNode data = data(company, get(company, config, pace, uri));
             JsonNode items = data.path("positions");
             total = data.path("count").asInt();
@@ -330,10 +291,9 @@ public class EightfoldAdapter implements JobBoardAdapter {
 
         private void finish() {
             flush();
-            log.info("{}: {} finished: {} jobs in {} ({} descriptions fetched, {} reused, {} list only, {} left for the "
-                            + "next crawl{}); one request every {} s at the end", company.slug(),
-                    newestOnly ? "quick check" : "crawl", done, since(start), fetched, reused, listOnly, deferred,
-                    newestOnly ? ", " + alreadyKnown + " already known" : "", pace.delay().toMillis() / 1000.0);
+            log.info("{}: crawl finished: {} jobs in {} ({} descriptions fetched, {} reused, {} list only, {} left for the "
+                            + "next crawl); one request every {} s at the end", company.slug(), done, since(start), fetched,
+                    reused, listOnly, deferred, pace.delay().toMillis() / 1000.0);
         }
     }
 
@@ -483,12 +443,11 @@ public class EightfoldAdapter implements JobBoardAdapter {
      * {"host": "apply.careers.microsoft.com", "domain": "microsoft.com"}, plus optional "location" (the search's
      * location text, default "India"), "delayMs" (the STARTING pause between requests, default 1000; it grows on
      * its own when the site throttles) and "detailDepartments" (regex; only jobs whose department matches get a
-     * detail request; absent = all). "newestSortBy" / "peekMaxPages": the quick check for new jobs. Patience with throttling: "coolDownSeconds" (default 10), "maxThrottledTries"
+     * detail request; absent = all). Patience with throttling: "coolDownSeconds" (default 10), "maxThrottledTries"
      * (default 5) and "maxCoolDownSeconds" (default 300).
      */
     record EightfoldConfig(String host, String domain, String location, Duration delay, Pattern detailDepartments,
-                           Integer maxDetailsPerCrawl, int saveEvery, Throttle throttle, String newestSortBy,
-                           int peekMaxPages) {
+                           Integer maxDetailsPerCrawl, int saveEvery, Throttle throttle) {
 
         static EightfoldConfig from(Company company) {
             String host = text(company.config(), "host");
@@ -504,8 +463,6 @@ public class EightfoldAdapter implements JobBoardAdapter {
             JsonNode coolDown = company.config().path("coolDownSeconds");
             JsonNode tries = company.config().path("maxThrottledTries");
             JsonNode maxCoolDown = company.config().path("maxCoolDownSeconds");
-            String newestSortBy = text(company.config(), "newestSortBy");
-            JsonNode peekPages = company.config().path("peekMaxPages");
             Throttle throttle = new Throttle(
                     coolDown.isNumber() && coolDown.asLong() >= 0 ? Duration.ofSeconds(coolDown.asLong()) : COOL_DOWN,
                     tries.isNumber() && tries.asInt() >= 1 ? tries.asInt() : MAX_THROTTLED_TRIES,
@@ -514,8 +471,7 @@ public class EightfoldAdapter implements JobBoardAdapter {
                     Duration.ofMillis(delayMs.isNumber() ? delayMs.asLong() : 1000),
                     detailDepartments == null ? null : Pattern.compile(detailDepartments, Pattern.CASE_INSENSITIVE),
                     maxDetails.isNumber() ? maxDetails.asInt() : null,
-                    saveEvery.isNumber() && saveEvery.asInt() >= 1 ? saveEvery.asInt() : 10, throttle, newestSortBy,
-                    peekPages.isNumber() && peekPages.asInt() >= 1 ? peekPages.asInt() : 5);
+                    saveEvery.isNumber() && saveEvery.asInt() >= 1 ? saveEvery.asInt() : 10, throttle);
         }
 
         /** True when every job gets a detail, or the department matches detailDepartments. */

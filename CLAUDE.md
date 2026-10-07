@@ -44,17 +44,16 @@ learning cost is only in the log, so an llm_calls ledger table would be needed).
 THEN, in this order (user's plan): (a) commit CLAUDE.md after the Microsoft crawl is done; (b) refresh the README numbers (jobs, companies,
 crawl time) now that Microsoft is in; (c) start the LOGIN SYSTEM (backlog item below); (d) the server stats DASHBOARD (see NEW REQUESTS below). Logos were dropped.
 POSTING TIME (2026-10-07, user's design, UNCOMMITTED): the public API shows ONE derived time, SQL expression JobSearch.POSTED (display, sort, postedWithinDays, stats): real platform time kept; date-only platforms (midnight UTC or IST: Workday, Amazon, Qualcomm) keep the DATE and take the time of day from first_seen_at when first seen that India day, else noon India of the date (backlog); no date = first_seen_at. Raw posted_at is untouched; UI unchanged (ago()). User plans to crawl every 1-2 h later, so the error shrinks.
-SCHEDULER REDESIGN (2026-10-07, user's decisions, UNCOMMITTED, V25 + V26, 330 tests): (1) regular loop = @Scheduled fixedDelay jobagent.crawl.schedule.delay PT30M
-(cron removed), crawls every company WITHOUT config.minCrawlHours, then the per-company gap fills (queued right after each company's crawl) and a final catch-all;
-(2) slow companies (config.minCrawlHours: Microsoft, Qualcomm) have their OWN loop: a tick every slow-check-delay (PT5M) starts each due one on its own virtual thread
-(CrawlRunService.startDueSlowCompanies), they never hold up the regular loop; their gap fill runs in their own thread right after their crawl; one gapFillLock serializes
-all fillCompany calls and the catch-all (no double Opus asks); (3) throttle patience per company (coolDownSeconds/maxThrottledTries/maxCoolDownSeconds; Microsoft 8 tries,
-30 s steps = 14 min, V25); (4) retry after a PARTIAL/FAILED full crawl: retry-after PT30M, max-retries 3, restarts from list page 1 (stored details are reused);
-(5) QUICK CHECK ("PEEK", crawl_runs.kind = 'PEEK', V26): hourly for Microsoft/Qualcomm (peekEveryMinutes 60, newestSortBy 'timestamp' verified live on both 2026-10-07; Qualcomm's
-postedTs is date-only): list sorted newest first, jobs stored with an unchanged list hash are skipped, stops after the first page with nothing new or peekMaxPages 5; it NEVER
-closes jobs and does not count as a good crawl (closing/health/last start/retry queries all filter kind = 'FULL'); (6) the daily FULL crawl of those two starts from
-fullCrawlFromHour 3 India time, once per day (minCrawlHours 6 is only a safety gap). Per company only ONE crawl at a time (crawling set): a PEEK during a FULL, or a retry
-during a PEEK, is refused. Manual: POST /admin/crawl/{slug}/newest = a PEEK. A throttling site is not peeked while its last full crawls failed.
+SCHEDULE (2026-10-07, user's final design, UNCOMMITTED, V25 + V27; the first attempt ef290c9 with a separate slow loop, daily 03:00 full crawl and hourly quick
+check was REPLACED the same day: user wants Microsoft and Qualcomm in the normal flow): every SERVER GROUP (companies on one server, crawled one after another on one
+virtual thread; Microsoft and Qualcomm each their own group) has its own FIXED DELAY loop: jobagent.crawl.schedule.delay PT30M after ITS round ended; a tick every check-delay
+(PT1M) starts the groups that are due (CrawlRunService.startDueServers, serverNextDue / serversRunning maps), so a slow group never delays another group. Per company in a
+round: crawl (adapter fetch, batches saved + rules extraction, health, record, close vanished jobs) then its gap fill is queued on ONE single-worker queue (scheduledFills,
+gapFillLock) after EVERY crawl with a result (cheap query, also asks jobs an earlier failed fill left unasked; the old end-of-run catch-all remains only for manual
+POST /admin/crawl). Throttle patience per company (config coolDownSeconds / maxThrottledTries / maxCoolDownSeconds; Microsoft and Qualcomm: 30 s steps, 8 tries; V25, V27);
+a throttled PARTIAL crawl is retried by the next round (30 min later; stored descriptions are reused, the list restarts at page 1). One crawl per company at a time (crawling
+set). minCrawlHours still works (optional, set for nobody). The quick-check code (sorted newest first, sort_by=timestamp works on Microsoft and Qualcomm) exists only in git
+history (ef290c9) if it is ever wanted again.
 COMPANY LOGOS: TRIED AND DROPPED 2026-10-07 (user: "not worth wasting so much time", everything deleted, nothing was pushed; the UI keeps the
 gradient monograms). What took the time, in case it ever comes back: favicons are 16-48 px and blur when enlarged; logos with their own coloured
 background must fill the tile (rounded corners only) while symbols and wordmarks need a white tile; wordmarks are unreadable at 28-44 px; useful

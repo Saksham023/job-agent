@@ -24,12 +24,10 @@ Any of them can also be set as an environment variable (Spring's naming: `jobage
 | `countries` | `IN` | countries whose jobs are kept (others are counted as `otherCountries` and dropped) |
 | `detail-max-age-days` | `7` | a known, unchanged job's stored detail is reused until it is this old, then fetched again |
 | `schedule.enabled` | `false` | run the crawl job automatically (manual: `POST /admin/crawl`) |
-| `schedule.delay` | `PT30M` | FIXED DELAY of the regular loop (ISO-8601 duration): the next run starts this long after the previous one ENDED, so runs never overlap. The regular loop crawls every company that has no `minCrawlHours` |
-| `schedule.initial-delay` | `PT1M` | wait after the app starts before the first run of each loop |
-| `schedule.slow-check-delay` | `PT5M` | how often the slow companies (those with `minCrawlHours`: Microsoft, Qualcomm) are checked; each due one is crawled on its own thread, so it never holds up the regular loop |
-| `schedule.retry-after` | `PT30M` | a slow company whose crawl ended PARTIAL or FAILED (throttled) is tried again this long after it ended; what was saved is reused |
-| `schedule.max-retries` | `3` | at most this many such retries in a row, then it waits for its `minCrawlHours` again |
-| `schedule.gap-fill` | `true` | Opus fills the gaps of new jobs: for each company right after its own crawl (so a slow company never delays the others), and once more at the end for anything still unasked |
+| `schedule.delay` | `PT30M` | FIXED DELAY of every server group (ISO-8601 duration): a group (the companies on one server, crawled one after another on one thread) starts its next round this long after its previous round ENDED. Groups run in parallel and never wait for each other, so a slow or throttled company (Microsoft) only delays the next round of its own group |
+| `schedule.initial-delay` | `PT1M` | wait after the app starts before the first check |
+| `schedule.check-delay` | `PT1M` | how often the tick looks for groups that are due (cheap) |
+| `schedule.gap-fill` | `true` | Opus fills the gaps of jobs never asked about: for each company right after its own crawl (so a slow company never delays the others; it is asked after EVERY crawl, a cheap query that finds nothing when nothing is unasked), one company at a time. A manual `POST /admin/crawl` adds one more pass at the end |
 | `schedule.gap-fill-model` | `opus` | model for that gap fill |
 | `schedule.gap-fill-parallelism` | `10` | Opus calls at the same time (1 to 10) |
 | `schedule.close-after-misses` | `2` | a job missing from this many good crawls in a row is closed |
@@ -161,7 +159,7 @@ and reproducible, put the same `UPDATE` in a new Flyway migration (`src/main/res
 | Column / key | Default | What it does |
 |---|---|---|
 | `enabled` (column) | `true` | `false` = never crawled (today: Qualcomm) |
-| `minCrawlHours` | none (every run) | full runs skip the company until its last crawl started this many hours ago; `POST /admin/crawl/{slug}` ignores it. Set: Qualcomm 24, Microsoft 24 |
+| `minCrawlHours` | none (every run) | full runs skip the company until its last crawl started this many hours ago; `POST /admin/crawl/{slug}` ignores it. Set for nobody (V27 removed it from Qualcomm and Microsoft) |
 | `delayMs` | see platform | Microsoft: 10000 (V23, first load) |
 
 ### Per platform
@@ -180,11 +178,7 @@ and reproducible, put the same `UPDATE` in a new Flyway migration (`src/main/res
 | Eightfold | `location` | no | `India` | location filter sent to the API |
 | Eightfold | `delayMs` | no | `1000` | starting pace per request (slows down by itself on throttling) |
 | Eightfold | `detailDepartments` | no | all | regex; only jobs whose department matches get a detail request, the rest are saved from the list |
-| any | `minCrawlHours` | no | none | gives the company ITS OWN LOOP (not in the regular 30-minute run; checked every `slow-check-delay`): at least this many hours between two FULL crawls. With `fullCrawlFromHour` it is only a safety gap (Microsoft, Qualcomm: 6, V26) |
-| any | `fullCrawlFromHour` | no | none | India-time hour (0 to 23) from which the daily FULL crawl may start, once per day (V26: 3 for Microsoft and Qualcomm, the quietest time); a retry after a throttled crawl ignores it |
-| Eightfold | `peekEveryMinutes` | no | none | the QUICK CHECK for new jobs (PEEK) of a company with its own loop, this often after a full crawl (V26: 60). Needs `newestSortBy`; paused while the last full crawls ended PARTIAL/FAILED |
-| Eightfold | `newestSortBy` | no | none | the PCSX `sort_by` value that lists the newest jobs first (`timestamp`); switches the quick check on |
-| Eightfold | `peekMaxPages` | no | `5` | a quick check reads at most this many list pages; it stops earlier at the first page with nothing new |
+| any | `minCrawlHours` | no | none | optional: at least this many hours between two crawls of the company (a round skips it until then); not set for anyone by default |
 | Eightfold | `coolDownSeconds` | no | `10` | after a throttle signal (429 / refused connection) the crawl waits this x the signals in a row before it retries |
 | Eightfold | `maxThrottledTries` | no | `5` | signals in a row for one request before the crawl gives up (PARTIAL); Microsoft: 8 (V25) |
 | Eightfold | `maxCoolDownSeconds` | no | `300` | no single retry wait is longer than this |

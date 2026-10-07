@@ -22,10 +22,7 @@ public class CrawlRunRepository {
     public record CrawlRun(long companyId, String trigger, Instant startedAt, Instant finishedAt, Status status,
                            int fetched, int kept, int inserted, int updated, int unchanged, int unresolved,
                            int noDescription, int detailsFetched, int detailsReused, List<String> alerts, String error,
-                           long elapsedMs, String kind) {
-
-        public static final String FULL = "FULL";
-        public static final String PEEK = "PEEK";
+                           long elapsedMs) {
     }
 
     /** A company with its open jobs and its latest crawl (null fields when it was never crawled). */
@@ -42,17 +39,16 @@ public class CrawlRunRepository {
             UPDATE jobs j SET closed_at = now()
             WHERE j.company_id = :companyId AND j.closed_at IS NULL
               AND (SELECT count(*) FROM crawl_runs r
-                   WHERE r.company_id = j.company_id AND r.status = 'OK' AND r.kind = 'FULL'
-                     AND r.started_at > j.last_seen_at) >= :misses
+                   WHERE r.company_id = j.company_id AND r.status = 'OK' AND r.started_at > j.last_seen_at) >= :misses
             """;
 
     private static final String HEALTH = """
             SELECT c.slug, c.platform, c.enabled,
                    (SELECT count(*) FROM jobs j WHERE j.company_id = c.id AND j.closed_at IS NULL) AS open_jobs,
                    r.status, r.started_at, r.kept, r.inserted, r.closed, r.alerts, r.error,
-                   (SELECT max(o.started_at) FROM crawl_runs o WHERE o.company_id = c.id AND o.status = 'OK' AND o.kind = 'FULL') AS last_ok
+                   (SELECT max(o.started_at) FROM crawl_runs o WHERE o.company_id = c.id AND o.status = 'OK') AS last_ok
             FROM companies c
-            LEFT JOIN LATERAL (SELECT * FROM crawl_runs r WHERE r.company_id = c.id AND r.kind = 'FULL'
+            LEFT JOIN LATERAL (SELECT * FROM crawl_runs r WHERE r.company_id = c.id
                                ORDER BY r.started_at DESC LIMIT 1) r ON true
             ORDER BY (r.status IS DISTINCT FROM 'OK' OR cardinality(r.alerts) > 0) DESC, c.slug
             """;
@@ -68,10 +64,10 @@ public class CrawlRunRepository {
         return jdbc.sql("""
                         INSERT INTO crawl_runs (company_id, trigger, started_at, finished_at, status, fetched, kept, inserted,
                                                 updated, unchanged, unresolved, no_description, details_fetched,
-                                                details_reused, alerts, error, elapsed_ms, kind)
+                                                details_reused, alerts, error, elapsed_ms)
                         VALUES (:companyId, :trigger, :startedAt, :finishedAt, :status, :fetched, :kept, :inserted,
                                 :updated, :unchanged, :unresolved, :noDescription, :detailsFetched, :detailsReused,
-                                :alerts, :error, :elapsedMs, :kind)
+                                :alerts, :error, :elapsedMs)
                         RETURNING id
                         """)
                 .param("companyId", run.companyId())
@@ -91,7 +87,6 @@ public class CrawlRunRepository {
                 .param("alerts", run.alerts().toArray(String[]::new))
                 .param("error", run.error())
                 .param("elapsedMs", run.elapsedMs())
-                .param("kind", run.kind())
                 .query(Long.class)
                 .single();
     }
@@ -101,52 +96,17 @@ public class CrawlRunRepository {
      * (a deploy) does not count: the company should be crawled again at the next run, not a day later.
      */
     public Map<Long, Instant> lastCrawlStarts() {
-        return lastStarts(CrawlRun.FULL);
-    }
-
-    /** When each company's last quick check for new jobs (PEEK) started; interrupted ones do not count. */
-    public Map<Long, Instant> lastPeekStarts() {
-        return lastStarts(CrawlRun.PEEK);
-    }
-
-    private Map<Long, Instant> lastStarts(String kind) {
         Map<Long, Instant> starts = new HashMap<>();
-        jdbc.sql("SELECT company_id, max(started_at) AS last FROM crawl_runs WHERE kind = :kind "
-                        + "AND (error IS NULL OR position(:interrupted IN error) = 0) GROUP BY company_id")
-                .param("kind", kind)
+        jdbc.sql("SELECT company_id, max(started_at) AS last FROM crawl_runs "
+                        + "WHERE error IS NULL OR position(:interrupted IN error) = 0 GROUP BY company_id")
                 .param("interrupted", ShutdownSignal.INTERRUPTED)
                 .query((rs, n) -> starts.put(rs.getLong("company_id"), rs.getTimestamp("last").toInstant())).list();
         return starts;
     }
 
-    /** How one finished crawl ended, for deciding on a retry. */
-    public record RunState(Status status, Instant finishedAt) {
-    }
-
-    /**
-     * Each company's latest finished crawls, newest first (at most :limit each). Crawls interrupted by a shutdown are left
-     * out, like in lastCrawlStarts: they say nothing about the site.
-     */
-    public Map<Long, List<RunState>> recentRunStates(int limit) {
-        Map<Long, List<RunState>> states = new HashMap<>();
-        jdbc.sql("""
-                        SELECT company_id, status, finished_at FROM (
-                            SELECT company_id, status, finished_at,
-                                   row_number() OVER (PARTITION BY company_id ORDER BY started_at DESC) AS rn
-                            FROM crawl_runs WHERE kind = 'FULL' AND (error IS NULL OR position(:interrupted IN error) = 0)) t
-                        WHERE rn <= :limit ORDER BY company_id, rn
-                        """)
-                .param("interrupted", ShutdownSignal.INTERRUPTED)
-                .param("limit", limit)
-                .query((rs, n) -> states.computeIfAbsent(rs.getLong("company_id"), k -> new java.util.ArrayList<>())
-                        .add(new RunState(Status.valueOf(rs.getString("status")), rs.getTimestamp("finished_at").toInstant())))
-                .list();
-        return states;
-    }
-
     /** Kept counts of the company's latest OK crawls, newest first. */
     public List<Integer> recentOkKept(long companyId, int limit) {
-        return jdbc.sql("SELECT kept FROM crawl_runs WHERE company_id = :companyId AND status = 'OK' AND kind = 'FULL' "
+        return jdbc.sql("SELECT kept FROM crawl_runs WHERE company_id = :companyId AND status = 'OK' "
                         + "ORDER BY started_at DESC LIMIT :limit")
                 .param("companyId", companyId)
                 .param("limit", limit)
