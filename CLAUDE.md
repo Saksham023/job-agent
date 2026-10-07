@@ -43,6 +43,7 @@ IDEA from this: a "Claude usage today" panel in the planned dashboard (calls and
 learning cost is only in the log, so an llm_calls ledger table would be needed).
 THEN, in this order (user's plan): (a) commit CLAUDE.md after the Microsoft crawl is done; (b) refresh the README numbers (jobs, companies,
 crawl time) now that Microsoft is in; (c) start the LOGIN SYSTEM (backlog item below); (d) the server stats DASHBOARD (see NEW REQUESTS below). Logos were dropped.
+POSTING TIME (2026-10-07, user's design, UNCOMMITTED): the public API shows ONE derived time, SQL expression JobSearch.POSTED (display, sort, postedWithinDays, stats): real platform time kept; date-only platforms (midnight UTC or IST: Workday, Amazon, Qualcomm) keep the DATE and take the time of day from first_seen_at when first seen that India day, else noon India of the date (backlog); no date = first_seen_at. Raw posted_at is untouched; UI unchanged (ago()). User plans to crawl every 1-2 h later, so the error shrinks.
 COMPANY LOGOS: TRIED AND DROPPED 2026-10-07 (user: "not worth wasting so much time", everything deleted, nothing was pushed; the UI keeps the
 gradient monograms). What took the time, in case it ever comes back: favicons are 16-48 px and blur when enlarged; logos with their own coloured
 background must fill the tile (rounded corners only) while symbols and wordmarks need a white tile; wordmarks are unreadable at 28-44 px; useful
@@ -789,7 +790,10 @@ fails the experience arithmetic (kappa 0.46); with thinking 0.85; fix later by c
   real data (read-only SELECTs), run the unit tests; before a rules change dump a baseline for all jobs and diff after.
 - Testing the RUNNING app: give the user the curl commands; the user runs them and pastes results (Claude may read
   result FILES like `eval/runs/*` directly). Using the product through the job-agent MCP tools is fine for Claude.
-- Ask before commits unless the user said "commit" (they have generally approved committing finished work). Never push.
+- NEVER COMMIT unless the user explicitly asks for it in that very message (stated emphatically 2026-10-07: "never commit anything until I ask you
+  to do it"; one earlier "commit" never covers later work). After a bug fix or a feature: make the change, run the tests, leave it UNCOMMITTED and say
+  what changed, so the user can review the diff. Applies to docs and notes too. Do not commit, amend, reset or revert on your own initiative; offer
+  it. Never push (the user pushes).
   Ask before downloading anything (models, packages). Keep CLAUDE.md section 0 current: the user compacts often and
   wants zero context loss.
 
@@ -1107,7 +1111,7 @@ per connection; harmless macOS Tomcat "setSoLinger Invalid argument" errors.
   every function/method + a one-line purpose, and its shortcomings / known limitations / what a
   production version would do differently.
 - The user runs commands; Claude may run read-only checks when asked. Ask before anything that writes
-  (DB, git commits, installs) and before downloading anything (models, packages). Never push.
+  (DB, installs) and before downloading anything (models, packages). NEVER commit unless asked (see "How we work"). Never push.
 - Analyses of pasted output: a few lines (what's right, what's wrong, did it improve).
 - Never use em-dashes in writing.
 - The user is new to Python (comfortable with requests, functions, classes, list comprehensions, env vars;

@@ -38,8 +38,8 @@ public class PublicJobRepository {
     /** One job in full. */
     public record JobDetail(long id, String title, String companySlug, String company, String url, String department,
                             List<String> locations, List<String> cities, boolean remote, String employmentType,
-                            Instant postedAt, Integer minYears, Integer maxYears, boolean yearsStated,
-                            String yearsEvidence, String family, List<String> secondaryFamilies, String specialization,
+                            Instant postedAt, Integer minYears, Integer maxYears,
+                            boolean yearsStated, String yearsEvidence, String family, List<String> secondaryFamilies, String specialization,
                             List<String> requiredSkills, List<String> preferredSkills, List<String> primaryLanguages,
                             String description) {
     }
@@ -50,7 +50,8 @@ public class PublicJobRepository {
             j.id, j.title, c.slug, c.name, j.cities, j.remote, r.min_years, r.max_years,
             """ + JobSearch.STATED + """
              AS years_stated, r.family, r.specialization,
-            (r.required_skills || r.preferred_skills)[1 : 6] AS skills, coalesce(j.posted_at, j.first_seen_at) AS posted_at, j.url
+            (r.required_skills || r.preferred_skills)[1 : 6] AS skills, """ + JobSearch.POSTED + """
+             AS posted_at, j.url
             """;
 
     private final JdbcClient jdbc;
@@ -136,7 +137,9 @@ public class PublicJobRepository {
         return jdbc.sql("""
                         SELECT j.id, j.title, c.slug, c.name, j.url, j.department, j.locations, j.cities, j.remote,
                                coalesce(r.employment_type, j.employment_type) AS employment_type,
-                               coalesce(j.posted_at, j.first_seen_at) AS posted_at, r.min_years, r.max_years,
+                               """ + JobSearch.POSTED + """
+                         AS posted_at,
+                               r.min_years, r.max_years,
                                """ + JobSearch.STATED + """
                          AS years_stated, r.years_evidence, r.family, r.secondary_families, r.specialization,
                                r.required_skills, r.preferred_skills, r.primary_languages, j.description
@@ -197,7 +200,8 @@ public class PublicJobRepository {
         return jdbc.sql("""
                         SELECT count(*) AS open_jobs, count(DISTINCT j.company_id) AS companies,
                                count(DISTINCT c.platform) AS platforms,
-                               count(*) FILTER (WHERE j.posted_at >= now() - interval '7 days') AS posted_week,
+                               count(*) FILTER (WHERE\s""" + JobSearch.POSTED + """
+                         >= now() - interval '7 days') AS posted_week,
                                count(*) FILTER (WHERE j.remote) AS remote,
                                (SELECT max(finished_at) FROM crawl_runs WHERE status = 'OK') AS last_crawl
                         FROM jobs j JOIN companies c ON c.id = j.company_id

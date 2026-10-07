@@ -40,6 +40,15 @@ class JobSearchTest {
     }
 
     @Test
+    void oneDerivedPostingTimeIsUsedForDisplaySortAndFilter() {
+        assertThat(JobSearch.POSTED).contains("j.first_seen_at", "time '12:00'", "Asia/Kolkata");
+        assertThat(search(null, null, true, List.of()).orderBy()).startsWith(JobSearch.POSTED + " DESC").endsWith(", j.id DESC");
+        JobSearch byExperience = new JobSearch(List.of(), List.of(), null, null, true, List.of(), List.of(), null, null,
+                JobSearch.Sort.EXPERIENCE, 0, 24);
+        assertThat(byExperience.orderBy()).contains(JobSearch.POSTED + " DESC, j.id");
+    }
+
+    @Test
     void noFiltersMeansOpenJobsInTheCountry() {
         Where where = search(null, null, true, List.of()).where("IN");
         assertThat(where.sql()).isEqualTo("j.closed_at IS NULL AND j.country_codes @> ARRAY[CAST(:country AS text)]");

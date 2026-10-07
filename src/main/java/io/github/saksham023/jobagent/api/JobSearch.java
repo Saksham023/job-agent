@@ -134,7 +134,7 @@ public record JobSearch(List<String> companies, List<JobFamily> families, Intege
             params.put("query", "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%");
         }
         if (postedWithinDays != null) {
-            conditions.add("coalesce(j.posted_at, j.first_seen_at) >= now() - make_interval(days => :days)");
+            conditions.add(POSTED + " >= now() - make_interval(days => :days)");
             params.put("days", postedWithinDays);
         }
         return new Where(String.join("\n  AND ", conditions), params);
@@ -154,12 +154,34 @@ public record JobSearch(List<String> companies, List<JobFamily> families, Intege
                 postedWithinDays, sort, 0, size);
     }
 
+    /**
+     * The ONE posting time shown, sorted and filtered on. A platform that gives a real time keeps it. A platform that gives
+     * only a date (stored as exactly midnight in UTC or in India) keeps that DATE, and the time of day is when we first saw
+     * the job if that was the same day in India; a job we found on a later day (a backlog) gets noon India time of its date;
+     * a job we saw before its date (time zone edge) just uses first_seen_at. No date at all: first_seen_at.
+     */
+    static final String POSTED = """
+            (CASE
+               WHEN j.posted_at IS NULL THEN j.first_seen_at
+               WHEN (j.posted_at AT TIME ZONE 'UTC')::time <> time '00:00'
+                AND (j.posted_at AT TIME ZONE 'Asia/Kolkata')::time <> time '00:00' THEN j.posted_at
+               WHEN (j.first_seen_at AT TIME ZONE 'Asia/Kolkata')::date = (CASE WHEN (j.posted_at AT TIME ZONE 'UTC')::time = time '00:00'
+                        THEN (j.posted_at AT TIME ZONE 'UTC')::date ELSE (j.posted_at AT TIME ZONE 'Asia/Kolkata')::date END)
+                    THEN j.first_seen_at
+               WHEN (j.first_seen_at AT TIME ZONE 'Asia/Kolkata')::date > (CASE WHEN (j.posted_at AT TIME ZONE 'UTC')::time = time '00:00'
+                        THEN (j.posted_at AT TIME ZONE 'UTC')::date ELSE (j.posted_at AT TIME ZONE 'Asia/Kolkata')::date END)
+                    THEN ((CASE WHEN (j.posted_at AT TIME ZONE 'UTC')::time = time '00:00'
+                        THEN (j.posted_at AT TIME ZONE 'UTC')::date ELSE (j.posted_at AT TIME ZONE 'Asia/Kolkata')::date END)
+                          + time '12:00') AT TIME ZONE 'Asia/Kolkata'
+               ELSE j.first_seen_at
+             END)""";
+
     /** ORDER BY for the chosen sort; the job id last, so pages never overlap. */
     public String orderBy() {
         return switch (sort) {
-            case NEWEST -> "coalesce(j.posted_at, j.first_seen_at) DESC, j.id DESC";
+            case NEWEST -> POSTED + " DESC, j.id DESC";
             case COMPANY -> "c.name, j.title, j.id";
-            case EXPERIENCE -> STATED + " DESC, r.min_years NULLS LAST, coalesce(j.posted_at, j.first_seen_at) DESC, j.id";
+            case EXPERIENCE -> STATED + " DESC, r.min_years NULLS LAST, " + POSTED + " DESC, j.id";
         };
     }
 
