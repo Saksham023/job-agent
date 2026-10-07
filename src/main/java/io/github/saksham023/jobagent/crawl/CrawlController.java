@@ -1,6 +1,7 @@
 package io.github.saksham023.jobagent.crawl;
 
 import io.github.saksham023.jobagent.company.Company;
+import io.github.saksham023.jobagent.company.Company;
 import io.github.saksham023.jobagent.company.CompanyRepository;
 import io.github.saksham023.jobagent.crawl.CrawlService.CrawlResult;
 import io.github.saksham023.jobagent.job.NormalizedJob;
@@ -61,6 +62,19 @@ public class CrawlController {
     @PostMapping("/crawl/{slug}")
     public CompanyCrawl crawl(@PathVariable String slug) {
         return CompanyCrawl.of(crawlRunService.crawlOne(supportedCompany(slug), "manual"));
+    }
+
+    /**
+     * The quick check for new jobs by hand (what the slow loop runs hourly for Microsoft and Qualcomm): the newest part of
+     * the company's list only; saves what is new or changed; closes nothing; no gap fill.
+     */
+    @PostMapping("/crawl/{slug}/newest")
+    public CompanyCrawl crawlNewest(@PathVariable String slug) {
+        Company company = supportedCompany(slug);
+        if (!crawlService.supportsNewestCheck(company)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, slug + " has no quick check for new jobs (config.newestSortBy)");
+        }
+        return CompanyCrawl.of(crawlRunService.crawlOne(company, "manual", CrawlRunRepository.CrawlRun.PEEK));
     }
 
     /**

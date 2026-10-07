@@ -58,6 +58,173 @@ class CrawlRunServiceTest {
         assertThat(CrawlRunService.tooSoon(company("adobe"), now.minusSeconds(60), now)).isNull();  // no minimum
     }
 
+    private static Company slowCompany(long id, String slug) throws Exception {
+        return new Company(id, slug, slug, "eightfold",
+                JsonMapper.builder().build().readTree("{\"host\": \"" + slug + ".example\", \"minCrawlHours\": 24}"),
+                null, true, null, null, null);
+    }
+
+    private static CrawlRunRepository.RunState ended(CrawlHealth.Status status, Instant finishedAt) {
+        return new CrawlRunRepository.RunState(status, finishedAt);
+    }
+
+    @Test
+    void aSlowCompanyIsDueWhenNeverCrawledWhenItsIntervalPassedOrForARetryAfterAThrottledCrawl() throws Exception {
+        Company microsoft = slowCompany(1, "microsoft");
+        Instant now = Instant.parse("2026-10-07T12:00:00Z");
+        java.time.Duration retryAfter = java.time.Duration.ofMinutes(30);
+
+        assertThat(CrawlRunService.dueReason(microsoft, null, List.of(), retryAfter, 3, now)).isEqualTo("never crawled");
+        assertThat(CrawlRunService.dueReason(microsoft, now.minusSeconds(25 * 3600),
+                List.of(ended(CrawlHealth.Status.OK, now.minusSeconds(24 * 3600))), retryAfter, 3, now))
+                .isEqualTo("minimum interval passed");
+        // a good crawl 3 h ago: not due
+        assertThat(CrawlRunService.dueReason(microsoft, now.minusSeconds(3 * 3600),
+                List.of(ended(CrawlHealth.Status.OK, now.minusSeconds(3 * 3600))), retryAfter, 3, now)).isNull();
+        // a throttled crawl: not before retryAfter, then due ("retry 1 of 3")
+        assertThat(CrawlRunService.dueReason(microsoft, now.minusSeconds(3600),
+                List.of(ended(CrawlHealth.Status.PARTIAL, now.minusSeconds(10 * 60))), retryAfter, 3, now)).isNull();
+        assertThat(CrawlRunService.dueReason(microsoft, now.minusSeconds(3600),
+                List.of(ended(CrawlHealth.Status.PARTIAL, now.minusSeconds(31 * 60))), retryAfter, 3, now))
+                .isEqualTo("retry 1 of 3 after a PARTIAL");
+        // the second failure in a row is retry 2; the fourth failure in a row has used up the 3 retries
+        assertThat(CrawlRunService.dueReason(microsoft, now.minusSeconds(3600),
+                List.of(ended(CrawlHealth.Status.FAILED, now.minusSeconds(31 * 60)),
+                        ended(CrawlHealth.Status.PARTIAL, now.minusSeconds(70 * 60))), retryAfter, 3, now))
+                .isEqualTo("retry 2 of 3 after a FAILED");
+        assertThat(CrawlRunService.dueReason(microsoft, now.minusSeconds(3600),
+                List.of(ended(CrawlHealth.Status.FAILED, now.minusSeconds(31 * 60)),
+                        ended(CrawlHealth.Status.FAILED, now.minusSeconds(70 * 60)),
+                        ended(CrawlHealth.Status.PARTIAL, now.minusSeconds(110 * 60)),
+                        ended(CrawlHealth.Status.PARTIAL, now.minusSeconds(150 * 60))), retryAfter, 3, now)).isNull();
+        // an OK crawl ends the streak: older failures do not count
+        assertThat(CrawlRunService.dueReason(microsoft, now.minusSeconds(3600),
+                List.of(ended(CrawlHealth.Status.OK, now.minusSeconds(31 * 60)),
+                        ended(CrawlHealth.Status.PARTIAL, now.minusSeconds(70 * 60))), retryAfter, 3, now)).isNull();
+    }
+
+    private static Company dailyCompany() throws Exception {
+        return new Company(1, "microsoft", "Microsoft", "eightfold", JsonMapper.builder().build().readTree("""
+                {"host": "m.example", "minCrawlHours": 6, "fullCrawlFromHour": 3, "peekEveryMinutes": 60,
+                 "newestSortBy": "timestamp"}"""), null, true, null, null, null);
+    }
+
+    @Test
+    void theFullCrawlOfADailyCompanyStartsOncePerDayFromItsHourInIndia() throws Exception {
+        Company microsoft = dailyCompany();
+        java.time.Duration retryAfter = java.time.Duration.ofMinutes(30);
+        Instant at = Instant.parse("2026-10-07T06:30:00Z");                     // 12:00 India time on 7 Oct
+        Instant yesterday = Instant.parse("2026-10-06T21:40:00Z");               // 03:10 India time on 7 Oct is 21:40Z on the 6th
+        Instant today0310 = Instant.parse("2026-10-06T21:40:00Z");
+
+        // 12:00 on the 7th, the last full crawl started 03:10 on the 6th: today's window (03:00 on the 7th) has opened
+        assertThat(CrawlRunService.dueReason(microsoft, yesterday.minusSeconds(24 * 3600), List.of(), retryAfter, 3, at))
+                .contains("daily window from 03:00 India time");
+        // the full crawl already started in today's window (03:10 on the 7th): not again today, whatever the interval
+        assertThat(CrawlRunService.dueReason(microsoft, today0310,
+                List.of(ended(CrawlHealth.Status.OK, today0310.plusSeconds(4200))), retryAfter, 3, at)).isNull();
+        // 02:00 on the 7th: today's window has not opened, yesterday's crawl counts
+        assertThat(CrawlRunService.dueReason(microsoft, yesterday.minusSeconds(24 * 3600),
+                List.of(ended(CrawlHealth.Status.OK, yesterday.minusSeconds(23 * 3600))), retryAfter, 3,
+                Instant.parse("2026-10-06T20:30:00Z"))).isNull();
+        // a throttled crawl retries at any time of day, the window does not matter
+        assertThat(CrawlRunService.dueReason(microsoft, today0310,
+                List.of(ended(CrawlHealth.Status.PARTIAL, at.minusSeconds(31 * 60))), retryAfter, 3, at))
+                .isEqualTo("retry 1 of 3 after a PARTIAL");
+    }
+
+    @Test
+    void theQuickCheckIsHourlyAfterAFullCrawlAndNotWhileTheSiteThrottlesUs() throws Exception {
+        Company microsoft = dailyCompany();
+        Instant now = Instant.parse("2026-10-07T12:00:00Z");
+        List<CrawlRunRepository.RunState> good = List.of(ended(CrawlHealth.Status.OK, now.minusSeconds(8 * 3600)));
+        List<CrawlRunRepository.RunState> throttled = List.of(ended(CrawlHealth.Status.PARTIAL, now.minusSeconds(3600)));
+        Instant full = now.minusSeconds(9 * 3600);
+
+        assertThat(CrawlRunService.peekReason(microsoft, null, null, List.of(), now)).isNull();          // no base yet
+        assertThat(CrawlRunService.peekReason(microsoft, full, null, good, now)).isEqualTo("no quick check yet");
+        assertThat(CrawlRunService.peekReason(microsoft, full, now.minusSeconds(20 * 60), good, now)).isNull();
+        assertThat(CrawlRunService.peekReason(microsoft, full, now.minusSeconds(61 * 60), good, now)).isEqualTo("every 60 minutes");
+        assertThat(CrawlRunService.peekReason(microsoft, full, null, throttled, now)).isNull();         // leave a throttling site alone
+        assertThat(CrawlRunService.peekReason(slowCompany(2, "qualcomm"), full, null, good, now)).isNull(); // no peekEveryMinutes
+    }
+
+    @Test
+    void aQuickCheckAndAFullCrawlOfOneCompanyNeverRunTogetherAndAQuickCheckNeverClosesJobs() throws Exception {
+        Company microsoft = dailyCompany();
+        CrawlService crawlService = mock(CrawlService.class);
+        when(crawlService.isSupported(any())).thenReturn(true);
+        when(crawlService.serverKey(any())).thenReturn("m.example");
+        CountDownLatch inside = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(crawlService.crawl(microsoft)).thenAnswer(call -> {
+            inside.countDown();
+            release.await(10, TimeUnit.SECONDS);
+            return result("microsoft");
+        });
+        when(crawlService.crawlNewest(microsoft)).thenReturn(result("microsoft"));
+        CompanyRepository repository = mock(CompanyRepository.class);
+        CrawlRunRepository runs = mock(CrawlRunRepository.class);
+        when(runs.recentOkKept(anyLong(), anyInt())).thenReturn(List.of());
+        CrawlRunService service = new CrawlRunService(repository, crawlService, runs, mock(GapFillRunner.class),
+                new CrawlScheduleProperties(true, java.time.Duration.ofMinutes(30), java.time.Duration.ofMinutes(1),
+                        java.time.Duration.ofMinutes(5), java.time.Duration.ofMinutes(30), 3, true, "opus", 10, 2),
+                new ShutdownSignal());
+        CrawlRunService.RunOutcome[] full = new CrawlRunService.RunOutcome[1];
+        Thread fullCrawl = new Thread(() -> full[0] = service.crawlOne(microsoft, "schedule"));
+        fullCrawl.start();
+        assertThat(inside.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // while the full crawl runs, a quick check is refused and does nothing
+        CrawlRunService.RunOutcome refused = service.crawlOne(microsoft, "schedule", CrawlRunRepository.CrawlRun.PEEK);
+        assertThat(refused.error()).isEqualTo("already being crawled");
+        verify(crawlService, never()).crawlNewest(any());
+
+        release.countDown();
+        fullCrawl.join(10_000);
+        // now the quick check may run: recorded as PEEK, and closeMissing is not called for it
+        CrawlRunService.RunOutcome peek = service.crawlOne(microsoft, "schedule", CrawlRunRepository.CrawlRun.PEEK);
+        assertThat(peek.status()).isEqualTo(CrawlHealth.Status.OK);
+        org.mockito.ArgumentCaptor<CrawlRunRepository.CrawlRun> recorded = org.mockito.ArgumentCaptor.forClass(CrawlRunRepository.CrawlRun.class);
+        verify(runs, times(2)).insert(recorded.capture());
+        assertThat(recorded.getAllValues()).extracting(CrawlRunRepository.CrawlRun::kind).containsExactly("FULL", "PEEK");
+        verify(runs, times(1)).closeMissing(anyLong(), anyInt(), anyLong());       // only the FULL crawl closed jobs
+    }
+
+    @Test
+    void onlyCompaniesWithAMinimumIntervalHaveTheirOwnLoop() throws Exception {
+        assertThat(CrawlRunService.hasOwnLoop(slowCompany(1, "microsoft"))).isTrue();
+        assertThat(CrawlRunService.hasOwnLoop(company("adobe"))).isFalse();
+    }
+
+    @Test
+    void theRegularRunLeavesTheSlowCompaniesToTheirOwnThreadThatNeverBlocksIt() throws Exception {
+        Company fast = company(1, "fast");
+        Company slow = slowCompany(2, "slow");
+        CrawlService crawlService = mock(CrawlService.class);
+        CountDownLatch inside = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(crawlService.crawl(fast)).thenReturn(result("fast"));
+        when(crawlService.crawl(slow)).thenAnswer(call -> {
+            inside.countDown();
+            release.await(10, TimeUnit.SECONDS);
+            return result("slow");
+        });
+        GapFillRunner gapFillRunner = mock(GapFillRunner.class);
+        when(gapFillRunner.fillCompany(anyLong(), any(), anyInt())).thenReturn(status(1, 0.01));
+        CrawlRunService service = service(crawlService, gapFillRunner, new ShutdownSignal(), fast, slow);
+
+        service.startDueSlowCompanies();                                    // returns at once, the crawl runs on its own thread
+        assertThat(inside.await(5, TimeUnit.SECONDS)).as("the slow crawl started").isTrue();
+        service.startDueSlowCompanies();                                    // still running: not started a second time
+
+        CrawlRunService.Run regular = service.runAll("schedule", company -> !CrawlRunService.hasOwnLoop(company));
+        assertThat(regular.outcomes()).extracting(CrawlRunService.RunOutcome::company).containsExactly("fast");
+
+        release.countDown();
+        verify(crawlService, times(1)).crawl(slow);
+    }
+
     // ---------------------------------------------------------------- a full run with stand-ins for the database and the sites
 
     private static CrawlResult result(String slug) {
@@ -82,7 +249,8 @@ class CrawlRunServiceTest {
         when(crawlService.isSupported(any())).thenReturn(true);
         when(crawlService.serverKey(any())).thenAnswer(call -> "server-" + ((Company) call.getArgument(0)).slug());
         return new CrawlRunService(repository, crawlService, runs, gapFillRunner,
-                new CrawlScheduleProperties(true, "0 0 */6 * * *", true, "opus", 10, 2), shutdown);
+                new CrawlScheduleProperties(true, java.time.Duration.ofMinutes(30), java.time.Duration.ofMinutes(1),
+                        java.time.Duration.ofMinutes(5), java.time.Duration.ofMinutes(30), 3, true, "opus", 10, 2), shutdown);
     }
 
     private static long anyLong() {

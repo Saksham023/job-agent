@@ -24,7 +24,11 @@ Any of them can also be set as an environment variable (Spring's naming: `jobage
 | `countries` | `IN` | countries whose jobs are kept (others are counted as `otherCountries` and dropped) |
 | `detail-max-age-days` | `7` | a known, unchanged job's stored detail is reused until it is this old, then fetched again |
 | `schedule.enabled` | `false` | run the crawl job automatically (manual: `POST /admin/crawl`) |
-| `schedule.cron` | `0 0 */6 * * *` | when (every 6 hours) |
+| `schedule.delay` | `PT30M` | FIXED DELAY of the regular loop (ISO-8601 duration): the next run starts this long after the previous one ENDED, so runs never overlap. The regular loop crawls every company that has no `minCrawlHours` |
+| `schedule.initial-delay` | `PT1M` | wait after the app starts before the first run of each loop |
+| `schedule.slow-check-delay` | `PT5M` | how often the slow companies (those with `minCrawlHours`: Microsoft, Qualcomm) are checked; each due one is crawled on its own thread, so it never holds up the regular loop |
+| `schedule.retry-after` | `PT30M` | a slow company whose crawl ended PARTIAL or FAILED (throttled) is tried again this long after it ended; what was saved is reused |
+| `schedule.max-retries` | `3` | at most this many such retries in a row, then it waits for its `minCrawlHours` again |
 | `schedule.gap-fill` | `true` | Opus fills the gaps of new jobs: for each company right after its own crawl (so a slow company never delays the others), and once more at the end for anything still unasked |
 | `schedule.gap-fill-model` | `opus` | model for that gap fill |
 | `schedule.gap-fill-parallelism` | `10` | Opus calls at the same time (1 to 10) |
@@ -176,6 +180,14 @@ and reproducible, put the same `UPDATE` in a new Flyway migration (`src/main/res
 | Eightfold | `location` | no | `India` | location filter sent to the API |
 | Eightfold | `delayMs` | no | `1000` | starting pace per request (slows down by itself on throttling) |
 | Eightfold | `detailDepartments` | no | all | regex; only jobs whose department matches get a detail request, the rest are saved from the list |
+| any | `minCrawlHours` | no | none | gives the company ITS OWN LOOP (not in the regular 30-minute run; checked every `slow-check-delay`): at least this many hours between two FULL crawls. With `fullCrawlFromHour` it is only a safety gap (Microsoft, Qualcomm: 6, V26) |
+| any | `fullCrawlFromHour` | no | none | India-time hour (0 to 23) from which the daily FULL crawl may start, once per day (V26: 3 for Microsoft and Qualcomm, the quietest time); a retry after a throttled crawl ignores it |
+| Eightfold | `peekEveryMinutes` | no | none | the QUICK CHECK for new jobs (PEEK) of a company with its own loop, this often after a full crawl (V26: 60). Needs `newestSortBy`; paused while the last full crawls ended PARTIAL/FAILED |
+| Eightfold | `newestSortBy` | no | none | the PCSX `sort_by` value that lists the newest jobs first (`timestamp`); switches the quick check on |
+| Eightfold | `peekMaxPages` | no | `5` | a quick check reads at most this many list pages; it stops earlier at the first page with nothing new |
+| Eightfold | `coolDownSeconds` | no | `10` | after a throttle signal (429 / refused connection) the crawl waits this x the signals in a row before it retries |
+| Eightfold | `maxThrottledTries` | no | `5` | signals in a row for one request before the crawl gives up (PARTIAL); Microsoft: 8 (V25) |
+| Eightfold | `maxCoolDownSeconds` | no | `300` | no single retry wait is longer than this |
 | Eightfold | `saveEvery` | no | `10` | the crawl fetches one list page at a time (each job gets its description right away) and saves its jobs and logs a progress line after this many jobs, so a crawl that stops part way keeps what it had; a debug line per job shows each job's own timestamp |
 | Eightfold | `maxDetailsPerCrawl` | no | no limit | at most this many detail requests per crawl; the rest are saved from the list (or keep an older stored detail) and fetched by the next crawls. For a gentle first load |
 | Oracle | `host`, `siteNumber` | yes | | e.g. `jpmc.fa.oraclecloud.com`, `CX_1001` |

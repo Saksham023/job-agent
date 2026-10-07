@@ -38,6 +38,22 @@ public interface JobBoardAdapter {
     }
 
     /**
+     * True when this adapter can check for NEW jobs only (the list sorted newest first, stopping at the first page with
+     * nothing new), a few requests instead of a walk through the whole list. Only for slow, throttling sites.
+     */
+    default boolean supportsNewestCheck(Company company) {
+        return false;
+    }
+
+    /**
+     * The quick check for new jobs: like {@link #fetchJobs(Company, Consumer)}, but it hands over only jobs that are new or
+     * whose list entry changed. It sees only the newest part of the list, so it can never tell which jobs have gone.
+     */
+    default List<RawJob> fetchNewestJobs(Company company, Consumer<List<RawJob>> sink) {
+        throw new UnsupportedOperationException(company.slug() + ": no quick check for new jobs on " + platform());
+    }
+
+    /**
      * The server this company's crawl talks to. Companies on the same server are crawled one after another (never
      * two request streams from us to one server at once); different servers are crawled in parallel. Default: the
      * platform, right for platforms whose one API serves every company (api.lever.co, boards-api.greenhouse.io...).

@@ -49,7 +49,11 @@ jobagent:
     detail-max-age-days: 7      # a known job's stored detail is reused unless its list entry changed or it is older
     schedule:
       enabled: false            # OFF for now (user, 2026-10-06): turn on when deployed; manual POST /admin/crawl works
-      cron: "0 0 */6 * * *"     # every 6 hours (00:00, 06:00, 12:00, 18:00); one virtual thread per server
+      delay: PT30M              # FIXED DELAY of the regular loop: next run 30 min after the previous one ENDED; one virtual thread per server
+      initial-delay: PT1M       # wait after startup before the first run of each loop
+      slow-check-delay: PT5M    # how often the slow companies (config.minCrawlHours: Microsoft, Qualcomm) are checked; each runs on its own thread
+      retry-after: PT30M        # a slow company whose crawl ended PARTIAL/FAILED (throttled) is retried this long after it ended
+      max-retries: 3            # at most this many retries in a row, then it waits for its minCrawlHours
       gap-fill: true            # afterwards the model fills the new jobs' gaps (only jobs never asked)
       gap-fill-model: opus
       gap-fill-parallelism: 10

@@ -16,6 +16,8 @@ import tools.jackson.databind.JsonNode;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -28,6 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 import java.util.function.Function;
 
 /**
@@ -36,12 +40,23 @@ import java.util.function.Function;
  * SERVER: companies on the same server (a shared API like api.lever.co, or one Workday cluster) are crawled one after
  * another, so our IP never sends parallel streams to one server; different servers run at the same time, so a slow or
  * throttling company (Microsoft at 15 s per request) only delays the companies on its own server.
- * Every 6 hours (jobagent.crawl.schedule.cron) the scheduler runs this, then lets the model fill the new jobs' gaps.
+ *
+ * Two scheduled loops (jobagent.crawl.schedule.*). The REGULAR loop crawls every company without its own timing, then lets
+ * the model fill the new jobs' gaps; it runs with a FIXED DELAY (the next run starts `delay` after the previous one
+ * finished), so runs never overlap. The SLOW loop belongs to the companies that have config.minCrawlHours (Microsoft,
+ * Qualcomm: throttling sites that take minutes to hours): every `slow-check-delay` it starts each due company on its own
+ * thread, so a slow or throttled company never holds up the regular loop. A slow company is due when its minCrawlHours
+ * have passed since its last crawl, or, after a PARTIAL or FAILED crawl, `retry-after` after it ended (at most
+ * `max-retries` times in a row). A slow company with config.fullCrawlFromHour does its FULL crawl once a day, from that
+ * hour in India time (03:00: least throttling), and with config.peekEveryMinutes also gets a quick check for NEW jobs
+ * (a PEEK: the newest part of its list only) between the full crawls. Per company only one crawl runs at a time (a FULL
+ * and a PEEK, or a retry, never overlap), and a PEEK never closes jobs: only a FULL walk sees the whole list.
  */
 @Service
 public class CrawlRunService {
 
     private static final Logger log = LoggerFactory.getLogger(CrawlRunService.class);
+    private static final ZoneId INDIA = ZoneId.of("Asia/Kolkata");
 
     /** How many recent good crawls the health check compares with. */
     static final int RECENT_RUNS = 5;
@@ -77,6 +92,8 @@ public class CrawlRunService {
     private final CrawlScheduleProperties properties;
     private final ShutdownSignal shutdown;
     private final AtomicBoolean fullRunGoing = new AtomicBoolean();
+    private final Set<String> slowRunning = ConcurrentHashMap.newKeySet();       // slow companies whose own thread is alive
+    private final ReentrantLock gapFillLock = new ReentrantLock();                 // one company's gap fill at a time
     private final Set<String> crawling = ConcurrentHashMap.newKeySet();       // companies being crawled right now
 
     public CrawlRunService(CompanyRepository companies, CrawlService crawlService, CrawlRunRepository runs,
@@ -88,21 +105,164 @@ public class CrawlRunService {
         this.properties = properties;
         this.shutdown = shutdown;
         log.info("Crawl schedule: {}", properties.enabled()
-                ? "ON (cron " + properties.cron() + ", gap fill " + (properties.gapFill() ? "on" : "off") + ")"
+                ? "ON (regular companies every " + properties.delay() + " after the previous run ended; slow companies checked every "
+                + properties.slowCheckDelay() + ", retry after " + properties.retryAfter() + " x" + properties.maxRetries()
+                + "; gap fill " + (properties.gapFill() ? "on" : "off") + ")"
                 : "OFF (companies are crawled only by POST /admin/crawl)");
     }
 
-    /** The scheduled run (when enabled): the whole crawl job. */
-    @Scheduled(cron = "${jobagent.crawl.schedule.cron:0 0 */6 * * *}")
+    /** The regular loop (when enabled): the whole crawl job for the companies without their own timing. */
+    @Scheduled(fixedDelayString = "${jobagent.crawl.schedule.delay:PT30M}",
+            initialDelayString = "${jobagent.crawl.schedule.initial-delay:PT1M}")
     void scheduledRun() {
         if (!properties.enabled() || shutdown.isStopping()) {
             return;
         }
         try {
-            crawlJob("schedule");
+            crawlJob("schedule", company -> !hasOwnLoop(company));
         } catch (RuntimeException e) {
             log.warn("Scheduled crawl skipped: {}", e.getMessage());
         }
+    }
+
+    /** The slow loop (when enabled): starts every due slow company on its own thread and returns at once. */
+    @Scheduled(fixedDelayString = "${jobagent.crawl.schedule.slow-check-delay:PT5M}",
+            initialDelayString = "${jobagent.crawl.schedule.initial-delay:PT1M}")
+    void slowCompaniesTick() {
+        if (!properties.enabled() || shutdown.isStopping()) {
+            return;
+        }
+        try {
+            startDueSlowCompanies();
+        } catch (RuntimeException e) {
+            log.warn("Slow companies check failed: {}", e.getMessage());
+        }
+    }
+
+    /** True for a company with config.minCrawlHours: it has its own timing and is not part of the regular loop. */
+    static boolean hasOwnLoop(Company company) {
+        return company.config() != null && company.config().path("minCrawlHours").isNumber();
+    }
+
+    void startDueSlowCompanies() {
+        Instant now = Instant.now();
+        Map<Long, Instant> lastStarts = runs.lastCrawlStarts();
+        Map<Long, Instant> lastPeeks = runs.lastPeekStarts();
+        Map<Long, List<CrawlRunRepository.RunState>> states = runs.recentRunStates(properties.maxRetries() + 2);
+        for (Company company : companies.findAll()) {
+            if (!company.enabled() || !crawlService.isSupported(company) || !hasOwnLoop(company)
+                    || crawling.contains(company.slug()) || slowRunning.contains(company.slug())) {
+                continue;
+            }
+            List<CrawlRunRepository.RunState> recent = states.getOrDefault(company.id(), List.of());
+            String kind = CrawlRun.FULL;
+            String reason = dueReason(company, lastStarts.get(company.id()), recent, properties.retryAfter(),
+                    properties.maxRetries(), now);
+            if (reason == null && crawlService.supportsNewestCheck(company)) {
+                reason = peekReason(company, lastStarts.get(company.id()), lastPeeks.get(company.id()), recent, now);
+                kind = CrawlRun.PEEK;
+            }
+            if (reason != null && slowRunning.add(company.slug())) {
+                log.info("{}: {} starts on its own thread ({})", company.slug(),
+                        CrawlRun.PEEK.equals(kind) ? "quick check for new jobs" : "full crawl", reason);
+                String runKind = kind;
+                Thread.ofVirtual().name("slow-crawl-" + company.slug()).start(() -> runSlowCompany(company, runKind));
+            }
+        }
+    }
+
+    private void runSlowCompany(Company company, String kind) {
+        try {
+            RunOutcome outcome = crawlOne(company, "schedule", kind);
+            CrawlResult result = outcome.result();
+            if (properties.gapFill() && result != null && result.inserted() + result.updated() > 0 && !shutdown.isStopping()) {
+                try (ShutdownSignal.Activity activity = shutdown.track()) {
+                    gapFillLock.lock();
+                    try {
+                        gapFillRunner.fillCompany(company.id(), properties.gapFillModel(), properties.gapFillParallelism());
+                    } finally {
+                        gapFillLock.unlock();
+                    }
+                }
+            }
+        } catch (RuntimeException e) {
+            log.warn("{}: slow crawl failed: {}", company.slug(), e.toString());
+        } finally {
+            slowRunning.remove(company.slug());
+        }
+    }
+
+    /** config.fullCrawlFromHour: the India-time hour from which the daily FULL crawl may start (null: not set). */
+    static Integer fullCrawlFromHour(Company company) {
+        JsonNode hour = company.config() == null ? null : company.config().path("fullCrawlFromHour");
+        return hour != null && hour.isNumber() && hour.asInt() >= 0 && hour.asInt() <= 23 ? hour.asInt() : null;
+    }
+
+    /** The most recent moment at or before now that was hour:00 in India. */
+    static Instant latestWindowStart(int hour, Instant now) {
+        ZonedDateTime candidate = now.atZone(INDIA).toLocalDate().atTime(hour, 0).atZone(INDIA);
+        if (candidate.toInstant().isAfter(now)) {
+            candidate = candidate.minusDays(1);
+        }
+        return candidate.toInstant();
+    }
+
+    /** How many of the newest FULL crawls in a row ended PARTIAL or FAILED (recent = newest first). */
+    static int failedInARow(List<CrawlRunRepository.RunState> recent) {
+        int failed = 0;
+        for (CrawlRunRepository.RunState state : recent) {
+            if (state.status() != Status.PARTIAL && state.status() != Status.FAILED) {
+                break;
+            }
+            failed++;
+        }
+        return failed;
+    }
+
+    /**
+     * Why a slow company's FULL crawl is due now, or null when it is not. Due when it was never crawled; or its
+     * minCrawlHours have passed since its last full crawl started and, if config.fullCrawlFromHour is set, today's window
+     * (that hour in India) has opened and no full crawl has started since it opened (one per day); or its last crawls
+     * ended PARTIAL / FAILED (throttled) and the newest ended at least retryAfter ago with fewer than maxRetries retries
+     * so far (a retry ignores the window). recent = the company's newest FULL runs first; interrupted ones are not in it.
+     */
+    static String dueReason(Company company, Instant lastStart, List<CrawlRunRepository.RunState> recent,
+                            Duration retryAfter, int maxRetries, Instant now) {
+        if (lastStart == null) {
+            return "never crawled";
+        }
+        if (tooSoon(company, lastStart, now) == null) {
+            Integer hour = fullCrawlFromHour(company);
+            if (hour == null) {
+                return "minimum interval passed";
+            }
+            if (lastStart.isBefore(latestWindowStart(hour, now))) {
+                return "daily window from " + String.format("%02d:00", hour) + " India time is open";
+            }
+        }
+        int failed = failedInARow(recent);
+        if (failed > 0 && failed <= maxRetries && !now.isBefore(recent.get(0).finishedAt().plus(retryAfter))) {
+            return "retry " + failed + " of " + maxRetries + " after a " + recent.get(0).status();
+        }
+        return null;
+    }
+
+    /**
+     * Why the quick check for new jobs is due now, or null: the company has config.peekEveryMinutes, a full crawl has
+     * run (there is a base to compare with), the last full crawls did not fail in a row (the site is throttling us: leave
+     * it alone), and the last quick check started at least that long ago.
+     */
+    static String peekReason(Company company, Instant lastFullStart, Instant lastPeekStart,
+                             List<CrawlRunRepository.RunState> recentFull, Instant now) {
+        JsonNode every = company.config() == null ? null : company.config().path("peekEveryMinutes");
+        if (every == null || !every.isNumber() || every.asLong() <= 0 || lastFullStart == null
+                || failedInARow(recentFull) > 0) {
+            return null;
+        }
+        if (lastPeekStart != null && Duration.between(lastPeekStart, now).toMinutes() < every.asLong()) {
+            return null;
+        }
+        return lastPeekStart == null ? "no quick check yet" : "every " + every.asLong() + " minutes";
     }
 
     /**
@@ -111,8 +271,13 @@ public class CrawlRunService {
      * gaps the rules left in jobs never asked before, and wait for that to finish.
      */
     public CrawlJobReport crawlJob(String trigger) {
+        return crawlJob(trigger, company -> true);
+    }
+
+    /** As above, for the companies the filter accepts (the regular loop leaves out the slow ones). */
+    public CrawlJobReport crawlJob(String trigger, Predicate<Company> only) {
         long start = System.nanoTime();
-        Run run = runAll(trigger);
+        Run run = runAll(trigger, only);
         List<RunOutcome> outcomes = run.outcomes();
         List<GapFillRunner.RunStatus> fills = new ArrayList<>(run.gapFills());
         String note = null;
@@ -121,11 +286,14 @@ public class CrawlRunService {
         } else if (!shutdown.isStopping()) {
             // each company was filled right after its own crawl; this catch-all asks about whatever is still unasked
             // (a company whose fill failed, jobs from earlier runs)
+            gapFillLock.lock();                              // never at the same time as a slow company's own fill
             try {
                 fills.add(gapFillRunner.runAndWait(properties.gapFillModel(), null, properties.gapFillParallelism()));
             } catch (RuntimeException e) {
                 note = "gap fill not run: " + e.getMessage();
                 log.warn("Gap fill after the crawl: {}", e.getMessage());
+            } finally {
+                gapFillLock.unlock();
             }
         }
         GapFillRunner.RunStatus gapFill = fills.isEmpty() ? null : GapFillRunner.RunStatus.combine(fills);
@@ -147,6 +315,11 @@ public class CrawlRunService {
 
     /** Crawls every enabled company that has an adapter, one virtual thread per server, and waits for all of them. */
     public Run runAll(String trigger) {
+        return runAll(trigger, company -> true);
+    }
+
+    /** As above, for the companies the filter accepts. */
+    public Run runAll(String trigger, Predicate<Company> only) {
         if (!fullRunGoing.compareAndSet(false, true)) {
             throw new IllegalStateException("A crawl of all companies is already running");
         }
@@ -157,7 +330,7 @@ public class CrawlRunService {
             List<Company> toCrawl = new ArrayList<>();
             List<String> skipped = new ArrayList<>();
             for (Company company : companies.findAll()) {
-                if (!company.enabled() || !crawlService.isSupported(company)) {
+                if (!company.enabled() || !crawlService.isSupported(company) || !only.test(company)) {
                     continue;
                 }
                 String wait = tooSoon(company, lastStarts.get(company.id()), now);
@@ -215,8 +388,13 @@ public class CrawlRunService {
         queue.submit(() -> {
             try (activity) {
                 if (!shutdown.isStopping()) {
-                    gapFills.add(gapFillRunner.fillCompany(company.id(), properties.gapFillModel(),
-                            properties.gapFillParallelism()));
+                    gapFillLock.lock();                                // not at the same time as a slow company's fill
+                    try {
+                        gapFills.add(gapFillRunner.fillCompany(company.id(), properties.gapFillModel(),
+                                properties.gapFillParallelism()));
+                    } finally {
+                        gapFillLock.unlock();
+                    }
                 }
             } catch (RuntimeException e) {
                 log.warn("{}: gap fill failed: {}", company.slug(), e.getMessage());
@@ -242,6 +420,14 @@ public class CrawlRunService {
 
     /** Crawls one company and records the run; a failure is recorded and returned, not thrown. */
     public RunOutcome crawlOne(Company company, String trigger) {
+        return crawlOne(company, trigger, CrawlRun.FULL);
+    }
+
+    /**
+     * As above; kind PEEK is the quick check for new jobs (recorded as such, never closes jobs). A company has only ONE
+     * crawl at a time, of either kind: the second is refused, so a full crawl and a quick check never run together.
+     */
+    public RunOutcome crawlOne(Company company, String trigger, String kind) {
         if (!crawling.add(company.slug())) {
             // a run is recorded only when it ends, so without this a long crawl (Microsoft: hours) would be started a second
             // time by the next schedule slot, double-hitting a site that already throttles us
@@ -250,7 +436,7 @@ public class CrawlRunService {
                     List.of("already being crawled"), 0, "already being crawled");
         }
         try (ShutdownSignal.Activity activity = shutdown.track()) {      // a shutdown waits until the run is recorded
-            return crawlTracked(company, trigger);
+            return CrawlRun.PEEK.equals(kind) ? peekTracked(company, trigger) : crawlTracked(company, trigger);
         } finally {
             crawling.remove(company.slug());
         }
@@ -268,7 +454,7 @@ public class CrawlRunService {
             long runId = runs.insert(new CrawlRun(company.id(), trigger, result.seenAt(), Instant.now(), verdict.status(),
                     result.fetched(), result.kept(), result.inserted(), result.updated(), result.unchanged(),
                     result.unresolved(), noDescription, result.detailsFetched(), result.detailsReused(),
-                    verdict.alerts(), null, result.elapsedMs()));
+                    verdict.alerts(), null, result.elapsedMs(), CrawlRun.FULL));
             int closed = verdict.status() == Status.OK
                     ? runs.closeMissing(company.id(), properties.closeAfterMisses(), runId) : 0;
             verdict.alerts().forEach(alert -> log.warn("{}: HEALTH {}", company.slug(), alert));
@@ -284,15 +470,47 @@ public class CrawlRunService {
             runs.insert(new CrawlRun(company.id(), trigger, partial.seenAt(), Instant.now(), Status.PARTIAL, partial.fetched(),
                     partial.kept(), partial.inserted(), partial.updated(), partial.unchanged(), partial.unresolved(),
                     noDescription, partial.detailsFetched(), partial.detailsReused(), alerts, e.getCause().toString(),
-                    partial.elapsedMs()));
+                    partial.elapsedMs(), CrawlRun.FULL));
             log.warn("{}: HEALTH crawl PARTIAL: {}", company.slug(), e.getMessage());
             return new RunOutcome(company.slug(), server, partial, Status.PARTIAL, alerts, 0, e.getCause().toString());
         } catch (RuntimeException e) {
             List<String> alerts = List.of("crawl failed: " + e.getMessage());
             long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
             runs.insert(new CrawlRun(company.id(), trigger, started, Instant.now(), Status.FAILED, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, alerts, e.toString(), elapsedMs));
+                    0, 0, alerts, e.toString(), elapsedMs, CrawlRun.FULL));
             log.warn("{}: HEALTH crawl failed: {}", company.slug(), e.toString());
+            return new RunOutcome(company.slug(), server, null, Status.FAILED, alerts, 0, e.toString());
+        }
+    }
+
+    /**
+     * The quick check for new jobs of one company: fetches the newest part of its list, saves what is new or changed and
+     * records a PEEK run. No health judgement and no closing: it does not see the older jobs.
+     */
+    private RunOutcome peekTracked(Company company, String trigger) {
+        String server = crawlService.serverKey(company);
+        Instant started = Instant.now();
+        long startNanos = System.nanoTime();
+        try {
+            CrawlResult result = crawlService.crawlNewest(company);
+            runs.insert(new CrawlRun(company.id(), trigger, result.seenAt(), Instant.now(), Status.OK, result.fetched(),
+                    result.kept(), result.inserted(), result.updated(), result.unchanged(), result.unresolved(), 0,
+                    result.detailsFetched(), result.detailsReused(), List.of(), null, result.elapsedMs(), CrawlRun.PEEK));
+            return new RunOutcome(company.slug(), server, result, Status.OK, List.of(), 0, null);
+        } catch (CrawlService.PartialCrawlException e) {
+            CrawlResult partial = e.partial();
+            List<String> alerts = List.of("partial: " + e.getMessage());
+            runs.insert(new CrawlRun(company.id(), trigger, partial.seenAt(), Instant.now(), Status.PARTIAL, partial.fetched(),
+                    partial.kept(), partial.inserted(), partial.updated(), partial.unchanged(), partial.unresolved(), 0,
+                    partial.detailsFetched(), partial.detailsReused(), alerts, e.getCause().toString(), partial.elapsedMs(),
+                    CrawlRun.PEEK));
+            log.warn("{}: quick check PARTIAL: {}", company.slug(), e.getMessage());
+            return new RunOutcome(company.slug(), server, partial, Status.PARTIAL, alerts, 0, e.getCause().toString());
+        } catch (RuntimeException e) {
+            List<String> alerts = List.of("quick check failed: " + e.getMessage());
+            runs.insert(new CrawlRun(company.id(), trigger, started, Instant.now(), Status.FAILED, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    alerts, e.toString(), (System.nanoTime() - startNanos) / 1_000_000, CrawlRun.PEEK));
+            log.warn("{}: quick check failed: {}", company.slug(), e.toString());
             return new RunOutcome(company.slug(), server, null, Status.FAILED, alerts, 0, e.toString());
         }
     }

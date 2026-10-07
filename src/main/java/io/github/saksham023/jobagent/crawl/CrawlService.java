@@ -106,12 +106,22 @@ public class CrawlService {
 
     /** Fetch, normalize, filter. Saves nothing. */
     public CrawlResult preview(Company company) {
-        return run(company, false);
+        return run(company, false, false);
     }
 
     /** Fetch, normalize, filter, then upsert the kept jobs. */
     public CrawlResult crawl(Company company) {
-        return run(company, true);
+        return run(company, true, false);
+    }
+
+    /** The quick check for new jobs: only new or changed jobs are fetched and upserted (see JobBoardAdapter). */
+    public CrawlResult crawlNewest(Company company) {
+        return run(company, true, true);
+    }
+
+    /** True when the company's adapter has the quick check for new jobs. */
+    public boolean supportsNewestCheck(Company company) {
+        return isSupported(company) && adapterFor(company).supportsNewestCheck(company);
     }
 
     /** The server the company's crawl talks to (see JobBoardAdapter.serverKey). */
@@ -126,7 +136,7 @@ public class CrawlService {
 
     // ---------------------------------------------------------------- the pipeline
 
-    private CrawlResult run(Company company, boolean save) {
+    private CrawlResult run(Company company, boolean save, boolean newestOnly) {
         JobBoardAdapter adapter = adapterFor(company);
         Instant seenAt = Instant.now().truncatedTo(ChronoUnit.MICROS);   // Postgres stores microseconds
         long startNanos = System.nanoTime();
@@ -135,7 +145,8 @@ public class CrawlService {
         try {
             // network: outside any transaction. A streaming adapter hands over finished jobs in batches (each batch is
             // saved at once); the rest, usually everything for a quick adapter, comes back at the end.
-            List<RawJob> rest = adapter.fetchJobs(company, progress::accept);
+            List<RawJob> rest = newestOnly ? adapter.fetchNewestJobs(company, progress::accept)
+                    : adapter.fetchJobs(company, progress::accept);
             progress.accept(rest);
         } catch (RuntimeException e) {
             if (progress.savedAnything()) {
@@ -146,7 +157,7 @@ public class CrawlService {
 
         CrawlResult result = progress.result(adapter.platform(), elapsedMs(startNanos));
         log.info("{}: {} fetched {} via {}, kept {} in {}, other {}, unresolved {}, skipped {}{}{} ({} ms)",
-                company.slug(), save ? "CRAWL" : "PREVIEW", result.fetched(), adapter.platform(), result.kept(),
+                company.slug(), !save ? "PREVIEW" : newestOnly ? "NEWEST" : "CRAWL", result.fetched(), adapter.platform(), result.kept(),
                 wantedCountries, result.otherCountries(), result.unresolved(), result.skipped(),
                 save ? ", inserted " + result.inserted() + ", updated " + result.updated() + ", unchanged "
                         + result.unchanged() + ", extracted " + result.extracted() : "",

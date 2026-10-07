@@ -42,7 +42,8 @@ class EightfoldAdapterTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final EightfoldConfig MICROSOFT =
-            new EightfoldConfig("apply.careers.microsoft.com", "microsoft.com", "India", Duration.ZERO, null, null, 10);
+            new EightfoldConfig("apply.careers.microsoft.com", "microsoft.com", "India", Duration.ZERO, null, null, 10,
+                    EightfoldAdapter.Throttle.DEFAULT, null, 5);
 
     private static JsonNode json(String text) {
         return JSON.readTree(text);
@@ -151,6 +152,54 @@ class EightfoldAdapterTest {
     private static String detailOf(int id) {
         return "{\"status\": 200, \"data\": {\"id\": " + id + ", \"name\": \"Job " + id
                 + "\", \"jobDescription\": \"<p>Description " + id + "</p>\"}}";
+    }
+
+    @Test
+    void theQuickCheckSkipsKnownJobsAndStopsAtTheFirstPageWithNothingNew() {
+        Company company = company("""
+                {"host": "apply.careers.microsoft.com", "domain": "microsoft.com", "delayMs": 0, "newestSortBy": "timestamp"}""");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // page 1: two new jobs (their descriptions are fetched); page 2: two known unchanged jobs -> stop, no page 3
+        server.expect(requestTo(containsString("start=0&sort_by=timestamp"))).andRespond(withSuccess(positions(1, 2, 6), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=1"))).andRespond(withSuccess(detailOf(1), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=2"))).andRespond(withSuccess(detailOf(2), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("start=2&sort_by=timestamp"))).andRespond(withSuccess(positions(3, 4, 6), MediaType.APPLICATION_JSON));
+        DetailCache cache = mock(DetailCache.class);
+        when(cache.load(1L)).thenReturn(new DetailCache.Known(Map.of(
+                "3", new DetailCache.Stored(null, Instant.now(), json("{}")),
+                "4", new DetailCache.Stored(null, Instant.now(), json("{}")))));
+        List<String> sunk = new java.util.ArrayList<>();
+        EightfoldAdapter adapter = new EightfoldAdapter(builder.build(), cache, new ShutdownSignal());
+
+        assertThat(adapter.supportsNewestCheck(company)).isTrue();
+        adapter.fetchNewestJobs(company, batch -> batch.forEach(job -> sunk.add(job.externalId())));
+
+        server.verify();                                             // and no request for a third list page
+        assertThat(sunk).containsExactly("1", "2");
+    }
+
+    @Test
+    void theQuickCheckStopsAfterPeekMaxPagesEvenWhenEveryJobIsNew() {
+        Company company = company("""
+                {"host": "apply.careers.microsoft.com", "domain": "microsoft.com", "delayMs": 0,
+                 "newestSortBy": "timestamp", "peekMaxPages": 1}""");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(containsString("/api/pcsx/search"))).andRespond(withSuccess(positions(1, 2, 50), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=1"))).andRespond(withSuccess(detailOf(1), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("position_id=2"))).andRespond(withSuccess(detailOf(2), MediaType.APPLICATION_JSON));
+        DetailCache cache = mock(DetailCache.class);
+        when(cache.load(1L)).thenReturn(DetailCache.Known.NONE);
+        List<String> sunk = new java.util.ArrayList<>();
+
+        new EightfoldAdapter(builder.build(), cache, new ShutdownSignal())
+                .fetchNewestJobs(company, batch -> batch.forEach(job -> sunk.add(job.externalId())));
+
+        server.verify();
+        assertThat(sunk).containsExactly("1", "2");
+        assertThat(new EightfoldAdapter(null, null, null).supportsNewestCheck(
+                company("{\"host\": \"h\", \"domain\": \"d\"}"))).isFalse();      // no newestSortBy: no quick check
     }
 
     @Test
@@ -350,6 +399,26 @@ class EightfoldAdapterTest {
         })).isInstanceOf(HttpClientErrorException.Forbidden.class);
         assertThat(calls).hasValue(1);
         assertThat(pace.delay()).isEqualTo(Duration.ZERO);
+    }
+
+    @Test
+    void aPatientCompanyRetriesLongerAndEveryWaitIsCapped() {
+        EightfoldConfig config = EightfoldConfig.from(company("""
+                {"host": "apply.careers.microsoft.com", "domain": "microsoft.com",
+                 "coolDownSeconds": 30, "maxThrottledTries": 8, "maxCoolDownSeconds": 100}"""));
+        assertThat(config.throttle().maxTries()).isEqualTo(8);
+        assertThat(config.throttle().waitAfter(1)).isEqualTo(Duration.ofSeconds(30));
+        assertThat(config.throttle().waitAfter(3)).isEqualTo(Duration.ofSeconds(90));
+        assertThat(config.throttle().waitAfter(7)).isEqualTo(Duration.ofSeconds(100));         // capped
+        assertThat(MICROSOFT.throttle()).isEqualTo(EightfoldAdapter.Throttle.DEFAULT);           // no keys: as before
+
+        AtomicInteger calls = new AtomicInteger();
+        EightfoldAdapter.Throttle fast = new EightfoldAdapter.Throttle(Duration.ZERO, 8, Duration.ZERO);
+        assertThatThrownBy(() -> EightfoldAdapter.politely("acme", new EightfoldAdapter.Pace(Duration.ZERO), fast, () -> {
+            calls.incrementAndGet();
+            throw tooManyRequests();
+        }, () -> false)).isInstanceOf(HttpClientErrorException.TooManyRequests.class);
+        assertThat(calls).hasValue(8);
     }
 
     private static HttpClientErrorException tooManyRequests() {
