@@ -46,7 +46,7 @@ public class RequirementsController {
      * POST /admin/requirements/fill-gaps?limit=15&parallelism=3. Re-running continues with the jobs not yet asked.
      */
     @PostMapping("/fill-gaps")
-    public ResponseEntity<RunStatus> fillGaps(@RequestParam(defaultValue = "opus") String model,
+    public ResponseEntity<RunStatus> fillGaps(@RequestParam(defaultValue = "sonnet") String model,
                                               @RequestParam(required = false) Integer limit,
                                               @RequestParam(defaultValue = "1") int parallelism) {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(gapFillRunner.start(model, limit, parallelism));

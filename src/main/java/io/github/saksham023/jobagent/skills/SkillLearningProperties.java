@@ -22,7 +22,7 @@ public record SkillLearningProperties(
         @DefaultValue("300") int maxTermsPerRun,
         @DefaultValue("20") int batchSize,
         @DefaultValue("4") int parallelism,
-        @DefaultValue("opus") String model) {
+        @DefaultValue("sonnet") String model) {
 
     public SkillLearningProperties {
         if (minCompanies < 1 || maxTermsPerRun < 1 || batchSize < 1 || batchSize > 40 || parallelism < 1 || parallelism > 8) {

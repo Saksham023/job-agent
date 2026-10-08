@@ -28,7 +28,7 @@ Any of them can also be set as an environment variable (Spring's naming: `jobage
 | `schedule.initial-delay` | `PT1M` | wait after the app starts before the first check |
 | `schedule.check-delay` | `PT1M` | how often the tick looks for groups that are due (cheap) |
 | `schedule.gap-fill` | `true` | Opus fills the gaps of jobs never asked about: for each company right after its own crawl (so a slow company never delays the others; it is asked after EVERY crawl, a cheap query that finds nothing when nothing is unasked), one company at a time. A manual `POST /admin/crawl` adds one more pass at the end |
-| `schedule.gap-fill-model` | `opus` | model for that gap fill |
+| `schedule.gap-fill-model` | `sonnet` | model for that gap fill (was `opus`; Sonnet matched it on 29/30 years at about half the cost, test 2026-10-08) |
 | `schedule.gap-fill-parallelism` | `10` | Opus calls at the same time (1 to 10) |
 | `schedule.close-after-misses` | `2` | a job missing from this many good crawls in a row is closed |
 
@@ -44,11 +44,11 @@ Any of them can also be set as an environment variable (Spring's naming: `jobage
 |---|---|---|
 | `enabled` | `false` | run skill learning automatically (manual: `POST /admin/skills/learn`) |
 | `cron` | `0 30 3 * * *` | when (daily 03:30) |
-| `min-companies` | `3` | a word must appear in skill lists at this many companies before Opus is asked |
-| `max-terms-per-run` | `300` | cost cap: words sent to Opus per run |
-| `batch-size` | `20` | words per Opus call |
-| `parallelism` | `4` | Opus calls at the same time |
-| `model` | `opus` | model that decides |
+| `min-companies` | `3` | a word must appear in skill lists at this many companies before the model is asked |
+| `max-terms-per-run` | `300` | cost cap: words sent to the model per run |
+| `batch-size` | `20` | words per model call |
+| `parallelism` | `4` | model calls at the same time |
+| `model` | `sonnet` | model that decides (was `opus`; test 2026-10-08) |
 
 ### AI search (MCP `match_jobs`): `jobagent.search.*`
 

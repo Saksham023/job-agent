@@ -25,7 +25,7 @@ public record CrawlScheduleProperties(
         @DefaultValue("PT1M") Duration initialDelay,
         @DefaultValue("PT1M") Duration checkDelay,
         @DefaultValue("true") boolean gapFill,
-        @DefaultValue("opus") String gapFillModel,
+        @DefaultValue("sonnet") String gapFillModel,
         @DefaultValue("10") int gapFillParallelism,
         @DefaultValue("2") int closeAfterMisses) {
 

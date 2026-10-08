@@ -53,18 +53,18 @@ jobagent:
       initial-delay: PT1M       # wait after startup before the first check
       check-delay: PT1M         # how often the tick looks for server groups that are due
       gap-fill: true            # afterwards the model fills the new jobs' gaps (only jobs never asked)
-      gap-fill-model: opus
+      gap-fill-model: sonnet    # Sonnet matched Opus on 29/30 years at about half the cost (test 2026-10-08)
       gap-fill-parallelism: 10
       close-after-misses: 2     # a job missing from 2 good crawls of its company in a row is closed
   skills:
     learning:
       enabled: false            # OFF by default: when true, the run below happens daily (manual: POST /admin/skills/learn)
       cron: "0 30 3 * * *"      # daily 03:30, after the 00:00 crawl
-      min-companies: 3          # a word must show up in skill lists at 3+ different companies before Opus is asked
-      max-terms-per-run: 300    # cost cap: at most 300 words to Opus per run (~$2)
-      batch-size: 20            # words per Opus call
+      min-companies: 3          # a word must show up in skill lists at 3+ different companies before the model is asked
+      max-terms-per-run: 300    # cost cap: at most 300 words to the model per run
+      batch-size: 20            # words per model call
       parallelism: 4
-      model: opus
+      model: sonnet             # as consistent as Opus with itself (33/40) at about 40% of the cost (test 2026-10-08)
   security:
     api-key: ${JOBAGENT_SECURITY_API_KEY:}   # shared secret for /admin/** and /mcp; blank = open (set it before exposing the app)
     rate-limit:                              # /api/** only, per client, in memory

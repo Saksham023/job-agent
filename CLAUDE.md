@@ -9,6 +9,22 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
+### >>> NEXT STEP (user's decision, 2026-10-07): MORE COMPANIES, one by one <<<
+The scheduler chapter is CLOSED (every server group runs its own 30 min fixed-delay rounds; Microsoft and Qualcomm are in the normal flow; user: "absolutely closed").
+Next: add the strong-paying companies with their own careers sites, ONE AT A TIME, each with its own adapter, the same way as the others (adapter + migration row + adapter
+test + crawl + generalization check BEFORE any rule edit + gap fill): ATLASSIAN, CISCO (Phenom), INTUIT (Radancy), APPLE, GOOGLE, FLIPKART (TurboHire; only ~8 external jobs, low
+value). Research of 2026-10-04 is in research/sources_2026-10-04.json; the fresh research (endpoints, fields, rate limits, effort per company) is in
+research/new-companies_2026-10-07.md. After these: check which of the unresearched high-paying companies (Rubrik, Snowflake, Rippling, Airbnb, Stripe, Coinbase, LinkedIn, Palo Alto
+Networks, Arista, Nutanix, Broadcom/VMware, Cohesity, Pure Storage, Twilio, D. E. Shaw, Tower Research, Graviton) already use Greenhouse/Lever/Workday/Ashby (one DB row, no code).
+Other backlog after that: README refresh, login system, admin dashboard (crawl history page, log viewer + log rotation, server stats via Micrometer, Claude usage ledger), nightly backup.
+
+### MODELS (2026-10-08, user's decision, UNCOMMITTED): gap fill and skill learning now use SONNET (application.yaml gap-fill-model / skills.learning.model,
+property defaults, POST /admin/requirements/fill-gaps default). Test on Opus's stored answers: gap fill years 29/30, family 24/30 (borderline non-tech roles),
+languages 27/30; skill review 30/40 vs stored Opus, same as Opus re-run vs itself (33/40 both); cost about half ($0.014 vs $0.027 per gap fill, $0.05 vs $0.12
+per 20-term batch); speed the same (~5-7 s, CLI start-up dominates); Sonnet does not think by default (thinking on/off gave the same tokens). Stored fills are not
+re-asked (keyed by content hash + prompt version, not model). The JUDGE stays on Opus (user: MCP rarely used): Sonnet matched every APPLY/NO but turned all 13 MAYBE
+into NO (Opus kept 11/13 on a re-run).
+
 ### >>> NEXT SESSION: MORNING CHECKLIST (written 2026-10-07 ~03:30 IST, end of a long session) <<<
 WHERE THINGS STAND: everything is deployed on the Air (MacBook Air M1 server, https://jobserver.tail8cf172.ts.net/ public via
 Tailscale Funnel; push to main = test + build on GitHub + deploy by the self-hosted runner with a graceful stop and rollback).
