@@ -15,6 +15,7 @@ TECH,\bengineering\b|\btech\b|\btechnology\b|\bbackend\b|commerce platform|digit
 PRODUCT,\bproduct\b
 DESIGN,\bdesign\b|art/creative|\bux\b
 LEGAL,\blegal\b
+QUANT,quantitative (?:trading|research)|\bstrats\b|systematic trading
 FINANCE,\bfinance\b|\baccounting\b|fp&a|\bpurchase\b|internal controls
 RISK_COMPLIANCE,\brisk\b|compliance|regulatory
 HR,human resources|\bhr\b|\bpeople\b|recruiting|\btalent\b|culture

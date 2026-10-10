@@ -61,6 +61,7 @@ public class PublicApiController {
             Map.entry(JobFamily.DESIGN, "Design"),
             Map.entry(JobFamily.PROGRAM_MANAGEMENT, "Program Management"),
             Map.entry(JobFamily.ANALYTICS, "Analytics"),
+            Map.entry(JobFamily.QUANT, "Quant Research & Trading"),
             Map.entry(JobFamily.SALES, "Sales"),
             Map.entry(JobFamily.MARKETING, "Marketing"),
             Map.entry(JobFamily.FINANCE, "Finance"),

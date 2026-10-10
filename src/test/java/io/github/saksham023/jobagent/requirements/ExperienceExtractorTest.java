@@ -227,14 +227,14 @@ class ExperienceExtractorTest {
     // ---------------------------------------------------------------- estimate from the title when no years are written
 
     @Test
-    void titleEstimateWhenNoYearsAreWritten() {
+    void levelWordsInTheTitleGiveNoEstimate() {
+        // senior, staff, principal, director, junior mean different things per company: no years unless written
         Experience staff = extractor.extract("Senior Staff Software Engineer- Search Quality", "- Build search systems.");
-
-        assertThat(staff.minYears()).isEqualTo(8);
-        assertThat(staff.confidence()).isEqualTo(Confidence.LOW);
-        assertThat(staff.evidence()).startsWith("title:");
-        assertThat(extractor.extract("Director Sales - Moveworks", null).minYears()).isEqualTo(12);
-        assertThat(extractor.extract("Senior Solutions Engineer", null).minYears()).isEqualTo(5);
+        assertThat(staff.minYears()).isNull();
+        assertThat(staff.confidence()).isEqualTo(Confidence.NONE);
+        assertThat(extractor.extract("Director Sales - Moveworks", null).minYears()).isNull();
+        assertThat(extractor.extract("Senior Solutions Engineer", null).minYears()).isNull();
+        assertThat(extractor.extract("Member of Technical Staff - FlashArray", null).minYears()).isNull();
     }
 
     @Test

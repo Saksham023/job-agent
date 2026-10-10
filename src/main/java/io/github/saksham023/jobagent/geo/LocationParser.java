@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -50,6 +51,9 @@ public class LocationParser {
 
     /** Workday location codes with dots: "IND.Pune", "IND.BLR.Home Office" (country code first). */
     private static final Pattern DOTTED_CODE = Pattern.compile("^[A-Z]{2,3}\\.(?=\\S)");
+
+    /** Workday office names with a dashed ISO alpha-3 code first: "IND-Bangalore Electronic City - S1" (Broadcom). */
+    private static final Pattern DASHED_CODE = Pattern.compile("^[A-Z]{3}-(?=\\p{L})");
 
     /** Word boundaries for the prefix fallback: "Bengaluru-VTP" -> ["Bengaluru", "VTP"]. */
     private static final Pattern WORD_SPLIT = Pattern.compile("[\\s\\-/]+");
@@ -121,6 +125,10 @@ public class LocationParser {
         cleaned = cleaned.replace('(', ' ').replace(')', ' ');
         if (DOTTED_CODE.matcher(cleaned.strip()).lookingAt()) {
             cleaned = cleaned.replace('.', ',');                      // "IND.Pune" -> "IND,Pune"
+        }
+        Matcher dashed = DASHED_CODE.matcher(cleaned.strip());
+        if (dashed.lookingAt()) {
+            cleaned = cleaned.strip().replaceFirst("-", ",");         // "IND-Bangalore ..." -> "IND,Bangalore ..."
         }
 
         List<String> parts = new ArrayList<>();

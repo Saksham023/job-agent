@@ -32,6 +32,25 @@ class JobClassifierTest {
     }
 
     @Test
+    void quantResearchAndTrading() {
+        assertThat(classify("Quantitative Researcher (2027 Graduate)", "Quantitative Trading").family()).isEqualTo(JobFamily.QUANT);
+        assertThat(classify("Senior Quantitative Trader", "Quantitative Trading").family()).isEqualTo(JobFamily.QUANT);
+        assertThat(classify("Trader - Gift City Securities PLC Branch - Vice President", null).family()).isEqualTo(JobFamily.QUANT);
+        assertThat(classify("Markets- Commodities Systematic Trading-Associate-Mumbai", null).family()).isEqualTo(JobFamily.QUANT);
+        // boundaries: model risk is risk work, quant developers are software engineers (with QUANT as a secondary)
+        assertThat(classify("Quant Model Risk Analyst", null).family()).isEqualTo(JobFamily.RISK_COMPLIANCE);
+        Classification developer = classify("Quantitative Developer", "Technology");
+        assertThat(developer.family()).isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(developer.secondaryFamilies()).contains(JobFamily.QUANT);
+        assertThat(classify("Senior Infrastructure Engineer - Trader Voice (Unigy-Cloud9)", null).family()).isEqualTo(JobFamily.INFRA_DEVOPS);
+        Classification backend = classify("Java Backend Engineer (Quant Analytics), Vice President", null);
+        assertThat(backend.family()).isEqualTo(JobFamily.SOFTWARE_ENGINEERING);
+        assertThat(backend.secondaryFamilies()).contains(JobFamily.QUANT);
+        assertThat(classify("GBM - STS AI Structuring - Sales Strats - Analyst/Associate - Bengaluru", null).family()).isEqualTo(JobFamily.QUANT);
+        assertThat(classify("Sr Solutions Architect, AWS Industries India - Strat Acc.", null).secondaryFamilies()).doesNotContain(JobFamily.QUANT);
+    }
+
+    @Test
     void chipDesignIsHardwareNotSoftware() {
         assertThat(classify("ASIC Design and STA Engineer", "Engineering").family()).isEqualTo(JobFamily.HARDWARE_ENGINEERING);
         assertThat(classify("Senior Verification Engineer, PCIE", "Engineering").family()).isEqualTo(JobFamily.HARDWARE_ENGINEERING);

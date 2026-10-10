@@ -218,6 +218,14 @@ class LocationParserTest {
     }
 
     @Test
+    void workdayDashedCodes() {
+        ParsedLocation bangalore = single("IND-Bangalore Electronic City - S1");
+        assertThat(bangalore.countryCode()).isEqualTo("IN");
+        assertThat(bangalore.city()).isEqualTo("Bengaluru");
+        assertThat(single("IND-Hyderabad 115 IT Park Area").countryCode()).isEqualTo("IN");
+    }
+
+    @Test
     void aDashWithASpaceOnlyAfterItSeparatesParts() {
         ParsedLocation location = single("Remote- India- Gurugram");
         assertThat(location.city()).isEqualTo("Gurugram");

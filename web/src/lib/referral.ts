@@ -19,6 +19,7 @@ const FAMILY_HEADLINE: Record<string, string> = {
   DESIGN: 'designer',
   PROGRAM_MANAGEMENT: 'program manager',
   ANALYTICS: 'data analyst',
+  QUANT: 'quant researcher',
 }
 
 /** "a" or "an" by sound: "an ML engineer", "an iOS developer", "a UX designer", "a backend engineer". */

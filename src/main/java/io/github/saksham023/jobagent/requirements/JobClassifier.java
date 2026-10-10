@@ -191,7 +191,9 @@ public class JobClassifier {
 
     private static void addSecondary(Set<JobFamily> secondary, List<String> why, JobFamily family,
                                      JobFamily candidate, String evidence) {
-        if (candidate.isTech() && candidate != family && secondary.add(candidate)) {
+        // QUANT is not a tech family, but a quant developer should also be found by a "Quant Research & Trading" search
+        boolean allowed = candidate.isTech() || candidate == JobFamily.QUANT;
+        if (allowed && candidate != family && secondary.add(candidate)) {
             why.add(evidence + " -> also " + candidate);
         }
     }

@@ -92,18 +92,14 @@ public class ExperienceExtractor {
     private static final int MAX_EVIDENCE_LENGTH = 200;
 
     /**
-     * Fallback when the text states no years: unambiguous title words give an ESTIMATE (LOW confidence).
-     * Order matters ("Senior Staff" is staff, "Senior Director" is director). Words that mean different
-     * things per company (manager, executive, analyst, associate, lead, specialist) give nothing.
+     * Fallback when the text states no years: only interns, trainees and apprentices get an ESTIMATE (0-1 years, LOW
+     * confidence), because those words mean a student everywhere. Level words (senior, staff, principal, director,
+     * junior...) give nothing: they mean different things at different companies (user's decision, 2026-10-10).
      */
     private record TitleEstimate(Pattern words, int minYears, Integer maxYears) {}
 
     private static final List<TitleEstimate> TITLE_ESTIMATES = List.of(
-            new TitleEstimate(Pattern.compile("(?i)\\b(?:intern(?:ship)?|trainee|apprentice)\\b"), 0, 1),
-            new TitleEstimate(Pattern.compile("(?i)\\b(?:director|head|vp|vice president|chief)\\b"), 12, null),
-            new TitleEstimate(Pattern.compile("(?i)\\b(?:staff|principal|distinguished)\\b"), 8, null),
-            new TitleEstimate(Pattern.compile("(?i)\\b(?:senior|sr)\\b\\.?(?!\\s*executive)"), 5, null),
-            new TitleEstimate(Pattern.compile("(?i)\\b(?:junior|jr)\\b"), 0, 2));
+            new TitleEstimate(Pattern.compile("(?i)\\b(?:intern(?:ship)?|trainee|apprentice)\\b"), 0, 1));
 
     private static final Pattern INTERN_EMPLOYMENT = Pattern.compile("(?i)\\b(?:intern(?:ship)?|trainee)\\b");
 

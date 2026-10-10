@@ -59,6 +59,7 @@ export const FAMILY_SHORT: Record<string, string> = {
   DESIGN: 'Design',
   PROGRAM_MANAGEMENT: 'Program Mgmt',
   ANALYTICS: 'Analytics',
+  QUANT: 'Quant',
   SALES: 'Sales',
   MARKETING: 'Marketing',
   FINANCE: 'Finance',

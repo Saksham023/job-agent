@@ -10,6 +10,10 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 ## 0. RESUME HERE (read first after a context compaction)
 
 ### >>> HANDOFF 2026-10-10 (written right before a compaction; THIS block is the current state, read it first) <<<
+UPDATE (end of 2026-10-10): L1-L6 ALL DONE AND DEPLOYED (commit 7764bb9, pushed by the user, deploy green, JWT secret set on the Air). The
+notes below about "uncommitted" describe the state before that commit. Open: Anthropic API key (or JOBAGENT_AUTH_SIGNUP_ENABLED=false)
+before anyone else uses the app; small fix: show an error when loading the profile fails; then backlog (admin dashboards, Atlassian and
+other companies, README refresh). web/tsconfig.tsbuildinfo is a build cache file, left uncommitted on purpose.
 WORK IN PROGRESS: accounts + referrals, milestones L0-L6 (table "MILESTONES: ACCOUNTS + REFERRALS" below). L1, L2, L3, L4 are BUILT and
 tested locally but ALL UNCOMMITTED (user commits only when they ask; never mention Claude / no Co-Authored-By line in commit messages,
 user's explicit rule). Last commits on main: 1d28683 (MCP shutdown fix), 7d7ec24 (Sonnet for gap fill + skill learning). Nothing of
@@ -92,6 +96,30 @@ algorithm; MCP server with custom matching + LLM re-rank, top-K returned, rest c
 The user chose to write 10K+ jobs / 50+ sites / 95% there although the system has ~5,600 jobs / 33 companies / ~89%; this was flagged.
 
 
+### >>> MORE COMPANIES, round 1 (2026-10-10, UNCOMMITTED; local crawl done, NOT deployed) <<<
+Probe (about 50 polite requests): 12 companies on platforms we already crawl -> V33__seed_more_companies.sql: Greenhouse pure-storage,
+stripe, rubrik, twilio, graviton (gravitonresearchcapital), tower-research (towerresearchcapital), coinbase, airbnb; Ashby snowflake;
+Workday palo-alto-networks (paloaltonetworks.wd5 / panwexternalcareers), broadcom (broadcom.wd1 / External_Career, VMware incl.), cohesity
+(cohesity.wd5 / Cohesity_Careers). Not on our platforms: Rippling (own ATS), Nutanix, Arista, D. E. Shaw India. Local crawl (port 8091,
+local db): 474 India jobs (Palo Alto 161, Pure Storage 79, Broadcom 60, Stripe 49, Rubrik 36, Twilio 20, Graviton 16, Tower 14, Snowflake 12,
+Cohesity 12, Coinbase 10, Airbnb 5). NO gap fill locally (user: the Air's per-company gap fill does it after its crawl).
+Rule changes, EXTRACTOR_VERSION 13 (diff over all 5,733 jobs: exactly the intended 219 changed): (1) LocationParser: dashed ISO alpha-3 code
+first ("IND-Bangalore Electronic City - S1", Broadcom; test); (2) title-families.csv: "engineer software" -> SWE, "sqa" -> QA, "manager,
+SW engineering" -> ENG_MANAGEMENT (Palo Alto, 12 jobs); (3) ExperienceExtractor: NO title estimates any more except interns/trainees/
+apprentices (0-1) and employment type Intern (user: senior/staff/principal/director vary per company, show nothing; 207 jobs LOW -> NONE;
+the website already hid them, the MCP search used them as filters); (4) GreenhouseAdapter: an office without a location gives its name minus
+"Locations" (Stripe "India Locations": +3 jobs; GreenhouseAdapterTest). NOT fixed (user: ignore for now): "minimum 5 ... typically 15+" -> 15,
+"5+ years managing ... including 1+ year" -> 1 (2 phrasings, 4 jobs). 358 tests. Left for the Sonnet gap fill on the Air: 16 unclassified
+(quant traders/researchers, Stripe finance), guessed families (e.g. Broadcom "R&D Engineer IC Design"). THEN (user OK) new job family QUANT, label "Quant Research & Trading", group TECH_ADJACENT, EXTRACTOR_VERSION 14: title rules (RISK
+"model risk/validation" first; QUANT "strats" before sales; other quant words (quant research/trading/analytics/modeling/engineering,
+systematic trading, execution/central/... trader, "Trader - ...") AFTER the software rules so "Java Backend Engineer (Quant Analytics)" stays
+SWE; "quantitative developer" = SWE + QUANT secondary), department rule (quantitative trading/research, strats), JobClassifier allows QUANT as
+the one non-tech SECONDARY family, gap-filler prompt line (prompt version NOT bumped: no re-asking), labels (API, format.ts "Quant", referral
+fallback "quant researcher"), tests. Diff vs v13: exactly 25 jobs (20 -> QUANT from UNCLASSIFIED/RISK/PRODUCT/SALES/OPERATIONS/DATA_ML/
+ANALYTICS; 5 get QUANT as a secondary). Note: Goldman "Quantitative Engineering" (was DATA_ML + SWE secondary) is now QUANT with no SWE
+secondary (QUANT primaries get no secondaries). 359 tests. NEXT: commit when asked, push; after deploy the Air re-extracts on the next
+crawl that saves anything (or POST /admin/requirements/rebuild); the Air crawls the 12 in its next rounds; optional LinkedIn ids.
+
 ### >>> NEXT STEP (user's decision, 2026-10-07): MORE COMPANIES, one by one <<<
 The scheduler chapter is CLOSED (every server group runs its own 30 min fixed-delay rounds; Microsoft and Qualcomm are in the normal flow; user: "absolutely closed").
 Next: add the strong-paying companies with their own careers sites, ONE AT A TIME, each with its own adapter, the same way as the others (adapter + migration row + adapter
@@ -128,7 +156,7 @@ users from a personal subscription is not allowed).
 | L3 | LinkedIn connections button: linkedinCompanyId per company (migration), "Find connections at X" in the job drawer, keyword fallback | DONE 2026-10-10, UNCOMMITTED: PublicJobRepository JobDetail.linkedinCompanyId, web/src/lib/linkedin.ts (several comma-separated ids -> currentCompany=["a","b"]; else keyword search), JobDrawer buttons; ids VERIFIED BY THE USER by hand via research/linkedin-ids-checklist.html (paste the address bar, ids picked out; several per company) -> V32__add_linkedin_company_ids.sql sets 33 companies (dry-run OK: 33 updated); SAMSUNG LEFT OUT on purpose (Samsung Electronics + SRI-B/SRI-Noida pages; user skipped it, name search fallback) |
 | L4 | Resume step after first sign-in: Drive link (recommended) or PDF; Drive fetch with checks; text via PDFBox (download then; NOT Claude-reads-the-file: prompt injection could leak secrets); Sonnet -> facts -> profiles row linked to the user | BUILT 2026-10-10, UNCOMMITTED. User's decisions: resume NOT required (dialog with x, shown once per visit while no profile), editable profile (edits feed filters + messages), 'Match my resume' filter = families + experience range only (no skills), referral message must be very short. Own table user_profiles (V29; NOT the MCP `profiles`, which stay frozen; MCP untouched). Package account: AccountProperties (jobagent.account.*), DriveLink (only drive/docs.google.com, URL built from the id: SSRF-safe), DriveFetcher (5 MB, PDF magic check, private file -> 'not shared'), PdfText (PDFBox 3.0.7, 10 pages, scan -> error), ResumeReader (Sonnet, text only, JSON schema, years nullable), ProfileChecks (dictionary names, ranges), AccountService (5 reads/hour/user, window via ExperienceWindow), AccountController (GET/PUT /api/v1/me/profile (204 = none), POST /api/v1/me/resume/link, /upload). UI: ResumeDialog, ProfilePanel (view + edit), FilterPanel 'Match my resume', menu 'My profile' / 'Update resume'. 351 tests. Live: user's real resume -> 1.6 yrs, Java + Python, 25 skills, SWE + DATA_ML, range 0-3, in 6 s; bad link / missing file messages; edits validated; browser checks all OK |
 | L5 | Referral message: fixed template filled per job (no AI), headline from the resume read, user-editable wording, copy in the drawer | BUILT 2026-10-10, UNCOMMITTED (see HANDOFF block) |
-| L6 | Deploy: JWT secret in ~/jobagent/env, first admin by SQL, push | planned |
+| L6 | Deploy: JWT secret in ~/jobagent/env, first admin by SQL, push | DONE 2026-10-10: user added JOBAGENT_AUTH_JWT_SECRET on the Air (generated there, 64 chars), commit 7764bb9 (L1-L5 + V32 ids) pushed and deployed; user checked: no "jwt-secret is not set" warning, all working |
 Later: admin dashboards (crawl history, logs, server stats, Claude usage), MCP personal tokens / OAuth 2.1, Anthropic API key before other users.
 
 ### LOGIN DESIGN DECIDED 2026-10-10 (user): BCrypt cost 12 (DelegatingPasswordEncoder); access token = JWT 15 min (HMAC secret from env, browser keeps

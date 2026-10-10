@@ -77,13 +77,17 @@ public class GreenhouseAdapter implements JobBoardAdapter {
 
     /**
      * location.name plus every office location, as free-text RawLocations, without duplicate texts.
-     * Greenhouse has no structured city/country, so only `text` is set.
+     * Greenhouse has no structured city/country, so only `text` is set. An office without a location gives its name,
+     * minus a trailing "Locations" (Stripe: location "N/A", office "India Locations" -> "India").
      */
-    private static List<RawLocation> locations(JsonNode job) {
+    static List<RawLocation> locations(JsonNode job) {
         Set<String> texts = new LinkedHashSet<>();
         addIfPresent(texts, text(job.path("location"), "name"));
         for (JsonNode office : job.path("offices")) {
-            addIfPresent(texts, text(office, "location"));
+            String location = text(office, "location");
+            String name = text(office, "name");
+            addIfPresent(texts, location != null && !location.isBlank() ? location
+                    : name == null ? null : name.replaceFirst("(?i)\\s+locations?$", ""));
         }
         return texts.stream()
                 .map(RawLocation::ofText)

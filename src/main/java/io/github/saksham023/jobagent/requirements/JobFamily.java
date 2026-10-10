@@ -19,6 +19,7 @@ public enum JobFamily {
     DESIGN(Group.TECH_ADJACENT),
     PROGRAM_MANAGEMENT(Group.TECH_ADJACENT),
     ANALYTICS(Group.TECH_ADJACENT),
+    QUANT(Group.TECH_ADJACENT),                    // quant research, trading and strats; quant developers stay SWE
     SALES(Group.BUSINESS),
     MARKETING(Group.BUSINESS),
     FINANCE(Group.BUSINESS),

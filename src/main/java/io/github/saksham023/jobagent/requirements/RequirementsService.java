@@ -36,7 +36,7 @@ public class RequirementsService {
      * 10 = family_guessed: a SOFTWARE_ENGINEERING family that comes only from the catch-all title is marked for the
      *      model to check.
      */
-    public static final int EXTRACTOR_VERSION = 12;
+    public static final int EXTRACTOR_VERSION = 14;
 
     private static final Pattern INTERN = Pattern.compile("(?i)\\b(?:intern(?:ship)?|trainee|apprentice)\\b");
     private static final Pattern CONTRACT = Pattern.compile("(?i)\\b(?:contract|contractor|temporary|freelance)\\b");

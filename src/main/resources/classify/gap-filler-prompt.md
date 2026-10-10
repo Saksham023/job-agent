@@ -37,6 +37,9 @@ the posting. Never guess, never use outside knowledge about the company.
 - DESIGN: UX, UI, product and visual design, user research.
 - PROGRAM_MANAGEMENT: program, project, delivery and technical program managers.
 - ANALYTICS: business and data analysts, BI and reporting (analysing data, not building data systems).
+- QUANT: quantitative researchers, quant and execution traders, strats, systematic trading, quant modeling.
+  Quant developers who build trading systems are SOFTWARE_ENGINEERING; model risk and model validation are
+  RISK_COMPLIANCE.
 - SALES: account executives, business development, partnerships, inside sales.
 - MARKETING: marketing, growth, content, communications, PR.
 - FINANCE: finance, accounting, tax, treasury, payroll.
