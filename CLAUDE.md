@@ -96,6 +96,19 @@ algorithm; MCP server with custom matching + LLM re-rank, top-K returned, rest c
 The user chose to write 10K+ jobs / 50+ sites / 95% there although the system has ~5,600 jobs / 33 companies / ~89%; this was flagged.
 
 
+### >>> 2026-10-11 ATLASSIAN ADAPTER (UNCOMMITTED): research re-checked live: robots.txt disallows only /company/careers/detail/* (job pages,
+never fetched); GET https://www.atlassian.com/endpoint/careers/listings = ONE JSON array of every posting worldwide (354, 0.5 MB, 0.3 s,
+weak ETag) with full text (overview, responsibilities, qualifications HTML), category, type (mostly null), locations (free text), applyUrl +
+portalJobPost.portalUrl (public iCIMS job page = our job link), updatedDate only (NO posting date -> null, site falls back to first seen).
+47 unique India jobs (51 rows, identical duplicates). Built: crawl/adapter/AtlassianAdapter (platform "atlassian", one request, keeps rows
+whose location names the country as a WHOLE word, never "Indiana", dedupe by id, description = overview + <h3>Responsibilities</h3> +
+<h3>Qualifications</h3>), AtlassianAdapterTest (2), V35__add_atlassian.sql, CONFIGURATION.md rows (country, url). 362 tests. Local crawl:
+OK, 47 kept, 0 unresolved, 0 without description, 2 s. Rules check BEFORE any edit: 0 unclassified, 4 guessed (Principal/Senior Principal
+Engineer: gap fill), 11 no years (postings state none), all 47 remote-capable (Atlassian is remote-first), ~43/47 right; NO rule change
+(one-offs: "Technical Program Manager (Analytics or AI/ML Platform)" -> DATA_ML (205 of 211 program managers are right), "Senior Principle
+Engineer - Analytics Platform" -> ANALYTICS, "9+ years ... (Preferred - 10+ years)" -> 10). LinkedIn id 22688 (user, f_C) in
+V36__add_atlassian_linkedin_id.sql (V35 had already run locally). NEXT: commit when asked. <<<
+
 ### >>> 2026-10-11 (UNCOMMITTED, after 9e3d022 was deployed): (1) CITIES: the public API shows and counts only the searched country's
 cities (PublicJobRepository LOCAL_CITIES from jobs.places; OTHER_COUNTRIES count; JobDetail.otherCountries; drawer "Gurugram · also listed
 in 7 other countries"); only 8 of 5,796 jobs list several countries, India-only jobs unchanged (checked); MCP matching untouched.
