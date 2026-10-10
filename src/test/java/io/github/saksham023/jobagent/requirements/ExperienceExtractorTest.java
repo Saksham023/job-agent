@@ -238,6 +238,17 @@ class ExperienceExtractorTest {
     }
 
     @Test
+    void theCompanyTalkingAboutItselfIsNotARequirement() {
+        String tower = "Tower Research Capital is a leading quantitative trading firm founded in 1998. Tower has built its "
+                + "business on a high-performance platform. We have a 25+ year track record of innovation.";
+        assertThat(extractor.extract("Experienced Quantitative Trader", tower).minYears()).isNull();
+        assertThat(extractor.extract("Engineer", "- We've over 30 years of experience serving banks.").minYears()).isNull();
+        // a real requirement next to company talk still counts
+        assertThat(extractor.extract("Engineer", "We have a great team. - 5+ years of experience in Java.").minYears()).isEqualTo(5);
+        assertThat(extractor.extract("Engineer", "- You have 4+ years of experience with Go.").minYears()).isEqualTo(4);
+    }
+
+    @Test
     void internsFromTitleOrEmploymentType() {
         assertThat(extractor.extract("Video Editor Intern", null).maxYears()).isEqualTo(1);
         assertThat(extractor.extract("Marketing Associate", null, "Intern").maxYears()).isEqualTo(1);

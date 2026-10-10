@@ -198,7 +198,7 @@ function JobContent({ job, message, onAddResume }: { job: JobDetail; message: st
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <Fact icon={<MapPin size={15} />} label="Location" value={job.cities.length ? job.cities.join(', ') : job.locations.join('; ') || '—'} />
+        <Fact icon={<MapPin size={15} />} label="Location" value={location(job)} />
         <Fact icon={<Briefcase size={15} />} label="Experience" value={years(job.minYears, job.maxYears, job.yearsStated)} />
         <Fact icon={<Building2 size={15} />} label="Family" value={[job.family, ...job.secondaryFamilies].filter(Boolean).map((f) => FAMILY_SHORT[f as string] ?? f).join(' · ') || '—'} />
         <Fact icon={job.remote ? <Globe2 size={15} /> : <Calendar size={15} />} label={job.remote ? 'Remote' : 'Posted'} value={job.remote ? `Yes · posted ${ago(job.postedAt)}` : ago(job.postedAt) || '—'} />
@@ -226,6 +226,13 @@ function JobContent({ job, message, onAddResume }: { job: JobDetail; message: st
       </div>
     </motion.div>
   )
+}
+
+/** Indian cities only; a posting listed in other countries too says so instead of naming all their cities. */
+function location(job: JobDetail): string {
+  const here = job.cities.length ? job.cities.join(', ') : job.otherCountries > 0 ? 'India' : job.locations.join('; ') || '—'
+  if (job.otherCountries === 0) return here
+  return `${here} · also listed in ${job.otherCountries} other ${job.otherCountries === 1 ? 'country' : 'countries'}`
 }
 
 function Fact({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {

@@ -70,6 +70,15 @@ public class ExperienceExtractor {
                     + "|\\bsince\\s+(?:19|20)\\d\\d|\\bhistory\\b|\\blegacy\\b|\\bour\\s+\\d|\\bfor over\\b");
 
     /**
+     * The company speaking about itself right before the number: "We have a 25+ year track record" (Tower), "we've over
+     * 30 years of experience serving clients". Checked on the text just before the mention, so a nearby "we have" in
+     * another sentence does not hide a real requirement.
+     */
+    private static final Pattern COMPANY_VOICE = Pattern.compile(
+            "(?i)\\b(?:we\\s+have|we've|we\\s+bring|(?:the\\s+)?(?:company|firm|team)\\s+has|our)\\s+"
+                    + "(?:a\\s+|an\\s+|over\\s+|more\\s+than\\s+|nearly\\s+|almost\\s+)?$");
+
+    /**
      * A level label right before a requirement: "- Senior Engineer: 3-5 years", "Staff Engineer - 8-12 years".
      * Several such lines with DIFFERENT labels form a level ladder (one posting for several levels, as Qualcomm
      * writes them): the job is open from the lowest level, so the ladder counts as its smallest requirement.
@@ -208,6 +217,9 @@ public class ExperienceExtractor {
         }
 
         String window = line.substring(Math.max(0, m.start() - 50), Math.min(line.length(), m.end() + 80));
+        if (COMPANY_VOICE.matcher(line.substring(Math.max(0, m.start() - 30), m.start())).find()) {
+            return null;                                                // "We have a 25+ year track record"
+        }
         if (NOISE_CUE.matcher(window).find()) {
             return null;
         }

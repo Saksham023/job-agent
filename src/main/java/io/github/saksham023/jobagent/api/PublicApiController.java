@@ -133,7 +133,7 @@ public class PublicApiController {
 
     @GetMapping("/jobs/{id}")
     public JobDetail job(@PathVariable long id) {
-        return repository.detail(id)
+        return repository.detail(id, country)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No open job " + id));
     }
 

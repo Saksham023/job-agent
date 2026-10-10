@@ -96,6 +96,13 @@ algorithm; MCP server with custom matching + LLM re-rank, top-K returned, rest c
 The user chose to write 10K+ jobs / 50+ sites / 95% there although the system has ~5,600 jobs / 33 companies / ~89%; this was flagged.
 
 
+### >>> 2026-10-11 (UNCOMMITTED, after 9e3d022 was deployed): (1) CITIES: the public API shows and counts only the searched country's
+cities (PublicJobRepository LOCAL_CITIES from jobs.places; OTHER_COUNTRIES count; JobDetail.otherCountries; drawer "Gurugram · also listed
+in 7 other countries"); only 8 of 5,796 jobs list several countries, India-only jobs unchanged (checked); MCP matching untouched.
+(2) YEARS: ExperienceExtractor COMPANY_VOICE: a year number right after "we have / we've / we bring / our / the company has" is the company
+talking ("We have a 25+ year track record", Tower). EXTRACTOR_VERSION 15. Diff: exactly the 7 Tower jobs (4 now show their real years 2+,
+3-5, 4+, 2-6; intern 0-1; 2 not stated). 360 tests, checked live on 8091 + browser. <<<
+
 ### >>> 2026-10-11 (UNCOMMITTED): V34__add_more_linkedin_company_ids.sql = LinkedIn ids round 2, verified by the user: the 12 V33 companies
 + Samsung (1753,33926293,106767085 = Electronics + R&D Institute pages), Broadcom 3072,2988 (Broadcom + VMware); dry run: all 46 companies
 now have ids. Cleanups: .gitignore *.tsbuildinfo; App.tsx shows a red bar with "Try again" when loading the profile fails. GitHub Actions

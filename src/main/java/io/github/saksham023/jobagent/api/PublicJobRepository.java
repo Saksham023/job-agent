@@ -41,13 +41,26 @@ public class PublicJobRepository {
                             Instant postedAt, Integer minYears, Integer maxYears,
                             boolean yearsStated, String yearsEvidence, String family, List<String> secondaryFamilies, String specialization,
                             List<String> requiredSkills, List<String> preferredSkills, List<String> primaryLanguages,
-                            String description, String linkedinCompanyId) {
+                            String description, String linkedinCompanyId, int otherCountries) {
     }
 
     private static final String OPEN = "j.closed_at IS NULL AND j.country_codes @> ARRAY[CAST(:country AS text)]";
 
+    /**
+     * The job's cities in the searched country only, in their stored order: a job posted for several countries (Tower:
+     * Amsterdam, Chicago, Gurugram, London...) shows and counts only its Indian cities.
+     */
+    static final String LOCAL_CITIES = "ARRAY(SELECT u.city FROM unnest(j.cities) WITH ORDINALITY AS u(city, n) "
+            + "WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(j.places) AS p "
+            + "WHERE p ->> 'city' = u.city AND p ->> 'countryCode' = CAST(:country AS text)) ORDER BY u.n)";
+
+    /** How many OTHER countries the job is also posted in (the drawer says "also listed in N other countries"). */
+    static final String OTHER_COUNTRIES = "(SELECT count(DISTINCT cc) FROM unnest(j.country_codes) AS cc "
+            + "WHERE cc <> CAST(:country AS text))";
+
     private static final String CARD_COLUMNS = """
-            j.id, j.title, c.slug, c.name, j.cities, j.remote, r.min_years, r.max_years,
+            j.id, j.title, c.slug, c.name, """ + LOCAL_CITIES + """
+             AS cities, j.remote, r.min_years, r.max_years,
             """ + JobSearch.STATED + """
              AS years_stated, r.family, r.specialization,
             (r.required_skills || r.preferred_skills)[1 : 6] AS skills, """ + JobSearch.POSTED + """
@@ -105,7 +118,7 @@ public class PublicJobRepository {
                         + " GROUP BY 1", families),
                 countMap("SELECT c.slug AS name, count(*) AS jobs" + FROM + " WHERE " + companies.sql() + " GROUP BY 1",
                         companies),
-                countMap("SELECT city AS name, count(DISTINCT j.id) AS jobs" + FROM + ", unnest(j.cities) AS city WHERE "
+                countMap("SELECT city AS name, count(DISTINCT j.id) AS jobs" + FROM + ", unnest(" + LOCAL_CITIES + ") AS city WHERE "
                         + locations.sql() + " GROUP BY 1", locations),
                 jdbc.sql("SELECT count(*)" + FROM + " WHERE " + locations.sql() + " AND j.remote")
                         .params(locations.params()).query(Integer.class).single(),
@@ -133,9 +146,12 @@ public class PublicJobRepository {
         return name;
     }
 
-    public Optional<JobDetail> detail(long id) {
+    public Optional<JobDetail> detail(long id, String country) {
         return jdbc.sql("""
-                        SELECT j.id, j.title, c.slug, c.name, j.url, j.department, j.locations, j.cities, j.remote,
+                        SELECT j.id, j.title, c.slug, c.name, j.url, j.department, j.locations,
+                               """ + LOCAL_CITIES + """
+                         AS cities, """ + OTHER_COUNTRIES + """
+                         AS other_countries, j.remote,
                                coalesce(r.employment_type, j.employment_type) AS employment_type,
                                """ + JobSearch.POSTED + """
                          AS posted_at,
@@ -149,6 +165,7 @@ public class PublicJobRepository {
                         WHERE j.id = :id AND j.closed_at IS NULL
                         """)
                 .param("id", id)
+                .param("country", country)
                 .query((rs, n) -> new JobDetail(rs.getLong("id"), rs.getString("title"), rs.getString("slug"),
                         rs.getString("name"), rs.getString("url"), rs.getString("department"), list(rs, "locations"),
                         list(rs, "cities"), rs.getBoolean("remote"), rs.getString("employment_type"),
@@ -156,7 +173,7 @@ public class PublicJobRepository {
                         rs.getBoolean("years_stated"), rs.getString("years_evidence"), rs.getString("family"),
                         list(rs, "secondary_families"), rs.getString("specialization"), list(rs, "required_skills"),
                         list(rs, "preferred_skills"), list(rs, "primary_languages"), rs.getString("description"),
-                        rs.getString("linkedin_company_id")))
+                        rs.getString("linkedin_company_id"), rs.getInt("other_countries")))
                 .optional();
     }
 
@@ -187,7 +204,7 @@ public class PublicJobRepository {
 
     /** The most common cities. */
     public List<Count> cities(String country, int limit) {
-        return counts("SELECT city AS name, count(*) AS jobs FROM jobs j, unnest(j.cities) AS city WHERE " + OPEN
+        return counts("SELECT city AS name, count(*) AS jobs FROM jobs j, unnest(" + LOCAL_CITIES + ") AS city WHERE " + OPEN
                 + " GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT " + limit, country);
     }
 

@@ -51,6 +51,8 @@ export type JobDetail = JobCard & {
   description: string | null
   /** LinkedIn's numeric company id when we know it (precise "who do I know there" search), else null */
   linkedinCompanyId: string | null
+  /** other countries the same posting is listed in (its cities there are not shown) */
+  otherCountries: number
 }
 
 /** Live counts for the filter lists under the current filters. */
