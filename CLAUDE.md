@@ -96,6 +96,23 @@ algorithm; MCP server with custom matching + LLM re-rank, top-K returned, rest c
 The user chose to write 10K+ jobs / 50+ sites / 95% there although the system has ~5,600 jobs / 33 companies / ~89%; this was flagged.
 
 
+### >>> 2026-10-11 ROUND 2 ADDED (UNCOMMITTED): user picked ALL 20 recommended, NOT the borderline ones. V37__seed_well_paying_companies.sql
+(slugs okta mongodb inmobi gitlab glean squarepoint elastic druva harness worldquant anthropic deliveroo swiggy grab tekion openai atlan
+morgan-stanley ebay crowdstrike). Local crawl: all 20 OK, 879 India jobs, all with descriptions, unresolved strings all non-India. Rules check
+before edits: 99 unclassified (bank desk/IB roles at Morgan Stanley 31, Swiggy warehouse/area managers 34, finance, tech writers: genuinely
+non-tech, gap fill), 50 guessed (real engineering titles: gap fill confirms), sample ~17/20 right; NO rule change (one-offs: Anthropic
+"Applied AI Architect" -> SWE, eBay "Master's with 2+ / 5+" -> 5). NOTE: Swiggy's SmartRecruiters board is almost all business roles (~6
+tech of 173); its tech hiring seems to be on its own site. LinkedIn checklist = round 3 (these 20). LinkedIn ids for 19 of them in V38__add_round3_linkedin_ids.sql (Squarepoint none: name search). Swiggy's other platform checked (swiggy.mynexthire.com, robots 404, POST /employer/careers/reqlist/get = 79 jobs): only 3 data-science roles, the same as on SmartRecruiters, rest business; user keeps Swiggy on SmartRecruiters, NO MyNextHire adapter. Committed with V37/V38. <<<
+### >>> 2026-10-11 PROBE ROUND 2 (no code yet; waiting for the user's pick): ~60 well-paying companies probed on our platforms (raw outputs
+were in the scratchpad). RECOMMENDED (SDE2 >= ~30 LPA by public salary data, my estimate): SmartRecruiters swiggy 173, grab 13; Greenhouse
+okta 114, mongodb 85, inmobi 37, gitlab 30, gleanwork 24, squarepointcapital 23, elastic 18, druva 13, harnessinc 8, worldquant 8, anthropic 4,
+deliveroo 4; Ashby tekion 76, openai 8, atlan 5; Workday ms.wd5/External (Morgan Stanley, Location_Country India 108; NO Eightfold CSRF
+needed), ebay.wd5/apply 88, crowdstrike.wd5/crowdstrikecareers 34. BORDERLINE (~25-30): cadence.wd1/External_Careers 198, target.wd5/
+targetcareers 59, micron.wd1/External ~324 (location entries, mostly hardware). BELOW THE BAR: hpe.wd5/Jobsathpe, analogdevices.wd1/External,
+lowes.wd5, thomsonreuters.wd5, statestreet.wd1, sigmoid (services). REJECTED: lever "linkedin" (a test board), confluent/cloudflare (1 India
+job), upstox. NOT REACHABLE: NetApp (Eightfold 403), Walmart, Intuit, Nutanix, Arista, Akamai, Uber, LinkedIn, Postman, BrowserStack,
+Chargebee, Flipkart, Myntra, Dream11, ShareChat, Juspay. Cisco found on Workday (cisco.wd5/Cisco_Careers ~356) but the user is not targeting it. <<<
+
 ### >>> 2026-10-11 ATLASSIAN ADAPTER (UNCOMMITTED): research re-checked live: robots.txt disallows only /company/careers/detail/* (job pages,
 never fetched); GET https://www.atlassian.com/endpoint/careers/listings = ONE JSON array of every posting worldwide (354, 0.5 MB, 0.3 s,
 weak ETag) with full text (overview, responsibilities, qualifications HTML), category, type (mostly null), locations (free text), applyUrl +
