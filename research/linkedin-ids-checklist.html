@@ -32,9 +32,9 @@
 <body>
 <main>
   <h1>LinkedIn company ids</h1>
-  <p class="lead">For the "Find your connections" button. With a verified id the button finds people <b>currently</b> at the company; without one it falls back to a name search.</p>
+  <p class="lead">Round 2: the 12 new companies, plus Samsung. For the "Find your connections" button. With a verified id the button finds people <b>currently</b> at the company; without one it falls back to a name search.</p>
   <ol class="how">
-    <li><b>Candidate given:</b> click <i>check</i>. If LinkedIn opens <b>that company's</b> page, tick "correct". If it opens another company, tick "wrong".</li>
+    <li><b>Candidate given</b> (none this round): click <i>check</i>. If LinkedIn opens <b>that company's</b> page, tick "correct". If it opens another company, tick "wrong".</li>
     <li><b>No candidate (or wrong):</b> click <i>find</i>, open the company's main page (most followers, right logo), click <i>See all N employees</i>, copy the <b>whole address</b> from the address bar and paste it into the box. The number is picked out for you (the green line shows it). A "See all jobs" address (<code>f_C=</code>) works too.</li>
     <li><b>Company hiring under several pages</b> (e.g. Samsung Electronics + Samsung R&amp;D Institute Bangalore / Noida): paste each page's address (or number) into the same box, separated by spaces. All of them are kept and the button searches them together.</li>
     <li>Press <b>Copy results</b> and paste the text into the chat.</li>
@@ -47,17 +47,14 @@
   <textarea id="out" readonly placeholder="Results appear here"></textarea>
 </main>
 <script>
-// Candidates are from memory and are NOT verified; unknown ones are left empty on purpose.
+// Round 2 (2026-10-11): the 12 companies added in V33, plus Samsung (skipped in round 1: hires under several pages).
+// The 33 companies of round 1 are already stored (V32). No candidate ids: find each one on LinkedIn.
 const COMPANIES = [
-  ['adobe','Adobe','1480'], ['amazon','Amazon','1586'], ['amex','American Express',''], ['autodesk','Autodesk',''],
-  ['blackrock','BlackRock',''], ['ciena','Ciena',''], ['cred','CRED',''], ['databricks','Databricks','3477522'],
-  ['expedia','Expedia',''], ['freshworks','Freshworks',''], ['goldman-sachs','Goldman Sachs','1382'], ['groww','Groww',''],
-  ['intel','Intel','1053'], ['jpmorgan','JPMorgan Chase','1068'], ['mastercard','Mastercard','3015'], ['meesho','Meesho',''],
-  ['microsoft','Microsoft','1035'], ['nvidia','NVIDIA','3608'], ['paypal','PayPal','1482'], ['paytm','Paytm',''],
-  ['phonepe','PhonePe',''], ['qualcomm','Qualcomm','2017'], ['razorpay','Razorpay',''], ['salesforce','Salesforce','3185'],
-  ['samsung','Samsung','1753'], ['sarvam-ai','Sarvam AI',''], ['servicenow','ServiceNow','29352'], ['sprinklr','Sprinklr',''],
-  ['texas-instruments','Texas Instruments',''], ['visa','Visa','2190'], ['wells-fargo','Wells Fargo','1235'],
-  ['workday','Workday','17719'], ['zeta','Zeta',''], ['zscaler','Zscaler','']
+  ['palo-alto-networks','Palo Alto Networks',''], ['pure-storage','Pure Storage',''], ['broadcom','Broadcom (and VMware)',''],
+  ['stripe','Stripe',''], ['rubrik','Rubrik',''], ['twilio','Twilio',''], ['graviton','Graviton Research Capital',''],
+  ['tower-research','Tower Research Capital',''], ['snowflake','Snowflake',''], ['cohesity','Cohesity',''],
+  ['coinbase','Coinbase',''], ['airbnb','Airbnb',''],
+  ['samsung','Samsung (Electronics + R&D Institute pages)','']
 ];
 /**
  * Every company id in what was typed or pasted: people-search addresses (currentCompany=["1586"], also URL-encoded),

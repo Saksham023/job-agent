@@ -53,6 +53,14 @@ export default function App({ user }: { user: User }) {
 
   return (
     <div className="aurora relative min-h-screen overflow-x-clip">
+      {profile.isError && (
+        <div role="alert" className="fixed inset-x-4 bottom-4 z-30 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-rose-500/30 bg-white px-4 py-3 text-sm text-rose-600 shadow-xl dark:bg-ink-900 dark:text-rose-400">
+          <span className="flex-1">Couldn&apos;t load your profile: {(profile.error as Error).message}</span>
+          <button onClick={() => profile.refetch()} className="shrink-0 font-semibold underline-offset-2 hover:underline">
+            Try again
+          </button>
+        </div>
+      )}
       <Header user={user} onProfile={() => setProfileOpen(true)} onResume={() => setResumeOpen(true)} lastCrawlAt={meta.data?.totals.lastCrawlAt} onHome={() => { reset(); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
 
       <Hero

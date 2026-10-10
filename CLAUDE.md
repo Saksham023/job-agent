@@ -96,7 +96,12 @@ algorithm; MCP server with custom matching + LLM re-rank, top-K returned, rest c
 The user chose to write 10K+ jobs / 50+ sites / 95% there although the system has ~5,600 jobs / 33 companies / ~89%; this was flagged.
 
 
-### >>> MORE COMPANIES, round 1 (2026-10-10, UNCOMMITTED; local crawl done, NOT deployed) <<<
+### >>> 2026-10-11 (UNCOMMITTED): V34__add_more_linkedin_company_ids.sql = LinkedIn ids round 2, verified by the user: the 12 V33 companies
++ Samsung (1753,33926293,106767085 = Electronics + R&D Institute pages), Broadcom 3072,2988 (Broadcom + VMware); dry run: all 46 companies
+now have ids. Cleanups: .gitignore *.tsbuildinfo; App.tsx shows a red bar with "Try again" when loading the profile fails. GitHub Actions
+alerts: user turned on GitHub's own email notifications (Option 1); the Telegram step (Option 2) is NOT wanted. <<<
+
+### >>> MORE COMPANIES, round 1 (2026-10-10; COMMITTED 371905a with the QUANT family, user pushes) <<<
 Probe (about 50 polite requests): 12 companies on platforms we already crawl -> V33__seed_more_companies.sql: Greenhouse pure-storage,
 stripe, rubrik, twilio, graviton (gravitonresearchcapital), tower-research (towerresearchcapital), coinbase, airbnb; Ashby snowflake;
 Workday palo-alto-networks (paloaltonetworks.wd5 / panwexternalcareers), broadcom (broadcom.wd1 / External_Career, VMware incl.), cohesity
