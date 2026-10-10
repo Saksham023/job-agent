@@ -41,7 +41,7 @@ public class PublicJobRepository {
                             Instant postedAt, Integer minYears, Integer maxYears,
                             boolean yearsStated, String yearsEvidence, String family, List<String> secondaryFamilies, String specialization,
                             List<String> requiredSkills, List<String> preferredSkills, List<String> primaryLanguages,
-                            String description) {
+                            String description, String linkedinCompanyId) {
     }
 
     private static final String OPEN = "j.closed_at IS NULL AND j.country_codes @> ARRAY[CAST(:country AS text)]";
@@ -142,7 +142,8 @@ public class PublicJobRepository {
                                r.min_years, r.max_years,
                                """ + JobSearch.STATED + """
                          AS years_stated, r.years_evidence, r.family, r.secondary_families, r.specialization,
-                               r.required_skills, r.preferred_skills, r.primary_languages, j.description
+                               r.required_skills, r.preferred_skills, r.primary_languages, j.description,
+                               c.config ->> 'linkedinCompanyId' AS linkedin_company_id
                         FROM jobs j JOIN companies c ON c.id = j.company_id
                         LEFT JOIN job_requirements r ON r.job_id = j.id
                         WHERE j.id = :id AND j.closed_at IS NULL
@@ -154,7 +155,8 @@ public class PublicJobRepository {
                         instant(rs, "posted_at"), integer(rs, "min_years"), integer(rs, "max_years"),
                         rs.getBoolean("years_stated"), rs.getString("years_evidence"), rs.getString("family"),
                         list(rs, "secondary_families"), rs.getString("specialization"), list(rs, "required_skills"),
-                        list(rs, "preferred_skills"), list(rs, "primary_languages"), rs.getString("description")))
+                        list(rs, "preferred_skills"), list(rs, "primary_languages"), rs.getString("description"),
+                        rs.getString("linkedin_company_id")))
                 .optional();
     }
 

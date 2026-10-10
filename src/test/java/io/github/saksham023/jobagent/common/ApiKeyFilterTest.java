@@ -29,14 +29,32 @@ class ApiKeyFilterTest {
         return response;
     }
 
+    @org.junit.jupiter.api.AfterEach
+    void clearSecurityContext() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+
     @Test
-    void adminAndMcpNeedTheKey() throws Exception {
+    void mcpNeedsTheKey() throws Exception {
         ApiKeyFilter filter = new ApiKeyFilter(KEY);
-        assertThat(call(filter, "/admin/crawl", null, null).getStatus()).isEqualTo(401);
         assertThat(call(filter, "/mcp", null, null).getStatus()).isEqualTo(401);
-        assertThat(call(filter, "/admin/crawl", "X-API-Key", "wrong").getStatus()).isEqualTo(401);
-        assertThat(call(filter, "/admin/crawl", "Authorization", "Bearer wrong").getStatus()).isEqualTo(401);
-        assertThat(call(filter, "/admin/crawl", "Authorization", "Basic " + KEY).getStatus()).isEqualTo(401);
+        assertThat(call(filter, "/mcp", "X-API-Key", "wrong").getStatus()).isEqualTo(401);
+        assertThat(call(filter, "/mcp", "Authorization", "Bearer wrong").getStatus()).isEqualTo(401);
+        assertThat(call(filter, "/mcp", "Authorization", "Basic " + KEY).getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void withoutTheKeyAdminIsLeftToTheSecurityRules() throws Exception {
+        // the filter passes it on unauthenticated; SecurityConfig then demands a signed-in admin
+        assertThat(call(new ApiKeyFilter(KEY), "/admin/crawl", null, null).getStatus()).isEqualTo(200);
+        assertThat(org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
+    void theKeySignsTheRequestInAsAnAdmin() throws Exception {
+        call(new ApiKeyFilter(KEY), "/admin/crawl", "X-API-Key", KEY);
+        assertThat(org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getAuthorities())
+                .extracting(Object::toString).containsExactly("ROLE_ADMIN");
     }
 
     @Test
@@ -73,9 +91,9 @@ class ApiKeyFilterTest {
 
     @Test
     void lookAlikePathsAreNotMistakenForProtectedOnes() {
-        assertThat(ApiKeyFilter.protectedPath("/admin")).isTrue();
-        assertThat(ApiKeyFilter.protectedPath("/admin/search/1/more")).isTrue();
+        assertThat(ApiKeyFilter.protectedPath("/mcp")).isTrue();
         assertThat(ApiKeyFilter.protectedPath("/mcp/")).isTrue();
+        assertThat(ApiKeyFilter.protectedPath("/admin")).isFalse();           // the security rules guard /admin now
         assertThat(ApiKeyFilter.protectedPath("/administrator")).isFalse();
         assertThat(ApiKeyFilter.protectedPath("/mcpx")).isFalse();
     }

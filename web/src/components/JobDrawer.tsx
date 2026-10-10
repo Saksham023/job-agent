@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUpRight, Briefcase, Building2, Calendar, Globe2, MapPin, Quote, X } from 'lucide-react'
-import { useEffect, type ReactNode } from 'react'
-import { fetchJob, type JobDetail } from '../lib/api'
+import { ArrowUpRight, Briefcase, Building2, Calendar, Check, Copy, Globe2, MapPin, MessageSquareText, Quote, Users, X } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { fetchJob, fetchProfile, fetchReferralTemplate, type JobDetail } from '../lib/api'
+import { connectionsUrl } from '../lib/linkedin'
+import { fillReferral } from '../lib/referral'
 import { ago, FAMILY_SHORT, years } from '../lib/format'
 import { Avatar } from './Avatar'
 
 /** The job opened from a card: slides in from the right, closes with Esc, the backdrop or the X. */
-export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: () => void }) {
+export function JobDrawer({ jobId, onClose, onAddResume }: { jobId: number | null; onClose: () => void; onAddResume: () => void }) {
   useEffect(() => {
     if (jobId == null) return
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -41,7 +43,7 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 260 }}
           >
-            <DrawerBody jobId={jobId} onClose={onClose} />
+            <DrawerBody jobId={jobId} onClose={onClose} onAddResume={onAddResume} />
           </motion.aside>
         </>
       )}
@@ -49,8 +51,9 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
   )
 }
 
-function DrawerBody({ jobId, onClose }: { jobId: number; onClose: () => void }) {
+function DrawerBody({ jobId, onClose, onAddResume }: { jobId: number; onClose: () => void; onAddResume: () => void }) {
   const { data: job, isError, error } = useQuery({ queryKey: ['job', jobId], queryFn: () => fetchJob(jobId) })
+  const message = useReferralMessage(job)
   return (
     <>
       <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-white/10">
@@ -62,7 +65,7 @@ function DrawerBody({ jobId, onClose }: { jobId: number; onClose: () => void }) 
       <div className="scrollbar-thin flex-1 overflow-y-auto">
         {isError && <p className="p-6 text-sm text-rose-500">{(error as Error).message}</p>}
         {!job && !isError && <DrawerSkeleton />}
-        {job && <JobContent job={job} />}
+        {job && <JobContent job={job} message={message} onAddResume={onAddResume} />}
       </div>
       {job && (
         <div className="border-t border-slate-200 p-4 dark:border-white/10">
@@ -74,13 +77,116 @@ function DrawerBody({ jobId, onClose }: { jobId: number; onClose: () => void }) 
           >
             Apply on {job.company}&apos;s site <ArrowUpRight size={16} />
           </a>
+          <div className="mt-2.5 flex items-center gap-2">
+            <a
+              href={connectionsUrl(job.company, job.linkedinCompanyId)}
+              target="_blank"
+              rel="noreferrer"
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-sky-400 hover:text-sky-600 dark:border-white/10 dark:text-slate-200 dark:hover:border-sky-400 dark:hover:text-sky-300"
+              title="Opens LinkedIn's search of your 1st-degree connections at this company"
+            >
+              <Users size={16} /> Find your connections at {job.company}
+            </a>
+            <a
+              href={connectionsUrl(job.company, job.linkedinCompanyId, 'S')}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-500 transition hover:border-sky-400 hover:text-sky-600 dark:border-white/10 dark:text-slate-400 dark:hover:text-sky-300"
+              title="People your connections know at this company"
+            >
+              2nd°
+            </a>
+            {message && <CopyButton text={message} compact />}
+          </div>
         </div>
       )}
     </>
   )
 }
 
-function JobContent({ job }: { job: JobDetail }) {
+/** The referral message for this job (the user's template filled from their profile); null = no profile, undefined = loading. */
+function useReferralMessage(job: JobDetail | undefined): string | null | undefined {
+  const profile = useQuery({ queryKey: ['profile'], queryFn: fetchProfile, staleTime: Infinity })
+  const template = useQuery({ queryKey: ['referral-template'], queryFn: fetchReferralTemplate, staleTime: Infinity })
+  if (profile.data === null) return null
+  if (!job || !profile.data || !template.data) return undefined
+  return fillReferral(template.data.text, profile.data, { title: job.title, company: job.company, url: job.url })
+}
+
+/** The Clipboard API needs a secure page (https or localhost); plain http (e.g. jobserver.local:8080) gets the old way. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    const area = document.createElement('textarea')
+    area.value = text
+    area.setAttribute('readonly', '')
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    try {
+      return document.execCommand('copy')
+    } catch {
+      return false
+    } finally {
+      area.remove()
+    }
+  }
+}
+
+function CopyButton({ text, compact }: { text: string; compact?: boolean }) {
+  const [copied, setCopied] = useState<boolean | null>(null)
+  const copy = async () => {
+    const ok = await copyText(text)
+    setCopied(ok)
+    setTimeout(() => setCopied(null), 2000)
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Copy the referral message"
+      className={
+        compact
+          ? 'flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-600 transition hover:border-violet-400 hover:text-violet-600 dark:border-white/10 dark:text-slate-300 dark:hover:text-violet-300'
+          : 'flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-500'
+      }
+    >
+      {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : copied === false ? 'Select and copy' : compact ? 'Message' : 'Copy'}
+    </button>
+  )
+}
+
+function ReferralCard({ message, onAddResume }: { message: string | null | undefined; onAddResume: () => void }) {
+  if (message === undefined) return null
+  return (
+    <div className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+          <MessageSquareText size={14} className="text-violet-500" /> Referral message
+        </h3>
+        {message && <CopyButton text={message} />}
+      </div>
+      {message ? (
+        <>
+          <p className="mt-3 text-sm leading-relaxed whitespace-pre-line [overflow-wrap:anywhere] text-slate-700 dark:text-slate-200">{message}</p>
+          <p className="mt-2 text-xs text-slate-400">Send it to a connection at the company. Change the wording in My profile.</p>
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          <button onClick={onAddResume} className="font-semibold text-violet-600 hover:underline dark:text-violet-400">
+            Add your resume
+          </button>{' '}
+          to get a ready message to ask for a referral.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function JobContent({ job, message, onAddResume }: { job: JobDetail; message: string | null | undefined; onAddResume: () => void }) {
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-7 px-6 py-6">
       <div className="flex items-start gap-4">
@@ -97,6 +203,8 @@ function JobContent({ job }: { job: JobDetail }) {
         <Fact icon={<Building2 size={15} />} label="Family" value={[job.family, ...job.secondaryFamilies].filter(Boolean).map((f) => FAMILY_SHORT[f as string] ?? f).join(' · ') || '—'} />
         <Fact icon={job.remote ? <Globe2 size={15} /> : <Calendar size={15} />} label={job.remote ? 'Remote' : 'Posted'} value={job.remote ? `Yes · posted ${ago(job.postedAt)}` : ago(job.postedAt) || '—'} />
       </div>
+
+      <ReferralCard message={message} onAddResume={onAddResume} />
 
       {job.yearsEvidence && job.yearsStated && !job.yearsEvidence.startsWith('title:') && (
         <div className="flex gap-3 rounded-2xl border border-violet-500/20 bg-violet-500/[0.06] p-4 text-sm text-slate-700 dark:text-slate-300">

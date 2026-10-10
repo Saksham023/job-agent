@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LinkedIn company ids</title>
+<style>
+  :root { --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0; --ok:#059669; --bad:#e11d48; --accent:#7c3aed; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0b0b12; --card:#14141f; --text:#e2e8f0; --muted:#94a3b8; --line:#26263a; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px 60px; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, -apple-system, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  p.lead { color: var(--muted); margin: 0 0 18px; }
+  ol.how { color: var(--muted); padding-left: 20px; margin: 0 0 20px; }
+  table { width:100%; border-collapse: collapse; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align: middle; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  td.check a { color: var(--accent); }
+  input[type=text] { width: 100%; min-width: 160px; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--text); font: inherit; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .ids { font: 12px ui-monospace, monospace; color: var(--ok); margin-top: 4px; min-height: 1em; }
+  .row-ok td { background: color-mix(in srgb, var(--ok) 8%, transparent); }
+  .row-bad td { background: color-mix(in srgb, var(--bad) 8%, transparent); }
+  label { white-space: nowrap; margin-right: 10px; font-size: 13px; }
+  .bar { position: sticky; bottom: 0; margin-top: 18px; display:flex; gap:12px; align-items:center; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:12px; }
+  button { padding:9px 16px; border:0; border-radius:10px; background:var(--accent); color:#fff; font: 600 14px system-ui; cursor:pointer; }
+  textarea { width:100%; margin-top:12px; height:120px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--text); font: 13px ui-monospace, monospace; padding:10px; }
+  @media (max-width: 640px) { th:nth-child(3), td:nth-child(3) { display:none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>LinkedIn company ids</h1>
+  <p class="lead">For the "Find your connections" button. With a verified id the button finds people <b>currently</b> at the company; without one it falls back to a name search.</p>
+  <ol class="how">
+    <li><b>Candidate given:</b> click <i>check</i>. If LinkedIn opens <b>that company's</b> page, tick "correct". If it opens another company, tick "wrong".</li>
+    <li><b>No candidate (or wrong):</b> click <i>find</i>, open the company's main page (most followers, right logo), click <i>See all N employees</i>, copy the <b>whole address</b> from the address bar and paste it into the box. The number is picked out for you (the green line shows it). A "See all jobs" address (<code>f_C=</code>) works too.</li>
+    <li><b>Company hiring under several pages</b> (e.g. Samsung Electronics + Samsung R&amp;D Institute Bangalore / Noida): paste each page's address (or number) into the same box, separated by spaces. All of them are kept and the button searches them together.</li>
+    <li>Press <b>Copy results</b> and paste the text into the chat.</li>
+  </ol>
+  <table>
+    <thead><tr><th>Company</th><th>Id</th><th>Check</th><th>Result</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="bar"><button id="copy">Copy results</button><span class="muted" id="status">Only verified ids are copied.</span></div>
+  <textarea id="out" readonly placeholder="Results appear here"></textarea>
+</main>
+<script>
+// Candidates are from memory and are NOT verified; unknown ones are left empty on purpose.
+const COMPANIES = [
+  ['adobe','Adobe','1480'], ['amazon','Amazon','1586'], ['amex','American Express',''], ['autodesk','Autodesk',''],
+  ['blackrock','BlackRock',''], ['ciena','Ciena',''], ['cred','CRED',''], ['databricks','Databricks','3477522'],
+  ['expedia','Expedia',''], ['freshworks','Freshworks',''], ['goldman-sachs','Goldman Sachs','1382'], ['groww','Groww',''],
+  ['intel','Intel','1053'], ['jpmorgan','JPMorgan Chase','1068'], ['mastercard','Mastercard','3015'], ['meesho','Meesho',''],
+  ['microsoft','Microsoft','1035'], ['nvidia','NVIDIA','3608'], ['paypal','PayPal','1482'], ['paytm','Paytm',''],
+  ['phonepe','PhonePe',''], ['qualcomm','Qualcomm','2017'], ['razorpay','Razorpay',''], ['salesforce','Salesforce','3185'],
+  ['samsung','Samsung','1753'], ['sarvam-ai','Sarvam AI',''], ['servicenow','ServiceNow','29352'], ['sprinklr','Sprinklr',''],
+  ['texas-instruments','Texas Instruments',''], ['visa','Visa','2190'], ['wells-fargo','Wells Fargo','1235'],
+  ['workday','Workday','17719'], ['zeta','Zeta',''], ['zscaler','Zscaler','']
+];
+/**
+ * Every company id in what was typed or pasted: people-search addresses (currentCompany=["1586"], also URL-encoded),
+ * jobs addresses (f_C=1586), company addresses (/company/1586/) and plain numbers; several separated by spaces.
+ */
+function idsOf(text) {
+  const ids = [];
+  for (const part of text.trim().split(/\s+/).filter(Boolean)) {
+    let t = part;
+    try { t = decodeURIComponent(part); } catch (e) { /* keep as is */ }
+    let found = [];
+    const current = t.match(/currentCompany=\[([^\]]*)\]/);
+    const jobs = t.match(/[?&]f_C=([\d,]+)/);
+    const page = t.match(/\/company\/(\d+)/);
+    if (current) found = current[1].match(/\d+/g) || [];
+    else if (jobs) found = jobs[1].split(',');
+    else if (page) found = [page[1]];
+    else found = t.match(/^\d+$/) ? [t] : (t.match(/^[\d,]+$/) ? t.split(',') : []);
+    for (const id of found) if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+const rows = document.getElementById('rows');
+for (const [slug, name, id] of COMPANIES) {
+  const tr = document.createElement('tr');
+  tr.dataset.slug = slug;
+  tr.innerHTML = `
+    <td><b>${name}</b><div class="muted">${slug}</div></td>
+    <td><input type="text" value="${id}" placeholder="paste the address or the number" aria-label="${name} id"><div class="ids"></div></td>
+    <td class="check"></td>
+    <td><label><input type="radio" name="r-${slug}" value="ok"> correct</label><label><input type="radio" name="r-${slug}" value="bad"> wrong</label></td>`;
+  rows.appendChild(tr);
+  const input = tr.querySelector('input[type=text]');
+  const check = tr.querySelector('.check');
+  const shown = tr.querySelector('.ids');
+  const draw = () => {
+    const ids = idsOf(input.value);
+    shown.textContent = ids.length ? '→ ' + ids.join(', ') : '';
+    check.innerHTML = ids.length
+      ? ids.map((v, i) => `<a href="https://www.linkedin.com/company/${v}/" target="_blank" rel="noreferrer">check${ids.length > 1 ? ' ' + (i + 1) : ''}</a>`).join(' ')
+        + ` · <a href="https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(name)}" target="_blank" rel="noreferrer">find</a>`
+      : `<a href="https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(name)}" target="_blank" rel="noreferrer">find</a>`;
+  };
+  input.addEventListener('input', () => {
+    draw();
+    if (/linkedin\.com/.test(input.value) && idsOf(input.value).length) {       // pasted from the company's own page: correct
+      tr.querySelector('input[value=ok]').checked = true;
+      tr.className = 'row-ok';
+    }
+  });
+  tr.querySelectorAll('input[type=radio]').forEach(r => r.addEventListener('change', () => {
+    tr.className = r.value === 'ok' ? 'row-ok' : 'row-bad';
+  }));
+  draw();
+}
+document.getElementById('copy').addEventListener('click', async () => {
+  const lines = [];
+  for (const tr of rows.children) {
+    const ids = idsOf(tr.querySelector('input[type=text]').value);
+    const ok = tr.querySelector('input[value=ok]').checked;
+    if (ok && ids.length) lines.push(`${tr.dataset.slug}=${ids.join(',')}`);
+  }
+  const text = lines.length ? 'LinkedIn ids (verified):\n' + lines.join('\n') : 'No verified ids yet';
+  document.getElementById('out').value = text;
+  try { await navigator.clipboard.writeText(text); document.getElementById('status').textContent = `Copied ${lines.length} ids.`; }
+  catch { document.getElementById('status').textContent = 'Copy the text below by hand.'; }
+});
+</script>
+</body>
+</html>

@@ -1,8 +1,16 @@
 import { Radar } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
+import { UserMenu } from './UserMenu'
+import type { User } from '../lib/auth'
 import { ago } from '../lib/format'
 
-export function Header({ lastCrawlAt, onHome }: { lastCrawlAt: string | null | undefined; onHome: () => void }) {
+export function Header({ lastCrawlAt, onHome, user, onProfile, onResume }: {
+  lastCrawlAt: string | null | undefined
+  onHome: () => void
+  user: User
+  onProfile: () => void
+  onResume: () => void
+}) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/60 bg-slate-50/70 backdrop-blur-xl dark:border-white/5 dark:bg-ink-950/60">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
@@ -25,6 +33,7 @@ export function Header({ lastCrawlAt, onHome }: { lastCrawlAt: string | null | u
             </span>
           )}
           <ThemeToggle />
+          <UserMenu user={user} onProfile={onProfile} onResume={onResume} />
         </div>
       </div>
     </header>

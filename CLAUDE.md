@@ -9,6 +9,89 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
+### >>> HANDOFF 2026-10-10 (written right before a compaction; THIS block is the current state, read it first) <<<
+WORK IN PROGRESS: accounts + referrals, milestones L0-L6 (table "MILESTONES: ACCOUNTS + REFERRALS" below). L1, L2, L3, L4 are BUILT and
+tested locally but ALL UNCOMMITTED (user commits only when they ask; never mention Claude / no Co-Authored-By line in commit messages,
+user's explicit rule). Last commits on main: 1d28683 (MCP shutdown fix), 7d7ec24 (Sonnet for gap fill + skill learning). Nothing of
+L1-L4 is deployed; the Air still runs 1d28683. 351 unit tests green (`./mvnw -q -o test -Dtest='*Test'`, JDK 25 path in "How we work").
+UNCOMMITTED FILES: CLAUDE.md, CONFIGURATION.md, pom.xml (spring-boot-starter-security, -oauth2-resource-server, -security-test, pdfbox
+3.0.7), api/PublicJobRepository (JobDetail.linkedinCompanyId), common/ApiKeyFilter (now inside the Spring Security chain: key = ROLE_ADMIN,
+/mcp still needs the key), common/RateLimitFilter (sign-in/sign-up bucket 10/min burst 5), application.yaml (jobagent.auth.*,
+jobagent.account.*, spring.servlet.multipart 5MB), tests ApiKeyFilterTest + RateLimitFilterTest; NEW: package auth (AuthProperties,
+UserAccount, UserRepository, RefreshTokenRepository, TokenService, AuthService, AuthController, AuthException, SecurityConfig) + tests
+AuthServiceTest/TokenServiceTest; package account (AccountProperties, AccountException, UserProfile, UserProfileRepository, DriveLink,
+DriveFetcher, PdfText, ProfileChecks, ResumeReader, AccountService, AccountController) + tests DriveLinkTest/ProfileChecksTest/
+PdfAndFetchTest; V28__create_users_and_refresh_tokens.sql, V29__create_user_profiles.sql; web: Root.tsx, lib/auth.ts, lib/linkedin.ts,
+components AuthScreen, UserMenu, ResumeDialog, ProfilePanel; edited App.tsx, main.tsx, Header, Hero ("no sign-up" removed), JobDrawer
+(LinkedIn buttons), FilterPanel ("Match my resume"), lib/api.ts (authFetch, profile calls); research/linkedin-ids-checklist.html.
+BUG FIXED 2026-10-10: after restarting IntelliJ the dialog appeared on sign-in and the user's Drive link was read correctly.
+L5 BUILT 2026-10-10 (UNCOMMITTED, 355 tests, live-checked on 8091 + browser): user chose a FIXED TEMPLATE filled per job (option B), NO AI writes
+the message. Default ("Warm and brief", no job id: user dropped it, ids are not consistent across platforms): "Hi, hope you're doing well! I'm
+applying for the {{jobTitle}} role at {{company}}: {{jobLink}}. I'm {{headline}}[ with {{experience}}]. If you're comfortable, a referral would mean
+a lot.[ Resume: {{resumeLink}}]". [ ] = optional part, dropped when a placeholder inside has no value. Placeholders: company, jobTitle, jobLink
+(= company's own careers page, jobs.url), resumeLink (drive link), headline (with a/an by sound; fallback from the first family), experience
+("around 2 years of experience in Java, Spring Boot and Kafka": years rounded to nearest whole, <0.5 = "less than a year"; main language +
+top 2 non-language skills), years, skills. Files: V30__referral_message.sql (user_profiles.headline, referral_templates(user_id, text,
+updated_at) = only users who rewrote it); account: headline through UserProfile/Facts/Repository/Service/Controller, ProfileChecks.headline
+(strips a/an + end punctuation, max 60), ResumeReader prompt (headline from WORK experience, languages + skills ordered by use in jobs; live:
+user's resume -> "backend engineer", Java before Python, Spring Boot + Kafka first); package referral (ReferralTemplate DEFAULT/PLACEHOLDERS/
+check, ReferralRepository, ReferralController GET/PUT/DELETE /api/v1/me/referral-template; bad text -> 400 via BadRequestAdvice); tests
+ReferralTemplateTest, ProfileChecksTest. Web: lib/referral.ts (fillReferral), api.ts (headline, template calls), JobDrawer (Referral message
+card + Copy, compact "Message" button next to connections, clipboard fallback for plain http), ProfilePanel (Headline field, Referral message
+preview with an example job + "Change wording" editor with placeholder chips, live preview, Reset to default), ResumeDialog shows the headline.
+L5b (2026-10-10, UNCOMMITTED, 356 tests): default template now has LINE BREAKS (greeting / role + link / pitch / resume); new profile field
+"What you build" (V31 user_profiles.build; Sonnet phrase starting with an -ing verb, ProfileChecks.build, editable; {{experience}} =
+"<years> of experience <build>", falls back to skills; new placeholder {{build}}); headline prompt: broader "software engineer" when work
+spans areas. TEST RUN on 6 resumes (user's own + 5 fictional: Jake Ryan LaTeX template, RenderCV John Doe, JSON Resume Richard Hendriks,
+2 search-tool samples Priya Nair backend / Riya Sharma fresher) through the real upload on port 8091 (V31 applied to the local db, test users
+deleted). First run found: user's headline "backend engineer"; "what you build" too long (14-16 words, 3-4 techs); Jake 8.1 years from student
+jobs marked "Present". FIXED (user OK): prompt = "software engineer" for generalists incl. backend (specialist titles only for clear
+specialties), build AT MOST 12 words / one kind of system / at most 2 technologies (check: <= 15 words, -ing start), years count only
+jobs AFTER studies (no internships, part-time, campus, RA/TA, overlapping the degree). Re-run: user -> "software engineer ... around 2
+years of experience building event-driven backend services in Java and Spring Boot"; Priya software engineer 6.3 y payments
+microservices; John Doe ML engineer 3.3 y; Riya frontend developer 0 y; Jake 0 y (fixed); Richard 0.5 y. ~$0.01 and 4-6 s per read. The user's own profile was read before L5: re-read the resume once (or type a headline) to get the headline + ordering. NEXT: user tests
+L5 (restart IntelliJ for V30), L3 ids DONE (V32). NEXT: L6 deploy (JWT secret on the Air first, then commit when asked, user pushes, sign up + admin by SQL, consider JOBAGENT_AUTH_SIGNUP_ENABLED=false until the Anthropic API key). Old note: OPEN BUG (user, 2026-10-10; CAUSE FOUND right after this note: the IntelliJ backend (pid 51790) was started 15:15:49, BEFORE the L4 code was written at 15:33, so it has no /api/v1/me/profile; fix = the user restarts IntelliJ, then re-check; if the dialog still does not show, continue with the checks below): on localhost (Vite 5173 + the user's IntelliJ backend on 8080) the user signed out and in
+and did NOT see the resume dialog. Most likely cause to check first: the IntelliJ backend still runs pre-L4 code (no /api/v1/me/profile ->
+404 -> fetchProfile throws -> profile.isSuccess never true -> App never opens the dialog), i.e. it needs a restart (then V29 runs). Also
+check: the user's account may already have a user_profiles row (then no dialog by design); App.tsx `offered` ref (App unmounts on sign-out,
+so it should reset); fetchProfile error handling (an error should maybe still offer the dialog or show an error). Verify with
+`curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer <token>" localhost:8080/api/v1/me/profile` and the browser network tab.
+LOCAL SETUP: Docker Desktop + container rag-postgres (localhost:5433, db `jobagent` = the ONLY local db; jobagent_dev was created and then
+DELETED at the user's request: "not needed"; do not create extra databases). The user's IntelliJ app on 8080 uses `jobagent`; my test runs
+used port 8091 (`java -jar target/jobagent-0.0.1-SNAPSHOT.jar --server.port=8091 --jobagent.crawl.schedule.enabled=false
+--jobagent.skills.learning.enabled=false`, env JOBAGENT_WEB_DIR=$PWD/web/dist; when sourcing ~/.zshrc for CLAUDE_CODE_OAUTH_TOKEN, run java
+by the FULL JDK 25 path, ~/.zshrc sets JAVA_HOME to Java 17). Frontend dev: `npm --prefix web run dev` -> http://localhost:5173 (proxies
+/api to 8080). Make an admin: `docker exec rag-postgres psql -U postgres -d jobagent -c "UPDATE users SET role='ADMIN' WHERE email='...'"`
+(a reload is enough: refresh reads the role from the DB). Test accounts used @example.test emails and were deleted; the user's own account
+remains in the local db.
+USER'S WORKING RULES (this session): (1) BEFORE each milestone/change set, explain what will change (files + why) and WAIT for OK (memory
+explain-before-changing.md); (2) never commit unless asked in that message, no Claude attribution in commits; (3) short answers, no
+em-dashes; (4) ask before downloads (security starters + PDFBox were approved); (5) MCP: NO CHANGES (learning project, kept as is; MCP
+personal tokens / OAuth 2.1 = backlog); (6) focus = backend API + web UI; (7) never fetch LinkedIn (robots/ToS) and never use the user's
+logged-in browser for LinkedIn.
+NEXT STEPS: (a) fix the open bug above; (b) L5 referral message: EXPLAIN PLAN FIRST. Agreed so far: ONE template per user generated by
+Sonnet from the (possibly edited) profile, VERY short (2-3 sentences, ~300 chars max, code rejects longer and retries), starts "Hi,"
+(no recipient name), placeholders {{company}} {{jobTitle}} {{jobLink}} {{resumeLink}} filled in the browser per job, copy button in
+the job drawer next to "Find your connections", regenerate when the profile changes or on request (daily cap), user may edit it, never
+overwritten unless they regenerate; no resume link when the profile has none; table e.g. referral_templates(user_id PK...). (c) L3 ids:
+user fills research/linkedin-ids-checklist.html (17 unverified candidates from memory + 17 unknown), sends "slug=id" lines, then a
+migration sets companies.config.linkedinCompanyId (number after V29). (d) L6 deploy: on the Air add JOBAGENT_AUTH_JWT_SECRET
+(`openssl rand -base64 48`) to ~/jobagent/env BEFORE pushing L1+L2 (UI without login breaks if only the backend ships); after deploy
+sign up and make the user ADMIN by SQL; the Air's MCP connection keeps the shared key. Then backlog: admin dashboards, more companies
+(Atlassian first; research/new-companies_2026-10-07.md), README refresh.
+DESIGN DECISIONS OF THIS SESSION (details further down in section 0): posting time = derived JobSearch.POSTED; scheduler = per-server
+fixed-delay rounds (PT30M), Microsoft/Qualcomm in the normal flow, throttle patience 30 s steps x 8; gap fill + skill learning on SONNET,
+judge stays on OPUS; McpShutdown closes MCP sessions before Tomcat's graceful shutdown (deploy no longer hangs 80 s); login = BCrypt 12,
+JWT 15 min in memory, refresh 7 d HttpOnly SameSite=Strict cookie /api/v1/auth rotated + reuse detection (10 s race window), everyone must
+sign in (everything except /api/v1/auth/*, UI files, /actuator/health), /admin = ADMIN or shared key, signup-enabled switch; role changes
+take effect on the next refresh (<= 15 min, or at once on reload); resume: link OR upload (one, never both required), server downloads the
+Drive PDF itself (URL built from the id), PDFBox text -> Sonnet facts (text only, prompt-injection safe), PDF discarded, user_profiles is
+editable and separate from the frozen MCP `profiles`; "Match my resume" = families + experience window only (no skills).
+RESUME (the user's CV) project bullets were finalised in chat on 2026-10-08 (JobRadar: AI agent pulling live tech jobs + custom
+algorithm; MCP server with custom matching + LLM re-rank, top-K returned, rest cached; self-improving skills dataset learning 219 skills).
+The user chose to write 10K+ jobs / 50+ sites / 95% there although the system has ~5,600 jobs / 33 companies / ~89%; this was flagged.
+
+
 ### >>> NEXT STEP (user's decision, 2026-10-07): MORE COMPANIES, one by one <<<
 The scheduler chapter is CLOSED (every server group runs its own 30 min fixed-delay rounds; Microsoft and Qualcomm are in the normal flow; user: "absolutely closed").
 Next: add the strong-paying companies with their own careers sites, ONE AT A TIME, each with its own adapter, the same way as the others (adapter + migration row + adapter
@@ -17,6 +100,53 @@ value). Research of 2026-10-04 is in research/sources_2026-10-04.json; the fresh
 research/new-companies_2026-10-07.md. After these: check which of the unresearched high-paying companies (Rubrik, Snowflake, Rippling, Airbnb, Stripe, Coinbase, LinkedIn, Palo Alto
 Networks, Arista, Nutanix, Broadcom/VMware, Cohesity, Pure Storage, Twilio, D. E. Shaw, Tower Research, Graviton) already use Greenhouse/Lever/Workday/Ashby (one DB row, no code).
 Other backlog after that: README refresh, login system, admin dashboard (crawl history page, log viewer + log rotation, server stats via Micrometer, Claude usage ledger), nightly backup.
+
+### >>> PLAN AGREED 2026-10-10 (user's vision): LOGIN -> LINKEDIN CONNECTIONS -> REFERRAL MESSAGE <<<
+Build order: (1) LOGIN SYSTEM (JWT, roles USER/ADMIN; see the backlog item below for open points). (2) LINKEDIN CONNECTIONS BUTTON in the job
+drawer: opens LinkedIn's own people search for the company + 1st-degree connections, e.g.
+https://www.linkedin.com/search/results/people/?currentCompany=["1586"]&network=["F"] (1586 = Amazon; network S = 2nd degree); needs
+companies.config.linkedinCompanyId for our companies (one-time lookup), fallback = keyword search on the company name. NO LinkedIn API (the
+connections API is partner-only since ~2015, OAuth gives only the user's own profile), NO community LinkedIn MCP (they scrape with the user's
+session = ToS violation), NEVER store LinkedIn passwords. Optional later: import the user's own LinkedIn data export (Connections.csv) to show
+names in-app. (3) RESUME -> FACTS for a signed-in user (reuse `profiles`; store facts only, never the PDF). (4) REFERRAL MESSAGE: ONE template per
+user generated by Sonnet from the resume facts (not per job/company), stored in referral_templates(user_id PK, text(s), model, generated_at,
+edited_by_user, facts_hash); placeholders {{company}} {{jobTitle}} {{jobLink}} {{resumeLink}} filled in the browser from the job; NO recipient
+name (user: same message pasted to everyone, starts with "Hi,"); {{resumeLink}} = the user's Google Drive link stored once per user (must be
+shared "anyone with the link can view"; the app only checks the URL shape); code checks the template (required placeholders present, no others,
+length cap); user may edit it (never overwritten unless they regenerate); regenerate only on resume change or on request (daily cap). Maybe a
+short variant for connection-request notes (LinkedIn caps notes at ~200-300 chars: keep {{resumeLink}}, drop {{jobLink}}). Job drawer: "Copy
+message" + "Find connections at <company>". LLM: the user's Claude subscription via ClaudeCliChatModel FOR NOW (user only, learning project);
+MUST switch to an Anthropic API key (AnthropicChatModel for this feature + per-user rate limit) BEFORE anyone else gets access (serving other
+users from a personal subscription is not allowed).
+
+### >>> MILESTONES: ACCOUNTS + REFERRALS (agreed 2026-10-10, local development first, nothing deployed until L6) <<<
+| # | Milestone | Status |
+|---|---|---|
+| L0 | Local dev DB: copy of the Air's data (pg_dump, read-only there) into a local database jobagent_dev | DONE 2026-10-10 (5,539 jobs, V27; L1's V28 applied there) |
+| L1 | Login backend: security deps, V28 users + refresh_tokens, BCrypt, JWT 15 min + rotating 7-day refresh cookie, /api/v1/auth/*, /api/v1/me, ALL /api/v1 needs a user, /admin needs ADMIN (or the shared key), /mcp unchanged, health open, signup switch, auth rate limit, CONFIGURATION.md, tests, local curl checks | DONE 2026-10-10, UNCOMMITTED: package auth (AuthProperties, UserAccount, UserRepository, RefreshTokenRepository, TokenService, AuthService, AuthController, AuthException, SecurityConfig), ApiKeyFilter now inside the security chain (key = ADMIN, /mcp still needs it), RateLimitFilter auth bucket 10/min burst 5; 341 tests; 23 live curl checks on port 8091 all as designed. DO NOT DEPLOY BEFORE L2: the current UI calls /api/v1 without a token |
+| L2 | Login frontend: sign-in / sign-up screens, token in memory + silent refresh, whole app behind login, user menu + logout, admin flag | DONE 2026-10-10, UNCOMMITTED: web/src/lib/auth.ts (access token in memory, refresh on load + 1 min before expiry, ONE shared in-flight refresh, authFetch = 401 -> refresh -> retry once), Root.tsx (loading / AuthScreen / App; clears the query cache on sign-out), components/AuthScreen.tsx (sign in + create account tabs), UserMenu.tsx (email, Admin badge, sign out, sign out on all devices); api.ts uses authFetch; Hero lost 'no sign-up'. Checked in the browser on port 8091: sign-up (short password error), session survives reload, sign out, wrong password message, sign in, backend restart with a new key -> 2 calls 401 -> ONE refresh -> retries 200, sign out everywhere, 375 px no horizontal scroll. L1 + L2 together are deployable (needs JOBAGENT_AUTH_JWT_SECRET on the Air first) |
+| L3 | LinkedIn connections button: linkedinCompanyId per company (migration), "Find connections at X" in the job drawer, keyword fallback | DONE 2026-10-10, UNCOMMITTED: PublicJobRepository JobDetail.linkedinCompanyId, web/src/lib/linkedin.ts (several comma-separated ids -> currentCompany=["a","b"]; else keyword search), JobDrawer buttons; ids VERIFIED BY THE USER by hand via research/linkedin-ids-checklist.html (paste the address bar, ids picked out; several per company) -> V32__add_linkedin_company_ids.sql sets 33 companies (dry-run OK: 33 updated); SAMSUNG LEFT OUT on purpose (Samsung Electronics + SRI-B/SRI-Noida pages; user skipped it, name search fallback) |
+| L4 | Resume step after first sign-in: Drive link (recommended) or PDF; Drive fetch with checks; text via PDFBox (download then; NOT Claude-reads-the-file: prompt injection could leak secrets); Sonnet -> facts -> profiles row linked to the user | BUILT 2026-10-10, UNCOMMITTED. User's decisions: resume NOT required (dialog with x, shown once per visit while no profile), editable profile (edits feed filters + messages), 'Match my resume' filter = families + experience range only (no skills), referral message must be very short. Own table user_profiles (V29; NOT the MCP `profiles`, which stay frozen; MCP untouched). Package account: AccountProperties (jobagent.account.*), DriveLink (only drive/docs.google.com, URL built from the id: SSRF-safe), DriveFetcher (5 MB, PDF magic check, private file -> 'not shared'), PdfText (PDFBox 3.0.7, 10 pages, scan -> error), ResumeReader (Sonnet, text only, JSON schema, years nullable), ProfileChecks (dictionary names, ranges), AccountService (5 reads/hour/user, window via ExperienceWindow), AccountController (GET/PUT /api/v1/me/profile (204 = none), POST /api/v1/me/resume/link, /upload). UI: ResumeDialog, ProfilePanel (view + edit), FilterPanel 'Match my resume', menu 'My profile' / 'Update resume'. 351 tests. Live: user's real resume -> 1.6 yrs, Java + Python, 25 skills, SWE + DATA_ML, range 0-3, in 6 s; bad link / missing file messages; edits validated; browser checks all OK |
+| L5 | Referral message: fixed template filled per job (no AI), headline from the resume read, user-editable wording, copy in the drawer | BUILT 2026-10-10, UNCOMMITTED (see HANDOFF block) |
+| L6 | Deploy: JWT secret in ~/jobagent/env, first admin by SQL, push | planned |
+Later: admin dashboards (crawl history, logs, server stats, Claude usage), MCP personal tokens / OAuth 2.1, Anthropic API key before other users.
+
+### LOGIN DESIGN DECIDED 2026-10-10 (user): BCrypt cost 12 (DelegatingPasswordEncoder); access token = JWT 15 min (HMAC secret from env, browser keeps
+it in memory only); refresh token = random opaque value, 7 days, stored HASHED in refresh_tokens, HttpOnly + Secure + SameSite=Strict cookie, rotated on
+every refresh, reuse of an old one revokes all the user's sessions; logout deletes it (+ "log out everywhere"); first admin = sign up, then
+`UPDATE users SET role='ADMIN'`; jobagent.auth.signup-enabled switch; stricter rate limit on login/sign-up; /admin needs role ADMIN (the shared API key
+keeps working for scripts and the deploy). LOGIN IS COMPULSORY (user, 2026-10-10): every /api/v1 endpoint needs a signed-in user (USER or ADMIN),
+only /api/v1/auth/*, the UI's static files (they show the sign-in screen) and /actuator/health stay open; after the first sign-in the app asks for the
+resume + Drive link (build step 3); the resume's Live Demo link shows the sign-in/sign-up screen (user: fine, it shows proper security). RESUME STEP (user,
+2026-10-10): ONE step after sign-in, a resume is REQUIRED: a Google Drive link (RECOMMENDED: the app reads the resume from it AND puts it in the
+referral messages) OR a PDF upload (then the messages have no resume link until one is added). Drive fetch: accept only drive.google.com /
+docs.google.com links, extract the file id and BUILD the URL ourselves (no fetching arbitrary URLs: SSRF): file ->
+https://drive.google.com/uc?export=download&id=<ID>, Google Doc -> https://docs.google.com/document/d/<ID>/export?format=pdf; must be shared
+'Anyone with the link'; a non-PDF answer (private file = Google sign-in page) -> clear message; ~5 MB cap + timeout. Text via Apache PDFBox 3.x
+(download, ask when building step 3), then Sonnet extracts the facts (same as MCP profile facts), then the template; the PDF is discarded, only
+facts + link are stored. FOCUS = backend API + web UI. MCP: NO CHANGES NOW (user: MCP was for learning, rarely
+used; it keeps the shared API key). BACKLOG for MCP: per-user personal access tokens (GitHub-style, hashed, revocable, `Authorization: Bearer`, so a
+search knows the user and their saved profile), later OAuth 2.1 as the MCP spec defines (Claude clients run the browser login).
 
 ### MODELS (2026-10-08, user's decision, UNCOMMITTED): gap fill and skill learning now use SONNET (application.yaml gap-fill-model / skills.learning.model,
 property defaults, POST /admin/requirements/fill-gaps default). Test on Opus's stored answers: gap fill years 29/30, family 24/30 (borderline non-tech roles),

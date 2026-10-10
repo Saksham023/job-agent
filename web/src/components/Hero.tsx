@@ -45,7 +45,7 @@ export function Hero({
           className="glass mx-auto mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300"
         >
           <Sparkles size={14} className="text-violet-500" />
-          Straight from {totals ? totals.companies : '30+'} companies&apos; own careers sites · no sign-up
+          Straight from {totals ? totals.companies : '30+'} companies&apos; own careers sites
         </motion.div>
 
         <motion.h1

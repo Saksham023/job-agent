@@ -119,4 +119,17 @@ class RateLimitFilterTest {
             assertThat(call(filter, "/api/v1/jobs", "1.1.1.1", null, null).getStatus()).isEqualTo(200);
         }
     }
+
+    @Test
+    void signInHasItsOwnSmallBucket() {
+        long[] now = {0};
+        RateLimitFilter filter = new RateLimitFilter(120, 30, null, 10, 5, () -> now[0]);
+        for (int i = 0; i < 5; i++) {
+            assertThat(filter.tryTakeAuth("1.2.3.4")).isZero();
+        }
+        assertThat(filter.tryTakeAuth("1.2.3.4")).isPositive();      // the 6th sign-in attempt at once waits
+        assertThat(filter.tryTake("1.2.3.4")).isZero();              // the ordinary API is not affected
+        now[0] += 6_000_000_000L;                                    // 10 per minute = one every 6 s
+        assertThat(filter.tryTakeAuth("1.2.3.4")).isZero();
+    }
 }

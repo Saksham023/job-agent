@@ -7,30 +7,32 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.annotation.Order;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.List;
 
 /**
- * A shared secret in front of the endpoints that spend money or change data: /admin/** (crawls, Opus runs, profiles)
- * and /mcp (the AI search). Everything else stays open: the read-only web API /api/v1/** and the health check.
+ * The shared secret for scripts and the MCP connection. It runs inside the Spring Security chain (SecurityConfig).
  *
- * A request passes when it carries the key as "X-API-Key: key" or "Authorization: Bearer key"; otherwise it gets 401.
- * A request with the right key is also marked TRUSTED on every path (request attribute TRUSTED): on the open API
- * /api/** that lifts the rate limit and the size caps, so your own scripts are never throttled.
+ * A request that carries the key as "X-API-Key: key" or "Authorization: Bearer key" is signed in as an ADMIN (for
+ * curl, scripts and the deploy) and marked TRUSTED (request attribute TRUSTED: no rate limit, no size caps on /api/**).
+ * /mcp still needs the key itself (401 without it), exactly as before accounts existed. Every other path is decided by
+ * SecurityConfig: /api/** needs a signed-in user, /admin/** an admin (a signed-in admin or this key).
  * The key is jobagent.security.api-key (env JOBAGENT_SECURITY_API_KEY, never in git). When it is blank the
  * protection is off, so local development works as before; a warning is logged at startup then.
  * Comparison is constant-time, so the key cannot be guessed from response times.
  *
- * Shortcomings: one key for everybody (no users, no roles), no rate limiting, no lockout after wrong keys; it
- * must be used over HTTPS when the app is reachable from the internet (the key travels in a header).
+ * Shortcomings: one key for everybody, no lockout after wrong keys; it must be used over HTTPS when the app is
+ * reachable from the internet (the key travels in a header).
  */
 @Component
-@Order(1)                                       // before the rate limit, which looks at the TRUSTED mark
 public class ApiKeyFilter extends OncePerRequestFilter {
 
     /** Request attribute set when the request carried the right key. */
@@ -43,9 +45,9 @@ public class ApiKeyFilter extends OncePerRequestFilter {
     public ApiKeyFilter(@Value("${jobagent.security.api-key:}") String apiKey) {
         this.key = apiKey == null || apiKey.isBlank() ? null : apiKey.strip().getBytes(StandardCharsets.UTF_8);
         if (key == null) {
-            log.warn("jobagent.security.api-key is not set: /admin and /mcp are OPEN. Set it before exposing the app.");
+            log.warn("jobagent.security.api-key is not set: /mcp is OPEN and no script key works. Set it before exposing the app.");
         } else {
-            log.info("API key protection is on for /admin/** and /mcp");
+            log.info("API key: required for /mcp, accepted as an admin everywhere");
         }
     }
 
@@ -59,8 +61,9 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         return Boolean.TRUE.equals(request.getAttribute(TRUSTED));
     }
 
+    /** Paths that need the key itself, whatever else the request carries. */
     static boolean protectedPath(String path) {
-        return path.equals("/admin") || path.startsWith("/admin/") || path.equals("/mcp") || path.startsWith("/mcp/");
+        return path.equals("/mcp") || path.startsWith("/mcp/");
     }
 
     @Override
@@ -68,11 +71,13 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         if (matches(request.getHeader("X-API-Key")) || matches(bearer(request.getHeader("Authorization")))) {
             request.setAttribute(TRUSTED, Boolean.TRUE);
+            SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
+                    "api-key", null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
             chain.doFilter(request, response);
             return;
         }
         if (!protectedPath(request.getRequestURI())) {
-            chain.doFilter(request, response);                 // open path, no (or a wrong) key: an ordinary visitor
+            chain.doFilter(request, response);                 // no (or a wrong) key: SecurityConfig decides
             return;
         }
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

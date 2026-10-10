@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { Briefcase, Building2, Calendar, Check, ChevronDown, Layers, MapPin, RotateCcw, Search, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { Facets, Filters, Meta } from '../lib/api'
+import type { Facets, Filters, Meta, UserProfile } from '../lib/api'
 import { activeCount, toggle } from '../lib/filters'
 import { Avatar } from './Avatar'
 
@@ -12,12 +12,34 @@ type Props = {
   filters: Filters
   update: (change: Partial<Filters>) => void
   reset: () => void
+  profile?: UserProfile | null
+  onMatch?: (profile: UserProfile) => void
+  onAddResume?: () => void
 }
 
-export function FilterPanel({ meta, facets, filters, update, reset }: Props) {
+export function FilterPanel({ meta, facets, filters, update, reset, profile, onMatch, onAddResume }: Props) {
   const active = activeCount(filters)
+  const canMatch = !!profile && (profile.families.length > 0 || profile.jobYearsFrom != null)
   return (
     <div className="space-y-3">
+      {onMatch && (
+        <button
+          onClick={() => (canMatch ? onMatch(profile!) : onAddResume?.())}
+          className="group flex w-full items-center gap-3 rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-500/10 to-cyan-500/10 px-4 py-3 text-left transition hover:border-violet-500/60"
+        >
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 text-white">
+            <Sparkles size={15} />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-slate-900 dark:text-white">Match my resume</span>
+            <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+              {canMatch
+                ? `${profile!.families.length} famil${profile!.families.length === 1 ? 'y' : 'ies'}${profile!.jobYearsFrom != null ? ` · ${profile!.jobYearsFrom}–${profile!.jobYearsTo} yrs` : ''}`
+                : 'Add your resume to use this'}
+            </span>
+          </span>
+        </button>
+      )}
       <div className="flex items-center justify-between px-1">
         <h2 className="font-display text-base font-semibold text-slate-900 dark:text-white">Filters</h2>
         <AnimatePresence>

@@ -93,16 +93,49 @@ Also needed as an environment variable, never in a file: `CLAUDE_CODE_OAUTH_TOKE
 
 | Setting | Default | What it does |
 |---|---|---|
-| `api-key` | empty (protection off, a warning is logged) | shared secret for `/admin/**` and `/mcp`; requests must send `X-API-Key: <key>` or `Authorization: Bearer <key>`, else 401. `/api/v1/**` (the web UI's read-only API) and `/actuator/health` stay open. Env `JOBAGENT_SECURITY_API_KEY`, never in a file in git. Use HTTPS when the app is reachable from the internet. |
+| `api-key` | empty (a warning is logged; `/mcp` is then open) | shared secret for scripts and the MCP connection, sent as `X-API-Key: <key>` or `Authorization: Bearer <key>`. `/mcp` needs it (401 without). Anywhere else it signs the request in as an ADMIN (curl, scripts, the deploy). Env `JOBAGENT_SECURITY_API_KEY`, never in a file in git. Use HTTPS when the app is reachable from the internet. |
 | `rate-limit.requests-per-minute` | `120` | sustained rate per client on `/api/**`; over it the answer is 429 with `Retry-After`; `0` = no limit |
 | `rate-limit.burst` | `30` | requests one client may send at once |
+| `rate-limit.auth-requests-per-minute` | `10` | sign-in and sign-up (`/api/v1/auth/login`, `/signup`) have their own, much smaller bucket per client, against password guessing |
+| `rate-limit.auth-burst` | `5` | sign-in and sign-up attempts one client may make at once |
 | `rate-limit.client-ip-header` | empty (the connection's address) | behind a proxy or tunnel, the header that carries the visitor's address (Tailscale Funnel: `X-Forwarded-For`; Cloudflare: `CF-Connecting-IP`). When the header holds a list, the last entry is used (the one our proxy added). Env `JOBAGENT_CLIENT_IP_HEADER`. Set it ONLY when all traffic comes through that proxy, otherwise a caller can invent addresses and escape the limit. On the home server: `export JOBAGENT_CLIENT_IP_HEADER=X-Forwarded-For` in `~/jobagent/env`. |
 
-The public search also refuses, for an ordinary visitor, requests built to be expensive: more than 50 companies, cities or
+The job search also refuses, for an ordinary signed-in user, requests built to be expensive: more than 50 companies, cities or
 skills, a keyword over 100 characters, a page above 1000; page size is capped at 60.
 
 **A request that carries the API key skips all of this** on `/api/**`: no rate limit, no caps (page size up to 1000).
 Use it for your own scripts: `curl -H 'X-API-Key: <key>' '.../api/v1/jobs?size=500'`.
+
+### Accounts: `jobagent.auth.*`
+
+Everyone signs in: every `/api/**` endpoint needs a signed-in user, `/admin/**` an ADMIN (a signed-in admin or the API key),
+only sign-up / sign-in / refresh / logout, the UI's own files and `/actuator/health` are open. The first admin is made by
+hand: sign up, then `UPDATE users SET role = 'ADMIN' WHERE email = '...'` (it takes effect at the next sign-in or refresh).
+
+| Setting | Default | What it does |
+|---|---|---|
+| `jwt-secret` | empty (a random key per start, warning logged) | signs the access tokens (HMAC-SHA256); at least 32 characters. Env `JOBAGENT_AUTH_JWT_SECRET`, never in git. Changing it signs everyone out of their current access token (the refresh cookie then gets them a new one). Make one with `openssl rand -base64 48` |
+| `access-token-ttl` | `PT15M` | how long an access token (JWT, sent as `Authorization: Bearer`) is valid; the UI renews it with the refresh cookie |
+| `refresh-token-ttl` | `P7D` | how long the refresh cookie is valid; every refresh replaces it (rotation), and a replaced one used again ends all of that user's sessions |
+| `signup-enabled` | `true` | `false` = no new accounts (existing ones still sign in) |
+| `cookie-secure` | `true` | the refresh cookie is sent over HTTPS only (browsers count `http://localhost` as secure, so local development works) |
+
+### Resume and profile: `jobagent.account.*`
+
+A signed-in user can give their resume (a Google Drive link, recommended, or a PDF upload). Only the text is read (Apache
+PDFBox) and sent to the model; the file itself is never stored. The facts land in `user_profiles` and the user can edit them.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `resume-model` | `sonnet` | model that reads the resume text into facts (years, languages, skills, roles wanted, job families) |
+| `max-pdf-bytes` | `5000000` | largest resume accepted; uploads are also capped by `spring.servlet.multipart.max-file-size` (5MB) |
+| `max-pdf-pages` | `10` | only this many pages are read |
+| `fetch-timeout` | `PT20S` | how long a Google Drive download may take |
+| `reads-per-hour` | `5` | resume reads (model calls) one user may start per hour |
+
+Only `drive.google.com` and `docs.google.com` links are accepted; the server builds the download address from the file id
+itself and never fetches what the user typed. A file that is not shared "Anyone with the link" comes back as Google's
+sign-in page and is reported as "not shared".
 
 ### Shutdown: `jobagent.shutdown.*` and Spring's own
 
@@ -178,6 +211,7 @@ and reproducible, put the same `UPDATE` in a new Flyway migration (`src/main/res
 | Eightfold | `location` | no | `India` | location filter sent to the API |
 | Eightfold | `delayMs` | no | `1000` | starting pace per request (slows down by itself on throttling) |
 | Eightfold | `detailDepartments` | no | all | regex; only jobs whose department matches get a detail request, the rest are saved from the list |
+| any | `linkedinCompanyId` | no | none | LinkedIn's numeric company id (e.g. Amazon `1586`), or several comma-separated (`"1753,12345"`) for a company hiring under several LinkedIn pages; set for 33 companies by V32 (not Samsung). The job drawer's "Find your connections" button then searches people CURRENTLY at the company; without it the button searches the company name as a keyword (also finds former employees). Find it: on the company's LinkedIn page click "See all employees", the address shows `currentCompany=["<id>"]`; check it: `linkedin.com/company/<id>` opens the company page |
 | any | `minCrawlHours` | no | none | optional: at least this many hours between two crawls of the company (a round skips it until then); not set for anyone by default |
 | Eightfold | `coolDownSeconds` | no | `10` | after a throttle signal (429 / refused connection) the crawl waits this x the signals in a row before it retries |
 | Eightfold | `maxThrottledTries` | no | `5` | signals in a row for one request before the crawl gives up (PARTIAL); Microsoft: 8 (V25) |

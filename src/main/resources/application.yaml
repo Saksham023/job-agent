@@ -1,6 +1,10 @@
 spring:
   application:
     name: jobagent
+  servlet:
+    multipart:
+      max-file-size: 5MB          # resume PDF upload (jobagent.account.max-pdf-bytes checks it again)
+      max-request-size: 6MB
   ai:
     mcp:
       server:
@@ -71,6 +75,20 @@ jobagent:
       requests-per-minute: 120               # sustained rate; 0 = no limit
       burst: 30                              # requests allowed at once
       client-ip-header: ${JOBAGENT_CLIENT_IP_HEADER:}   # behind a proxy/tunnel, e.g. CF-Connecting-IP; blank = the connection's address
+      auth-requests-per-minute: 10           # sign-in and sign-up have their own small bucket (password guessing)
+      auth-burst: 5
+  account:
+    resume-model: sonnet                     # reads a resume's text into profile facts
+    max-pdf-bytes: 5000000                   # largest resume accepted (upload or Google Drive)
+    max-pdf-pages: 10
+    fetch-timeout: PT20S                     # Google Drive download
+    reads-per-hour: 5                        # resume reads (model calls) per user per hour
+  auth:
+    jwt-secret: ${JOBAGENT_AUTH_JWT_SECRET:} # signs the access tokens, 32+ characters, never in git; blank = random per start
+    access-token-ttl: PT15M                  # access token (JWT) lifetime
+    refresh-token-ttl: P7D                   # refresh cookie lifetime (renewed on every refresh)
+    signup-enabled: true                     # false = no new accounts
+    cookie-secure: true                      # refresh cookie over HTTPS only (http://localhost counts as secure in browsers)
   shutdown:
     wait-seconds: 60                         # on a stop (deploy, restart) running crawls get this long to save and record their run
   web:
