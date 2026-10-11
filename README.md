@@ -4,6 +4,8 @@ A job-search app for the Indian tech market. It crawls live openings straight fr
 companies (Amazon, Microsoft, JPMorgan, NVIDIA, Stripe, Atlassian, ...), works out what each job really asks for, and
 helps you find, share and get referred for the ones worth applying to. You always click "apply" yourself.
 
+**Live:** https://jobserver.tail8cf172.ts.net/ (sign up to use it)
+
 **~6,700 open India jobs · 66 companies · 9 careers platforms · refreshed about every 30 minutes**
 
 ## Features
