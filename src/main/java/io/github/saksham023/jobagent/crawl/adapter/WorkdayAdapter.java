@@ -124,6 +124,10 @@ public class WorkdayAdapter implements JobBoardAdapter {
                     continue;
                 }
                 JsonNode detail = fetchDetail(company, config, path);
+                if (title(summary, detail) == null) {                 // a closed job: no detail page and no list title
+                    log.warn("{}: skipping {}: no title in the list and no detail page", company.slug(), path);
+                    continue;
+                }
                 batcher.add(toRawJob(config, summary, detail).withDetail(listHash,
                         detail == null ? RawJob.DetailSource.NONE : RawJob.DetailSource.FETCHED));
                 pause();
@@ -282,12 +286,12 @@ public class WorkdayAdapter implements JobBoardAdapter {
     static RawJob toRawJob(WorkdayConfig config, Summary summary, JsonNode detail) {
         JsonNode posting = summary.posting();
         String path = text(posting, "externalPath");
-        JsonNode info = detail == null ? null : detail.path("jobPostingInfo");
+        JsonNode info = info(detail);
         Boolean remote = remote(text(posting, "remoteType"));
         String url = info == null ? null : text(info, "externalUrl");
         return new RawJob(
                 externalId(path),
-                info == null ? text(posting, "title") : text(info, "title"),
+                title(summary, detail),
                 summary.department(),
                 null,
                 info == null ? summaryLocations(posting, remote) : locations(info, remote),
@@ -298,6 +302,41 @@ public class WorkdayAdapter implements JobBoardAdapter {
                 null,
                 info == null ? posting : info
         );
+    }
+
+    /** The detail's jobPostingInfo, or null when there is no usable detail. */
+    private static JsonNode info(JsonNode detail) {
+        JsonNode info = detail == null ? null : detail.path("jobPostingInfo");
+        return info != null && info.isObject() ? info : null;
+    }
+
+    /**
+     * The job's title: the detail's, else the list's, else the one written in the job's address
+     * ("/job/Bengaluru/Customer-Care-Communications-Analyst_JR-0110136" -> "Customer Care Communications Analyst").
+     * Null when none has one: seen for a job closed between the list call and its detail call (detail 404, list entry
+     * without a title); the crawl then skips that job instead of failing.
+     */
+    static String title(Summary summary, JsonNode detail) {
+        JsonNode info = info(detail);
+        String title = info == null ? null : text(info, "title");
+        if (title == null || title.isBlank()) {
+            title = text(summary.posting(), "title");
+        }
+        if (title == null || title.isBlank()) {
+            title = titleFromPath(text(summary.posting(), "externalPath"));
+        }
+        return title == null || title.isBlank() ? null : title.strip();
+    }
+
+    /** "/job/Pune/Senior-Data-Engineer_R-287943" -> "Senior Data Engineer"; null when the address has no title part. */
+    static String titleFromPath(String externalPath) {
+        if (externalPath == null) {
+            return null;
+        }
+        String last = externalPath.substring(externalPath.lastIndexOf('/') + 1);
+        int requisition = last.lastIndexOf('_');
+        String words = (requisition >= 0 ? last.substring(0, requisition) : last).replace('-', ' ').replaceAll("\\s+", " ").strip();
+        return words.isEmpty() ? null : words;
     }
 
     /** The main location carries the requisition's country code; additional locations are text only. */

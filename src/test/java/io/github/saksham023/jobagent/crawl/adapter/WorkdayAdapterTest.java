@@ -76,6 +76,30 @@ class WorkdayAdapterTest {
     // ---------------------------------------------------------------- mapping
 
     @Test
+    void aClosedJobWithoutAListTitleTakesTheTitleFromItsAddress() {
+        // seen on the Air 2026-10-08: detail 404 (closed a moment ago) and a list entry without a title crashed the crawl
+        Summary summary = new Summary(json("""
+                {"externalPath": "/job/Bengaluru/Customer-Care-Communications-Analyst_JR-0110136", "locationsText": "Bengaluru, India"}"""), null);
+
+        RawJob job = WorkdayAdapter.toRawJob(CONFIG, summary, null);
+
+        assertThat(job.title()).isEqualTo("Customer Care Communications Analyst");
+        assertThat(job.description()).isNull();
+        assertThat(WorkdayAdapter.title(summary, json("{}"))).isEqualTo("Customer Care Communications Analyst");   // detail without jobPostingInfo
+    }
+
+    @Test
+    void titleFromTheAddress() {
+        assertThat(WorkdayAdapter.titleFromPath("/job/Pune/Senior-Data-Engineer_R-287943")).isEqualTo("Senior Data Engineer");
+        assertThat(WorkdayAdapter.titleFromPath("/job/India-Bengaluru/Senior-Deep-Learning-Research-Engineer---Multimedia-GPU-team_JR2020216"))
+                .isEqualTo("Senior Deep Learning Research Engineer Multimedia GPU team");
+        assertThat(WorkdayAdapter.titleFromPath("/job/x/_R1")).isNull();
+        assertThat(WorkdayAdapter.titleFromPath(null)).isNull();
+        Summary none = new Summary(json("{\"externalPath\": \"/job/x/_R1\"}"), null);
+        assertThat(WorkdayAdapter.title(none, null)).isNull();                // the crawl skips such a job
+    }
+
+    @Test
     void mapsTheDetail() {
         Summary summary = new Summary(json("""
                 {"title": "Senior Staff Engineer", "remoteType": "Hybrid",

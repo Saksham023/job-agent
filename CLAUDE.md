@@ -96,6 +96,16 @@ algorithm; MCP server with custom matching + LLM re-rank, top-K returned, rest c
 The user chose to write 10K+ jobs / 50+ sites / 95% there although the system has ~5,600 jobs / 33 companies / ~89%; this was flagged.
 
 
+### >>> 2026-10-11 AIR CRAWL HEALTH REVIEW + WORKDAY FIX (UNCOMMITTED): crawl_runs on the Air (read-only over SSH, psql
+/opt/homebrew/opt/postgresql@18/bin/psql -d jobagent, SQL on stdin): 6,463 OK, 51 FAILED, 11 PARTIAL (Oct 6-11). Intermittent (no fix):
+Workday-wide outage 10 Oct 11:53-12:56 IST (text/html instead of JSON, every Workday company, OK again 13:02); scattered 502/503/504/500 and
+I/O timeouts (Oracle tenants, Autodesk, BlackRock, Zeta, Expedia, Salesforce, Visa); Microsoft PARTIAL = our deploys + one 429; Paytm one
+non-JSON answer; Mastercard path-null (fixed 6 Oct). REAL BUG fixed: "NullPointerException: title" (Intel 3 PARTIAL, Workday 1 FAILED): a job
+closed between the list and detail calls (detail 404) whose list entry has no title crashed the company's crawl. WorkdayAdapter: title() =
+detail title, else list title, else titleFromPath ("/job/x/Customer-Care-Communications-Analyst_JR-0110136" -> "Customer Care Communications
+Analyst"); info() ignores a detail without jobPostingInfo; a job with no title at all is skipped with a warning. 2 tests; 364 tests; local
+crawl of Adobe + Mastercard OK. <<<
+
 ### >>> 2026-10-11 ROUND 2 ADDED (UNCOMMITTED): user picked ALL 20 recommended, NOT the borderline ones. V37__seed_well_paying_companies.sql
 (slugs okta mongodb inmobi gitlab glean squarepoint elastic druva harness worldquant anthropic deliveroo swiggy grab tekion openai atlan
 morgan-stanley ebay crowdstrike). Local crawl: all 20 OK, 879 India jobs, all with descriptions, unresolved strings all non-India. Rules check
