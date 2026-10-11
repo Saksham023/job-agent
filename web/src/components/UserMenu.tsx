@@ -38,7 +38,7 @@ export function UserMenu({ user, onProfile, onResume, onAlerts }: { user: User; 
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="glass absolute right-0 mt-2 w-64 origin-top-right rounded-2xl p-2 shadow-xl shadow-slate-900/10"
+            className="absolute right-0 mt-2 w-64 origin-top-right rounded-2xl border border-slate-200/80 bg-white p-2 shadow-xl shadow-slate-900/10 ring-1 ring-black/[0.02] dark:border-white/10 dark:bg-ink-900 dark:shadow-2xl dark:shadow-black/60 dark:ring-white/[0.03]"
           >
             <div className="px-3 py-2">
               <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{user.email}</p>

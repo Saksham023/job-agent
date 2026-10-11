@@ -39,7 +39,13 @@ USER'S SETUP PROGRESS (Telegram):
   JOBAGENT_ALERTS_TELEGRAM_BOT_USERNAME=JobRadarDev_bot (+ optional JOBAGENT_ALERTS_SITE_URL=http://localhost:5173/, only for the
   "Manage your alert" link); connect + test message WORK. NOT yet tested locally: a real alert from a crawl (user skipped it for now;
   how: POST /admin/crawl/<busy company> with the admin key, a brand-new fitting job arrives within seconds).
-  STEP 6 DONE (production bot): display name "JobRadar", username JobRadarIndiaBot (chosen 2026-10-11). NOW AT STEP 7 (Air env).
+  STEP 6 DONE (production bot): display name "JobRadar", username JobRadarIndiaBot (chosen 2026-10-11).
+  STEPS 7-9 DONE 2026-10-11: env lines on the Air, commit df95156 "Job alerts on Telegram" pushed + deployed, log 12:59:44 "Telegram
+  alerts: on, bot @JobRadarIndiaBot delivers its messages to https://jobserver.tail8cf172.ts.net/api/v1/telegram/webhook". Hiccup: the
+  token line had an opening ' and a CURLY closing quote (copied), so `source` stopped at that line (alerts "off"); fixed by removing
+  both quotes. Check for hidden characters: sed -n Np ~/jobagent/env | LC_ALL=C grep -c '[^ -~]'. STEP 10: connect + test message WORK on the live site (2026-10-11 ~13:05). Waiting for the first REAL alert after a crawl round.
+  AFTER THAT (2026-10-11): account menu made a solid panel (dark glass was 4% opaque; nested backdrop-blur inside the blurred header does
+  nothing), README rewritten short (features: search, profile, referrals, Telegram alerts, MCP), committed by Claude at the user's request.
   (Username cannot change later; display name via /setname. Never paste the token in chat.)
 REMAINING STEPS FOR THE USER (Part B, Air):
   7. ssh serverserver@jobserver.local; cp ~/jobagent/env ~/jobagent/env.bak;
