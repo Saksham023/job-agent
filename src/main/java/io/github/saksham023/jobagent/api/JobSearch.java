@@ -82,7 +82,7 @@ public record JobSearch(List<String> companies, List<JobFamily> families, Intege
     }
 
     /** "years stated" = the posting says it (rules or the model with a quote); LOW is only a guess from the title. */
-    static final String STATED = "(r.years_confidence IN ('HIGH', 'MEDIUM') AND r.min_years IS NOT NULL)";
+    public static final String STATED = "(r.years_confidence IN ('HIGH', 'MEDIUM') AND r.min_years IS NOT NULL)";
 
     /** The WHERE clause for open jobs in the given country that pass every filter. */
     public Where where(String country) {

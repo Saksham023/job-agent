@@ -170,3 +170,38 @@ export const saveReferralTemplate = (text: string) =>
   send<ReferralTemplate>('/api/v1/me/referral-template', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
 
 export const resetReferralTemplate = () => send<ReferralTemplate>('/api/v1/me/referral-template', { method: 'DELETE' })
+
+// ---------------------------------------------------------------- job alerts (Telegram, after every crawl round)
+
+/** Empty list or null = no filter on that field, as on the website. Families, cities, companies: any of; skills: all of. */
+export type AlertPrefs = {
+  enabled: boolean
+  families: string[]
+  minYears: number | null
+  maxYears: number | null
+  includeUnstated: boolean
+  skills: string[]
+  cities: string[]
+  companies: string[]
+}
+
+export type AlertView = {
+  prefs: AlertPrefs
+  /** false = nothing saved yet: the filters are suggestions from the profile */
+  saved: boolean
+  telegram: { available: boolean; connected: boolean; active: boolean; botUsername: string | null }
+}
+
+export const fetchAlerts = () => get<AlertView>('/api/v1/me/alerts')
+
+export const saveAlerts = (prefs: AlertPrefs) =>
+  send<AlertView>('/api/v1/me/alerts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prefs) })
+
+export const connectTelegram = () => send<{ url: string }>('/api/v1/me/alerts/telegram', { method: 'POST' })
+
+export const disconnectTelegram = () => send<AlertView>('/api/v1/me/alerts/telegram', { method: 'DELETE' })
+
+export async function testAlert(): Promise<void> {
+  const response = await authFetch('/api/v1/me/alerts/test', { method: 'POST' })
+  if (!response.ok) throw new Error(await errorOf(response))
+}

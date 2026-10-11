@@ -9,6 +9,60 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
+### >>> HANDOFF 2026-10-11 (NEWEST, written right before a compaction: READ THIS FIRST; older blocks below are history) <<<
+GIT: main == origin/main at 0843172, everything up to there is PUSHED and deployed by the user: 371905a (12 companies + QUANT family),
+9e3d022 (LinkedIn ids round 2 + profile error bar + .gitignore), 4622b38 (Indian cities only + company-voice years, extractor v15),
+990a3d4 (Atlassian adapter, V35/V36), f72dee2 (20 well-paying companies V37 + LinkedIn ids V38), 0843172 (Workday title fix).
+Commit messages: plain, NO Claude/Anthropic/Co-Authored-By (user's explicit rule). The user pushes; never commit unless asked in that message.
+UNCOMMITTED NOW (all built + tested, 380 unit tests green): JOB ALERTS via Telegram + WEBHOOK MODE + strict filter validation:
+  new: src/main/java/.../alerts/ (AlertProperties, AlertPrefs, AlertPrefsRepository, AlertMatchRepository, AlertMatcher, AlertSender,
+  AlertMessage, AlertService, AlertController, TelegramClient, TelegramLinkRepository, TelegramBot, TelegramWebhookController,
+  TelegramWebhookSetup), tests src/test/java/.../alerts/ (AlertMessageTest, AlertPrefsTest, AlertSenderTest, TelegramClientTest with a
+  fake HTTP server, TelegramWebhookTest), V39__create_job_alerts.sql, V40__telegram_poll_state_bot.sql, web/src/components/AlertsPanel.tsx;
+  edited: JobRepository (queue new jobs), GapFillRepository.apply (re-queue), JobSearch.STATED + PublicJobRepository.LOCAL_CITIES made
+  public, SecurityConfig (permitAll /api/v1/telegram/webhook), application.yaml (jobagent.alerts.*), CONFIGURATION.md, CLAUDE.md,
+  web api.ts / UserMenu / Header / App. V39 + V40 already applied to the LOCAL db (not the Air's).
+DESIGN (agreed after long discussion, details in the JOB ALERTS + WEBHOOK blocks below): Direction 1 = for each new job, query alert_prefs
+for matching user ids; monolith; Postgres as the queue (alert_job_queue written in the crawl's transaction, matcher poller every 5 s with
+FOR UPDATE SKIP LOCKED, alert_matches PK(user,job) = no duplicates, sender poller every 5 s claims one user, sends ONE Telegram message,
+retries 429/backoff, 403 = link inactive); no Kafka, no Redis, no Spring events, no LLM. Filters = the website's rules exactly (families any,
+years overlap, include unstated, skills ALL of, cities any incl. Remote, companies any); verified: alert SQL == website search on 10 sample
+alerts (ALL SAME). Every filter is validated on the SERVER against what we have (user insisted, rightly): families = JobFamily enum, skills =
+SkillExtractor dictionary (canonical spelling), cities = Gazetteer cities of the country + Remote (canonical, "bangalore" -> "Bengaluru"),
+companies = enabled rows of companies (Google refused); UI = pick-from-list only. Telegram: bot connects via one-time hashed token in a
+t.me/<bot>?start=<token> deep link (10 min, one use), /stop pauses, /start resumes. Receiving messages: POLLING locally, WEBHOOK on the Air
+(user's decision), TWO BOTS (a bot has one mode; polling a webhook bot = 409; polling never calls deleteWebhook; stored update position is
+per bot id). Explained to the user: CSV geo/classify data stays in files for now (in-memory, git-reviewed, DB-free tests); move to DB tables
+when an admin dashboard can edit them (noted as backlog).
+USER'S SETUP PROGRESS (Telegram):
+  DONE locally: dev bot created, display name "JobRadar Dev", username JobRadarDev_bot; IntelliJ env JOBAGENT_ALERTS_TELEGRAM_BOT_TOKEN,
+  JOBAGENT_ALERTS_TELEGRAM_BOT_USERNAME=JobRadarDev_bot (+ optional JOBAGENT_ALERTS_SITE_URL=http://localhost:5173/, only for the
+  "Manage your alert" link); connect + test message WORK. NOT yet tested locally: a real alert from a crawl (user skipped it for now;
+  how: POST /admin/crawl/<busy company> with the admin key, a brand-new fitting job arrives within seconds).
+  STEP 6 DONE (production bot): display name "JobRadar", username JobRadarIndiaBot (chosen 2026-10-11). NOW AT STEP 7 (Air env).
+  (Username cannot change later; display name via /setname. Never paste the token in chat.)
+REMAINING STEPS FOR THE USER (Part B, Air):
+  7. ssh serverserver@jobserver.local; cp ~/jobagent/env ~/jobagent/env.bak;
+     echo "export JOBAGENT_ALERTS_TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 32)" >> ~/jobagent/env;
+     nano ~/jobagent/env and add: export JOBAGENT_ALERTS_TELEGRAM_BOT_TOKEN='<real bot token>', export
+     JOBAGENT_ALERTS_TELEGRAM_BOT_USERNAME=<chosen username>, export JOBAGENT_ALERTS_TELEGRAM_MODE=WEBHOOK, export
+     JOBAGENT_ALERTS_SITE_URL=https://jobserver.tail8cf172.ts.net/ ; chmod 600 ~/jobagent/env.
+  8. user says "commit" -> commit ALL the uncommitted work above in one plain commit (e.g. "Job alerts on Telegram"), user pushes; the deploy
+     applies V39 + V40 on the Air and registers the webhook at startup.
+  9. check on the Air: grep "Telegram alerts" ~/jobagent/logs/app.log | tail -2 -> expect "bot @<name> delivers its messages to
+     https://jobserver.tail8cf172.ts.net/api/v1/telegram/webhook"; "webhook NOT set: ..." names the wrong setting.
+  10. live site: menu -> Job alerts -> Connect Telegram -> Start -> Send a test message -> set filters, switch on, Save alert.
+OPEN / BACKLOG (after alerts are live): Anthropic API key (or JOBAGENT_AUTH_SIGNUP_ENABLED=false) before anyone else uses the app (resume
+reads + gap fill run on the user's Claude subscription); admin dashboard (crawl history, logs, server stats, Claude usage; then move geo/skill
+CSVs into editable DB tables); more companies: remaining custom adapters Apple (~160), IBM (~884), Deutsche Bank (~232), AMD (~205), Intuit
+(~26); NOT Cisco (user not targeting); Google blocked by robots (page=), Meta/SAP/Uber/Zepto bot-protected (never bypass), Flipkart no eng
+jobs, Swiggy's tech jobs not public (MyNextHire checked: only 3 data roles, no adapter); borderline-pay Workday companies NOT added by choice
+(Cadence, Target, Micron); Squarepoint has no LinkedIn id; README refresh (numbers: ~67 companies + Atlassian, ~7,000+ jobs); one-off
+extraction misses accepted ("minimum 5 ... typically 15+" -> 15, etc.).
+USER PREFERENCES THIS SESSION: explain every plan BEFORE changing code and wait for OK; be ELABORATE but clear when explaining (user
+complained about crammed answers and about me silently switching a design: never change an agreed design without saying so clearly);
+step-by-step instructions for anything the user must do; no em-dashes; never put tokens/keys in chat or git; ask before downloads.
+
 ### >>> HANDOFF 2026-10-10 (written right before a compaction; THIS block is the current state, read it first) <<<
 UPDATE (end of 2026-10-10): L1-L6 ALL DONE AND DEPLOYED (commit 7764bb9, pushed by the user, deploy green, JWT secret set on the Air). The
 notes below about "uncommitted" describe the state before that commit. Open: Anthropic API key (or JOBAGENT_AUTH_SIGNUP_ENABLED=false)
@@ -95,6 +149,40 @@ RESUME (the user's CV) project bullets were finalised in chat on 2026-10-08 (Job
 algorithm; MCP server with custom matching + LLM re-rank, top-K returned, rest cached; self-improving skills dataset learning 219 skills).
 The user chose to write 10K+ jobs / 50+ sites / 95% there although the system has ~5,600 jobs / 33 companies / ~89%; this was flagged.
 
+
+### >>> 2026-10-11 TELEGRAM WEBHOOK MODE (UNCOMMITTED, on top of the job alerts): user wants WEBHOOK on the Air, POLLING locally, with TWO
+bots (a bot has one delivery mode; polling a webhook bot gives 409; a local deleteWebhook would break the server). jobagent.alerts.telegram.mode
+POLLING|WEBHOOK (env JOBAGENT_ALERTS_TELEGRAM_MODE) + webhook-secret (env JOBAGENT_ALERTS_TELEGRAM_WEBHOOK_SECRET, [A-Za-z0-9_-]{1,256}).
+TelegramWebhookSetup: on ApplicationReadyEvent in webhook mode calls setWebhook(<site-url>api/v1/telegram/webhook, secret, allowed_updates
+message), refuses non-https site-url / bad secret with an ERROR log. TelegramWebhookController: POST /api/v1/telegram/webhook (permitAll in
+SecurityConfig), 404 unless webhook mode, 401 unless X-Telegram-Bot-Api-Secret-Token matches (constant time), body -> TelegramBot.handleWebhook.
+TelegramBot: one process() for both modes under a ReentrantLock, skips update_id < stored position (Telegram retries), polling only in POLLING
+mode, on 409 logs "this bot delivers to a webhook" once and stops polling (never deleteWebhook). V40__telegram_poll_state_bot.sql: bot_id
+column; the position resets to 0 when the bot changes (bot id = number before ':' in the token). Tests 380. Live with the fake Telegram:
+setWebhook sent with url + secret; no/wrong secret 401; /start connected; retried update ignored; /stop paused; polling with a webhook bot ->
+warning, webhook untouched, endpoint 404. <<<
+
+### >>> 2026-10-11 JOB ALERTS (Telegram) BUILT, UNCOMMITTED. Design agreed after a long discussion: DIRECTION 1 (job -> user ids on
+alert_prefs), monolith, Postgres as queue, scheduled pollers (no Spring events, no Kafka, no Redis), Telegram, sent after every crawl round,
+filters exactly like the website (families any, years overlap, include unstated, skills ALL of, cities any incl. Remote, companies any), NO LLM.
+V39__create_job_alerts.sql: alert_prefs (GIN on families/cities/companies WHERE enabled), alert_job_queue (to-do list), alert_matches
+(PK user+job, status PENDING/SENDING/SENT/FAILED/SKIPPED, attempts, next_attempt_at, claimed_at), telegram_links, telegram_link_tokens (hashed,
+10 min, one use), telegram_poll_state (getUpdates offset). Hooks: JobRepository.upsert queues a brand-new job in the crawl's transaction;
+GapFillRepository.apply re-queues a job whose family/years it changed (NOT reapply: rebuilds must not re-alert). Package alerts: AlertProperties
+(jobagent.alerts.*, bot token/username env JOBAGENT_ALERTS_TELEGRAM_BOT_TOKEN / _USERNAME, site url JOBAGENT_ALERTS_SITE_URL), AlertPrefs
+(checked()), AlertPrefsRepository, AlertMatchRepository (CLAIM_JOBS SKIP LOCKED only jobs with requirements; MATCH = INSERT..SELECT with
+Conditions mirroring JobSearch, reusing JobSearch.STATED/REMOTE and PublicJobRepository.LOCAL_CITIES made public), AlertMatcher (poll 5 s, one
+tx per batch), AlertSender (claim one user SKIP LOCKED -> SENDING, send outside tx, SENT / retry (429 retry_after, else 1,2,4.. min, 5 tries ->
+FAILED) / 403 -> link inactive + SKIPPED / closed job SKIPPED / paused SKIPPED; stuck SENDING retried after 5 min), AlertMessage (HTML, max 20,
+< 3,800 chars, "and N more"), TelegramClient (token hidden from every error), TelegramBot (poll getUpdates 3 s: /start TOKEN, /start, /stop),
+AlertService (skills canonicalized via SkillExtractor, unknown refused), AlertController (GET/PUT /api/v1/me/alerts, POST/DELETE .../telegram,
+POST .../test). Virtual threads are on, so scheduled tasks never block each other (no pool setting needed). Web: AlertsPanel (menu "Job alerts",
+always refetched on open/focus), api.ts, UserMenu/Header/App wiring. CONFIGURATION.md section. Tests 375 (11 new incl. a fake Telegram HTTP
+server). VERIFIED: alert SQL == website search on 10 sample alerts over all local jobs (ALL SAME, 7..6,762 jobs); end to end with a local FAKE
+Telegram server (python, scratchpad): connect token once only, help text, no update handled twice, 6 queued -> 4 matched -> one message, re-queue
+-> no duplicate, /stop -> nothing, closed job SKIPPED, 403 -> link inactive, 429 -> waited and resent, UI save/connect/test, Java+Bengaluru alert
+-> only the 2 fitting jobs. NEXT: user creates the bot with @BotFather, sets the two env vars (IntelliJ, then ~/jobagent/env + site url), real
+test, then commit when asked. <<<
 
 ### >>> 2026-10-11 AIR CRAWL HEALTH REVIEW + WORKDAY FIX (UNCOMMITTED): crawl_runs on the Air (read-only over SSH, psql
 /opt/homebrew/opt/postgresql@18/bin/psql -d jobagent, SQL on stdin): 6,463 OK, 51 FAILED, 11 PARTIAL (Oct 6-11). Intermittent (no fix):

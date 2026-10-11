@@ -10,6 +10,7 @@ import { JobDrawer } from './components/JobDrawer'
 import { JobList } from './components/JobList'
 import { ResultsBar } from './components/ResultsBar'
 import { fetchFacets, fetchMeta, fetchProfile, type Filters, type UserProfile } from './lib/api'
+import { AlertsPanel } from './components/AlertsPanel'
 import { ProfilePanel } from './components/ProfilePanel'
 import { ResumeDialog } from './components/ResumeDialog'
 import { activeCount, EMPTY, toggle, useFilters } from './lib/filters'
@@ -28,6 +29,7 @@ export default function App({ user }: { user: User }) {
   const profile = useQuery({ queryKey: ['profile'], queryFn: fetchProfile, staleTime: Infinity })
   const [resumeOpen, setResumeOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [alertsOpen, setAlertsOpen] = useState(false)
   // no profile yet: offer the resume once per visit (closing it hides it until the next visit)
   const offered = useRef(false)
   useEffect(() => {
@@ -61,7 +63,7 @@ export default function App({ user }: { user: User }) {
           </button>
         </div>
       )}
-      <Header user={user} onProfile={() => setProfileOpen(true)} onResume={() => setResumeOpen(true)} lastCrawlAt={meta.data?.totals.lastCrawlAt} onHome={() => { reset(); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
+      <Header user={user} onProfile={() => setProfileOpen(true)} onResume={() => setResumeOpen(true)} onAlerts={() => setAlertsOpen(true)} lastCrawlAt={meta.data?.totals.lastCrawlAt} onHome={() => { reset(); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
 
       <Hero
         totals={meta.data?.totals}
@@ -129,6 +131,7 @@ export default function App({ user }: { user: User }) {
 
       <JobDrawer jobId={openJob} onClose={closeJob} onAddResume={() => setResumeOpen(true)} />
       <ResumeDialog open={resumeOpen} onClose={() => setResumeOpen(false)} editedBefore={!!profile.data?.editedAt} />
+      <AlertsPanel open={alertsOpen} onClose={() => setAlertsOpen(false)} meta={meta.data} />
       <ProfilePanel
         open={profileOpen}
         onClose={() => setProfileOpen(false)}

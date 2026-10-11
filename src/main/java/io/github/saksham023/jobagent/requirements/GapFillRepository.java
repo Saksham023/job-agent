@@ -159,11 +159,16 @@ public class GapFillRepository {
                 .update();
     }
 
-    /** Writes the filled fields into job_requirements; fields that are no longer gaps are left alone. */
+    /**
+     * Writes the filled fields into job_requirements; fields that are no longer gaps are left alone. When the family or
+     * the years really changed, the job is queued for the job alerts again: users it now fits get it (nobody gets it
+     * twice). Only here, not in reapply(): a rules rebuild re-applies old fills to every job and must not re-alert.
+     */
     public void apply(long jobId, Fill fill, String model) {
         String source = source(model);
+        int changed = 0;
         if (fill.hasYears()) {
-            jdbc.sql(APPLY_YEARS)
+            changed += jdbc.sql(APPLY_YEARS)
                     .param("jobId", jobId)
                     .param("minYears", fill.minYears())
                     .param("maxYears", fill.maxYears())
@@ -172,7 +177,7 @@ public class GapFillRepository {
                     .update();
         }
         if (fill.hasFamily()) {
-            jdbc.sql(APPLY_FAMILY)
+            changed += jdbc.sql(APPLY_FAMILY)
                     .param("jobId", jobId)
                     .param("family", fill.family().name())
                     .param("specialization", fill.specialization() == null ? null : fill.specialization().name())
@@ -186,6 +191,9 @@ public class GapFillRepository {
                     .param("languages", fill.languages().toArray(String[]::new))
                     .param("source", source)
                     .update();
+        }
+        if (changed > 0) {
+            jdbc.sql("INSERT INTO alert_job_queue (job_id) VALUES (:jobId) ON CONFLICT DO NOTHING").param("jobId", jobId).update();
         }
     }
 

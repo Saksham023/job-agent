@@ -50,7 +50,7 @@ public class PublicJobRepository {
      * The job's cities in the searched country only, in their stored order: a job posted for several countries (Tower:
      * Amsterdam, Chicago, Gurugram, London...) shows and counts only its Indian cities.
      */
-    static final String LOCAL_CITIES = "ARRAY(SELECT u.city FROM unnest(j.cities) WITH ORDINALITY AS u(city, n) "
+    public static final String LOCAL_CITIES = "ARRAY(SELECT u.city FROM unnest(j.cities) WITH ORDINALITY AS u(city, n) "
             + "WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(j.places) AS p "
             + "WHERE p ->> 'city' = u.city AND p ->> 'countryCode' = CAST(:country AS text)) ORDER BY u.n)";
 

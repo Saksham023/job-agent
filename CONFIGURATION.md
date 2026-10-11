@@ -137,6 +137,32 @@ Only `drive.google.com` and `docs.google.com` links are accepted; the server bui
 itself and never fetches what the user typed. A file that is not shared "Anyone with the link" comes back as Google's
 sign-in page and is reported as "not shared".
 
+### Job alerts (Telegram): `jobagent.alerts.*`
+
+After every crawl round, new jobs that fit a user's saved alert are sent to them on Telegram. No AI: the alert has the
+website's own filters (families, years, include unstated, skills = all of, cities = any of incl. `Remote`, companies =
+any of). Each NEW job is queued (`alert_job_queue`, written with the job; the gap fill re-queues a job it re-classifies),
+a poller matches queued jobs against `alert_prefs` and writes `alert_matches`, a second poller sends one message per
+user. Telegram stays off until a bot token and username are set.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `enabled` | `true` | `false` = no matching, sending or bot (new jobs are still queued) |
+| `match-delay` | `PT5S` | how often queued jobs are matched |
+| `send-delay` | `PT5S` | how often pending matches are sent |
+| `match-batch` | `50` | queued jobs one matching run takes (`FOR UPDATE SKIP LOCKED`) |
+| `max-jobs-per-message` | `20` | jobs listed in one message; the rest are counted as "and N more" |
+| `max-attempts` | `5` | failed sends before a match is given up (`FAILED`); waits 1, 2, 4, 8... minutes, or what Telegram's 429 asks |
+| `sending-timeout` | `PT5M` | a match stuck in `SENDING` (crash mid-send) is retried after this |
+| `site-url` | env `JOBAGENT_ALERTS_SITE_URL`, empty | the web app's address, linked in every message |
+| `telegram.bot-token` | env `JOBAGENT_ALERTS_TELEGRAM_BOT_TOKEN`, empty | the bot's token from @BotFather (secret: never in git or chat); empty = Telegram off |
+| `telegram.bot-username` | env `JOBAGENT_ALERTS_TELEGRAM_BOT_USERNAME`, empty | the bot's username without `@` (for the connect link `t.me/<username>?start=<token>`) |
+| `telegram.api-url` | `https://api.telegram.org` | Telegram's Bot API (changed only for tests) |
+| `telegram.mode` | env `JOBAGENT_ALERTS_TELEGRAM_MODE`, `POLLING` | how the bot receives messages (`/start TOKEN` connects, `/stop` pauses, `/start` resumes). `POLLING`: the app asks Telegram every few seconds, nothing public needed (local testing). `WEBHOOK`: on start the app registers `<site-url>api/v1/telegram/webhook` with Telegram, which then POSTs each message there (the server; needs the public https `site-url`). Use a separate bot for each: while a bot has a webhook, polling is refused, and polling never removes a webhook |
+| `telegram.webhook-secret` | env `JOBAGENT_ALERTS_TELEGRAM_WEBHOOK_SECRET`, empty | webhook mode: Telegram sends it back in `X-Telegram-Bot-Api-Secret-Token` on every call; calls without it get 401. 1-256 of `A-Z a-z 0-9 _ -` (e.g. `openssl rand -hex 32`); never in git |
+| `telegram.poll-delay` | `PT3S` | polling mode: how often the bot asks for new messages |
+| `telegram.link-token-ttl` | `PT10M` | how long a "Connect Telegram" link works (one use) |
+
 ### Shutdown: `jobagent.shutdown.*` and Spring's own
 
 | Setting | Default | What it does |

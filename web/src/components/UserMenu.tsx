@@ -1,10 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { FileText, LogOut, MonitorSmartphone, ShieldCheck, UserRound } from 'lucide-react'
+import { Bell, FileText, LogOut, MonitorSmartphone, ShieldCheck, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { signOut, type User } from '../lib/auth'
 
 /** The signed-in user's initial; opens their email, role and the sign-out actions. */
-export function UserMenu({ user, onProfile, onResume }: { user: User; onProfile: () => void; onResume: () => void }) {
+export function UserMenu({ user, onProfile, onResume, onAlerts }: { user: User; onProfile: () => void; onResume: () => void; onAlerts: () => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -62,6 +62,12 @@ export function UserMenu({ user, onProfile, onResume }: { user: User; onProfile:
               className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/5"
             >
               <FileText size={15} /> Update resume
+            </button>
+            <button
+              onClick={() => { setOpen(false); onAlerts() }}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/5"
+            >
+              <Bell size={15} /> Job alerts
             </button>
             <div className="my-1 h-px bg-slate-200/70 dark:bg-white/10" />
             <button

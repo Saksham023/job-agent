@@ -56,9 +56,12 @@ public class JobRepository {
                 closed_at          = NULL,
                 list_hash          = coalesce(EXCLUDED.list_hash, jobs.list_hash),
                 detail_fetched_at  = coalesce(EXCLUDED.detail_fetched_at, jobs.detail_fetched_at)
-            RETURNING first_seen_at = :seenAt AS inserted,
+            RETURNING id, first_seen_at = :seenAt AS inserted,
                       content_changed_at = :seenAt AS changed
             """;
+
+    /** A brand-new job goes on the job alerts' to-do list, in the same transaction as the job itself. */
+    private static final String QUEUE_FOR_ALERTS = "INSERT INTO alert_job_queue (job_id) VALUES (:jobId) ON CONFLICT DO NOTHING";
 
     private final JdbcClient jdbc;
     private final JsonMapper jsonMapper;
@@ -69,12 +72,15 @@ public class JobRepository {
     }
 
     /**
-     * Inserts or refreshes one job.
+     * Inserts or refreshes one job. A brand-new job is also queued for the job alerts (call this inside the crawl's
+     * transaction, so the job and its queue row are saved together or not at all).
      *
      * @param seenAt the crawl's timestamp, the same for every job of one crawl
      */
     public UpsertOutcome upsert(NormalizedJob job, Instant seenAt) {
-        return jdbc.sql(UPSERT)
+        record Saved(long id, UpsertOutcome outcome) {
+        }
+        Saved saved = jdbc.sql(UPSERT)
                 .param("companyId", job.companyId())
                 .param("externalId", job.externalId())
                 .param("title", job.title())
@@ -95,13 +101,13 @@ public class JobRepository {
                 .param("seenAt", toOffset(seenAt))
                 .param("listHash", job.listHash())
                 .param("detailFetched", job.detailFetched())
-                .query((rs, rowNum) -> {
-                    if (rs.getBoolean("inserted")) {
-                        return UpsertOutcome.INSERTED;
-                    }
-                    return rs.getBoolean("changed") ? UpsertOutcome.UPDATED : UpsertOutcome.UNCHANGED;
-                })
+                .query((rs, rowNum) -> new Saved(rs.getLong("id"), rs.getBoolean("inserted") ? UpsertOutcome.INSERTED
+                        : rs.getBoolean("changed") ? UpsertOutcome.UPDATED : UpsertOutcome.UNCHANGED))
                 .single();
+        if (saved.outcome() == UpsertOutcome.INSERTED) {
+            jdbc.sql(QUEUE_FOR_ALERTS).param("jobId", saved.id()).update();
+        }
+        return saved.outcome();
     }
 
     /** The Postgres driver accepts OffsetDateTime for timestamptz, not Instant. */

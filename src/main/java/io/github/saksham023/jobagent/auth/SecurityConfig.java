@@ -51,6 +51,8 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login", "/api/v1/auth/refresh",
                                 "/api/v1/auth/logout").permitAll()
+                        // Telegram calls this without a login; the controller checks Telegram's secret header instead
+                        .requestMatchers("/api/v1/telegram/webhook").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .requestMatchers("/admin", "/admin/**", "/actuator/**").hasRole("ADMIN")
                         .requestMatchers("/mcp", "/mcp/**").permitAll()  // guarded by ApiKeyFilter, as before

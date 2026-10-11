@@ -4,12 +4,13 @@ import { UserMenu } from './UserMenu'
 import type { User } from '../lib/auth'
 import { ago } from '../lib/format'
 
-export function Header({ lastCrawlAt, onHome, user, onProfile, onResume }: {
+export function Header({ lastCrawlAt, onHome, user, onProfile, onResume, onAlerts }: {
   lastCrawlAt: string | null | undefined
   onHome: () => void
   user: User
   onProfile: () => void
   onResume: () => void
+  onAlerts: () => void
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/60 bg-slate-50/70 backdrop-blur-xl dark:border-white/5 dark:bg-ink-950/60">
@@ -33,7 +34,7 @@ export function Header({ lastCrawlAt, onHome, user, onProfile, onResume }: {
             </span>
           )}
           <ThemeToggle />
-          <UserMenu user={user} onProfile={onProfile} onResume={onResume} />
+          <UserMenu user={user} onProfile={onProfile} onResume={onResume} onAlerts={onAlerts} />
         </div>
       </div>
     </header>

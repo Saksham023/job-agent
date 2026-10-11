@@ -77,6 +77,23 @@ jobagent:
       client-ip-header: ${JOBAGENT_CLIENT_IP_HEADER:}   # behind a proxy/tunnel, e.g. CF-Connecting-IP; blank = the connection's address
       auth-requests-per-minute: 10           # sign-in and sign-up have their own small bucket (password guessing)
       auth-burst: 5
+  alerts:
+    enabled: true                                     # job alerts: matching + Telegram (Telegram needs the bot below)
+    match-delay: PT5S                                 # how often queued new jobs are matched against alerts
+    send-delay: PT5S                                  # how often pending matches are sent
+    match-batch: 50
+    max-jobs-per-message: 20
+    max-attempts: 5
+    sending-timeout: PT5M
+    site-url: ${JOBAGENT_ALERTS_SITE_URL:}            # linked in every message, e.g. https://jobserver.tail8cf172.ts.net/
+    telegram:
+      bot-token: ${JOBAGENT_ALERTS_TELEGRAM_BOT_TOKEN:}       # from @BotFather; never in git; blank = Telegram off
+      bot-username: ${JOBAGENT_ALERTS_TELEGRAM_BOT_USERNAME:} # without @
+      mode: ${JOBAGENT_ALERTS_TELEGRAM_MODE:POLLING}  # POLLING (local) or WEBHOOK (server: Telegram calls site-url + api/v1/telegram/webhook)
+      webhook-secret: ${JOBAGENT_ALERTS_TELEGRAM_WEBHOOK_SECRET:}   # webhook mode: checked on every call; never in git
+      poll-delay: PT3S                                # polling mode: how often the bot reads /start and /stop
+      link-token-ttl: PT10M
+
   account:
     resume-model: sonnet                     # reads a resume's text into profile facts
     max-pdf-bytes: 5000000                   # largest resume accepted (upload or Google Drive)
