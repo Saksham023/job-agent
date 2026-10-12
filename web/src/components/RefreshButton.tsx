@@ -1,45 +1,63 @@
 import { RotateCw } from 'lucide-react'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import { animate, motion, useMotionValue, type AnimationPlaybackControls } from 'framer-motion'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
-/** One full turn while loading takes this long (seconds). */
-const TURN = 0.8
+/** One full turn while loading takes this long (milliseconds). */
+const TURN = 800
 
 /**
  * Fetches the newest jobs from our database again (no crawl): the open job list keeps its filters and its place, and
  * the filter counts, the company strip and "Updated ... ago" follow. The icon turns while anything is loading; when
  * loading ends it does not snap back but eases out and stops at the end of the turn it is in, upright again.
+ *
+ * Both the turning and the stop are Web Animations on `transform` only, which the browser runs off the main thread:
+ * they stay smooth while the page is busy building the new job list (a JavaScript-driven angle stuttered there).
  */
 export function RefreshButton() {
   const client = useQueryClient()
   const loading = useIsFetching({ predicate: (q) => ['jobs', 'facets', 'meta', 'job'].includes(q.queryKey[0] as string) }) > 0
   const [clicked, setClicked] = useState(false)
   const spinning = loading || clicked
-  const rotate = useMotionValue(0)
-  const turning = useRef<AnimationPlaybackControls | null>(null)
+  const icon = useRef<HTMLSpanElement>(null)
+  const turning = useRef<Animation | null>(null)
+  const stopping = useRef<Animation | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const element = icon.current
+    if (!element || typeof element.animate !== 'function') return
+    const from = angle(element)
     if (spinning) {
       if (turning.current) return
-      const from = rotate.get() % 360
-      rotate.set(from)
-      turning.current = animate(rotate, from + 360, { duration: TURN, ease: 'linear', repeat: Infinity })
+      stopping.current?.cancel()
+      stopping.current = null
+      turning.current = element.animate(
+        [{ transform: `rotate(${from}deg)` }, { transform: `rotate(${from + 360}deg)` }],
+        { duration: TURN, iterations: Infinity, easing: 'linear' },
+      )
       return
     }
     if (!turning.current) return
-    turning.current.stop()
+    turning.current.cancel()
     turning.current = null
     // finish the turn in hand, slowing down into the upright position
-    const now = rotate.get()
-    const end = Math.ceil(now / 360) * 360
-    const left = end - now
-    if (left > 0.5) {
-      animate(rotate, end, { duration: Math.min(1, Math.max(0.35, (left / 360) * TURN * 1.6)), ease: [0.2, 0.6, 0.35, 1] })
+    const left = 360 - from
+    if (left < 1) return
+    stopping.current = element.animate([{ transform: `rotate(${from}deg)` }, { transform: 'rotate(360deg)' }], {
+      duration: Math.min(1000, Math.max(350, (left / 360) * TURN * 1.6)),
+      easing: 'cubic-bezier(0.2, 0.6, 0.35, 1)',
+    })
+    stopping.current.onfinish = () => {
+      stopping.current = null
     }
-  }, [spinning, rotate])
+  }, [spinning])
 
-  useEffect(() => () => turning.current?.stop(), [])
+  useEffect(
+    () => () => {
+      turning.current?.cancel()
+      stopping.current?.cancel()
+    },
+    [],
+  )
 
   const refresh = async () => {
     if (spinning) return
@@ -62,9 +80,18 @@ export function RefreshButton() {
       aria-busy={spinning}
       className="glass grid h-10 w-10 place-items-center rounded-full text-slate-600 transition hover:scale-105 hover:text-slate-900 disabled:cursor-default disabled:hover:scale-100 dark:text-slate-300 dark:hover:text-white"
     >
-      <motion.span style={{ rotate }} className="grid place-items-center">
+      <span ref={icon} className="grid place-items-center will-change-transform">
         <RotateCw size={17} />
-      </motion.span>
+      </span>
     </button>
   )
+}
+
+/** The element's current rotation in degrees (0 to 360), read from the running animation's transform. */
+function angle(element: HTMLElement): number {
+  const transform = getComputedStyle(element).transform
+  if (!transform || transform === 'none') return 0
+  const [a, b] = transform.slice(transform.indexOf('(') + 1, -1).split(',').map(Number)
+  const degrees = (Math.atan2(b, a) * 180) / Math.PI
+  return degrees < 0 ? degrees + 360 : degrees
 }

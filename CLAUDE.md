@@ -91,6 +91,12 @@ status + Hidden chips, menu: 3 statuses + Clear status + Hide/Unhide, HideButton
 FilterPanel Show only adds Hidden, help text, filters.ts maps ?status=NOT_INTERESTED -> HIDDEN. Tested: 17 API checks, local V46 (user's 5
 Not interested -> hidden, 2 Applied unchanged), browser: Applied then Hide -> DB APPLIED + hidden, Hidden view chips, Unhide toast, counts,
 drawer. Committed at the user's request.
+SMOOTHER ANIMATIONS (2026-10-13, user: refresh icon stutters on the live site where responses are slow; UNCOMMITTED): RefreshButton
+now uses Web Animations on transform (off the main thread: infinite 800 ms turn, then an ease-out to the next full turn read from the
+computed transform) instead of a framer-motion value; the card slide (framer `layout` + popLayout) was briefly removed, then RESTORED at
+the user's request (they like it; the stutter came from the JS-driven icon + blur); cards use a new .card class = .glass WITHOUT backdrop-blur, same colours (checked: the cards start ~1,115 px down, BELOW the
+~720 px aurora, so only the plain page background is behind them; measured before/after: dark 0.03% pixels differ max 9/255, light 0.8%
+max 19/255 at the card edge; the blur still cost a compositing layer + re-blur per card on scroll, fade-in, hover and list re-render). Option kept in mind: a Web Animations FLIP of the visible cards if the framer slide ever stutters.
 OPEN / BACKLOG (offered 2026-10-12, user picked companies first): close sign-up (JOBAGENT_AUTH_SIGNUP_ENABLED=false on the Air) or an
 Anthropic API key BEFORE other people use the app (resume reads run on the user's Claude subscription); pin ubuntu-latest -> ubuntu-24.04
 in .github/workflows/deploy.yml (GitHub moves the label to Ubuntu 26 on 2026-10-19); log rotation on the Air (DEBUG log grows); nightly

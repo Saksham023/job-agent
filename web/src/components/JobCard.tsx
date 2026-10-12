@@ -18,7 +18,7 @@ export function JobCard({ job, index, onOpen }: { job: Job; index: number; onOpe
       transition={{ duration: 0.3, delay: Math.min((index % 24) * 0.025, 0.4) }}
       whileHover={{ y: -3 }}
       onClick={onOpen}
-      className="glass group relative cursor-pointer overflow-hidden rounded-2xl p-5 transition-shadow hover:shadow-xl hover:shadow-violet-500/10"
+      className="card group relative cursor-pointer overflow-hidden rounded-2xl p-5 transition-shadow hover:shadow-xl hover:shadow-violet-500/10"
     >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/0 via-transparent to-cyan-500/0 opacity-0 transition-opacity duration-300 group-hover:from-violet-500/[0.07] group-hover:to-cyan-500/[0.06] group-hover:opacity-100" />
       <div className="absolute top-3 right-3 z-10">

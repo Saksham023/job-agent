@@ -64,6 +64,13 @@ html:not(.dark) .aurora::after {
   @apply border border-slate-200/80 bg-white/75 backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04];
 }
 
+/* .glass without the background blur, for the many job cards: only the plain page background sits behind them, so the
+   blur changed almost nothing you can see (measured), while every card needed its own blurred layer, redone on scroll,
+   fade-in, hover and each list change */
+.card {
+  @apply border border-slate-200/80 bg-white/75 dark:border-white/10 dark:bg-white/[0.04];
+}
+
 .text-gradient {
   @apply bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent;
 }
