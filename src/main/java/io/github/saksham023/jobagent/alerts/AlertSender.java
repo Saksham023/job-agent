@@ -28,15 +28,18 @@ public class AlertSender {
     private static final Duration PAUSE_BETWEEN_MESSAGES = Duration.ofMillis(100);   // well under Telegram's 30/s
 
     private final AlertMatchRepository matches;
+    private final AlertPrefsRepository prefs;
     private final TelegramLinkRepository links;
     private final TelegramClient telegram;
     private final AlertProperties properties;
     private final MatchingProperties matching;
     private final TransactionTemplate transaction;
 
-    public AlertSender(AlertMatchRepository matches, TelegramLinkRepository links, TelegramClient telegram,
-                       AlertProperties properties, MatchingProperties matching, TransactionTemplate transaction) {
+    public AlertSender(AlertMatchRepository matches, AlertPrefsRepository prefs, TelegramLinkRepository links,
+                       TelegramClient telegram, AlertProperties properties, MatchingProperties matching,
+                       TransactionTemplate transaction) {
         this.matches = matches;
+        this.prefs = prefs;
         this.links = links;
         this.telegram = telegram;
         this.properties = properties;
@@ -72,6 +75,10 @@ public class AlertSender {
     void send(Claimed claimed) {
         long userId = claimed.userId();
         List<Long> jobIds = claimed.jobIds();
+        if (!prefs.find(userId).map(AlertPrefs::enabled).orElse(false)) {    // switched off since the match
+            matches.finish(userId, jobIds, "SKIPPED", "alert switched off");
+            return;
+        }
         Optional<TelegramLinkRepository.Link> link = links.forUser(userId).filter(TelegramLinkRepository.Link::active);
         if (link.isEmpty()) {                                     // paused (/stop) or disconnected since the match
             matches.finish(userId, jobIds, "SKIPPED", "telegram not connected or paused");
@@ -103,10 +110,9 @@ public class AlertSender {
             log.info("Job alerts: user {} blocked the bot; their Telegram link is now inactive", userId);
             return;
         }
-        Duration delay = e.status() == 429 && e.retryAfter() != null
-                ? e.retryAfter()
-                : backoff(matches.attempts(userId, jobIds));
-        matches.retryLater(userId, jobIds, delay, properties.maxAttempts(), e.getMessage());
+        boolean tooFast = e.status() == 429 && e.retryAfter() != null;     // Telegram asks us to wait: not a failed try
+        Duration delay = tooFast ? e.retryAfter() : backoff(matches.attempts(userId, jobIds));
+        matches.retryLater(userId, jobIds, delay, !tooFast, properties.maxAttempts(), e.getMessage());
         log.warn("Job alerts: sending to user {} failed ({}); next try in {}", userId, e.getMessage(), delay);
     }
 

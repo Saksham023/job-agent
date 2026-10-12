@@ -38,7 +38,8 @@ class TelegramClientTest {
             exchange.close();
         });
         server.start();
-        AlertProperties properties = new AlertProperties(true, 50, 20, 5, Duration.ofMinutes(5), Duration.ofDays(2), "",
+        AlertProperties properties = new AlertProperties(true, 50, 20, 5, Duration.ofMinutes(5), Duration.ofDays(2),
+                Duration.ofMinutes(30), "",
                 new AlertProperties.Telegram(TOKEN, "JobRadarBot", "http://127.0.0.1:" + server.getAddress().getPort(), Duration.ofMinutes(10),
                         AlertProperties.Telegram.Mode.POLLING, ""));
         client = new TelegramClient(properties, JsonMapper.builder().build());

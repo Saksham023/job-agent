@@ -12,6 +12,8 @@ import java.time.ZoneOffset;
  * Writes crawled jobs into the `jobs` table.
  * One upsert per job: insert if new, otherwise refresh it, bump last_seen_at, and bump content_changed_at only
  * when the content hash differs. The outcome tells the crawl what happened.
+ * The `before` CTE reads the stored posting date first (every part of one statement sees the table as it was before
+ * the statement), so the upsert can tell that a known job was RE-POSTED (its posting date moved forward).
  */
 @Repository
 public class JobRepository {
@@ -23,6 +25,7 @@ public class JobRepository {
     }
 
     private static final String UPSERT = """
+            WITH before AS (SELECT posted_at FROM jobs WHERE company_id = :companyId AND external_id = :externalId)
             INSERT INTO jobs (company_id, external_id, title, department, function, locations, cities, country_codes, places,
                               remote, employment_type, url, description, posted_at, source_updated_at,
                               content_hash, raw, first_seen_at, last_seen_at, content_changed_at, closed_at,
@@ -57,10 +60,14 @@ public class JobRepository {
                 list_hash          = coalesce(EXCLUDED.list_hash, jobs.list_hash),
                 detail_fetched_at  = coalesce(EXCLUDED.detail_fetched_at, jobs.detail_fetched_at)
             RETURNING id, first_seen_at = :seenAt AS inserted,
-                      content_changed_at = :seenAt AS changed
+                      content_changed_at = :seenAt AS changed,
+                      coalesce(posted_at > (SELECT b.posted_at FROM before b), false) AS reposted
             """;
 
-    /** A brand-new job goes on the job alerts' to-do list, in the same transaction as the job itself. */
+    /**
+     * A brand-new or re-posted job goes on the job alerts' to-do list, in the same transaction as the job itself (the
+     * website shows a re-posted job as new, so the alerts do too; nobody gets the same job twice).
+     */
     private static final String QUEUE_FOR_ALERTS = "INSERT INTO alert_job_queue (job_id) VALUES (:jobId) ON CONFLICT DO NOTHING";
 
     private final JdbcClient jdbc;
@@ -72,13 +79,13 @@ public class JobRepository {
     }
 
     /**
-     * Inserts or refreshes one job. A brand-new job is also queued for the job alerts (call this inside the crawl's
+     * Inserts or refreshes one job. A brand-new or re-posted job is also queued for the job alerts (call this inside the crawl's
      * transaction, so the job and its queue row are saved together or not at all).
      *
      * @param seenAt the crawl's timestamp, the same for every job of one crawl
      */
     public UpsertOutcome upsert(NormalizedJob job, Instant seenAt) {
-        record Saved(long id, UpsertOutcome outcome) {
+        record Saved(long id, UpsertOutcome outcome, boolean reposted) {
         }
         Saved saved = jdbc.sql(UPSERT)
                 .param("companyId", job.companyId())
@@ -102,9 +109,10 @@ public class JobRepository {
                 .param("listHash", job.listHash())
                 .param("detailFetched", job.detailFetched())
                 .query((rs, rowNum) -> new Saved(rs.getLong("id"), rs.getBoolean("inserted") ? UpsertOutcome.INSERTED
-                        : rs.getBoolean("changed") ? UpsertOutcome.UPDATED : UpsertOutcome.UNCHANGED))
+                        : rs.getBoolean("changed") ? UpsertOutcome.UPDATED : UpsertOutcome.UNCHANGED,
+                        rs.getBoolean("reposted")))
                 .single();
-        if (saved.outcome() == UpsertOutcome.INSERTED) {
+        if (saved.outcome() == UpsertOutcome.INSERTED || saved.reposted()) {
             jdbc.sql(QUEUE_FOR_ALERTS).param("jobId", saved.id()).update();
         }
         return saved.outcome();

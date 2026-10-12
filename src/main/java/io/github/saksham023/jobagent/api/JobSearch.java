@@ -160,7 +160,7 @@ public record JobSearch(List<String> companies, List<JobFamily> families, Intege
      * the job if that was the same day in India; a job we found on a later day (a backlog) gets noon India time of its date;
      * a job we saw before its date (time zone edge) just uses first_seen_at. No date at all: first_seen_at.
      */
-    static final String POSTED = """
+    public static final String POSTED = """
             (CASE
                WHEN j.posted_at IS NULL THEN j.first_seen_at
                WHEN (j.posted_at AT TIME ZONE 'UTC')::time <> time '00:00'

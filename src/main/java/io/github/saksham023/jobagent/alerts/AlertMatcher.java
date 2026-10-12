@@ -1,6 +1,7 @@
 package io.github.saksham023.jobagent.alerts;
 
 import io.github.saksham023.jobagent.matching.MatchingProperties;
+import io.github.saksham023.jobagent.requirements.GapFillProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -25,13 +26,15 @@ public class AlertMatcher {
     private final AlertMatchRepository matches;
     private final AlertProperties properties;
     private final MatchingProperties matching;
+    private final List<String> gapFillFamilies;
     private final TransactionTemplate transaction;
 
     public AlertMatcher(AlertMatchRepository matches, AlertProperties properties, MatchingProperties matching,
-                        TransactionTemplate transaction) {
+                        GapFillProperties gapFill, TransactionTemplate transaction) {
         this.matches = matches;
         this.properties = properties;
         this.matching = matching;
+        this.gapFillFamilies = gapFill.families().stream().map(Enum::name).toList();
         this.transaction = transaction;
     }
 
@@ -52,7 +55,7 @@ public class AlertMatcher {
     /** One batch of queued jobs; returns how many were taken. */
     int matchBatch() {
         Integer taken = transaction.execute(status -> {
-            List<Long> jobIds = matches.claimQueuedJobs(properties.matchBatch());
+            List<Long> jobIds = matches.claimQueuedJobs(properties.matchBatch(), gapFillFamilies, properties.gapFillWait());
             if (jobIds.isEmpty()) {
                 return 0;
             }

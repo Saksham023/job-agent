@@ -85,7 +85,8 @@ jobagent:
     max-jobs-per-message: 20
     max-attempts: 5
     sending-timeout: PT5M
-    max-job-age: P2D                                  # only jobs first seen within this are sent (alerts are for NEW jobs)
+    max-job-age: P2D                                  # only jobs POSTED within this are sent (the posting time the website shows)
+    gap-fill-wait: PT30M                              # a new job waits at most this long for Claude's gap fill before matching
     site-url: ${JOBAGENT_ALERTS_SITE_URL:}            # linked in every message, e.g. https://jobserver.tail8cf172.ts.net/
     telegram:
       bot-token: ${JOBAGENT_ALERTS_TELEGRAM_BOT_TOKEN:}       # from @BotFather; never in git; blank = Telegram off

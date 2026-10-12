@@ -19,13 +19,24 @@ import java.util.Optional;
 public class AlertMatchRepository {
 
     /**
-     * Which queued jobs are ready: their requirements are extracted (family, years and skills exist). Rows locked by
-     * another matcher run are skipped, so parallel runs split the work instead of doing it twice.
+     * Which queued jobs are ready: their requirements are extracted (family, years and skills exist) and they are not
+     * waiting for Claude's gap fill. A job waits while it is one the gap fill will ask about (same rules as
+     * GapFillRepository: a family in scope, a years or family gap, a description, no answer yet for this version of the
+     * posting), so the alert uses Claude's answer, as the website does; it waits at most :waitedSince ago (a slow or
+     * failed fill never blocks an alert). Rows locked by another matcher run are skipped, so parallel runs split the
+     * work instead of doing it twice.
      */
     private static final String CLAIM_JOBS = """
             SELECT q.job_id
             FROM alert_job_queue q
+            JOIN jobs j ON j.id = q.job_id
             JOIN job_requirements r ON r.job_id = q.job_id
+            WHERE q.queued_at <= :waitedSince
+               OR NOT (j.closed_at IS NULL
+                       AND j.description IS NOT NULL AND j.description <> ''
+                       AND (r.family = ANY(:families) OR r.secondary_families && CAST(:families AS text[]))
+                       AND (r.years_confidence IN ('NONE', 'LOW') OR r.family = 'UNCLASSIFIED' OR r.family_guessed)
+                       AND NOT EXISTS (SELECT 1 FROM job_gap_fills f WHERE f.job_id = j.id AND f.content_hash = j.content_hash))
             ORDER BY q.job_id
             LIMIT :limit
             FOR UPDATE OF q SKIP LOCKED
@@ -41,8 +52,8 @@ public class AlertMatchRepository {
      * cities     any of them, or 'Remote' for remote jobs
      * companies  any of them
      * Only opted-in users with an active Telegram link; a pair already matched is skipped (nobody gets a job twice).
-     * Only jobs first seen recently (jobagent.alerts.max-job-age): an alert is about NEW jobs, so an old job that is
-     * queued again is dropped here.
+     * Only jobs POSTED recently (jobagent.alerts.max-job-age), by the same posting time the website shows, sorts by and
+     * marks NEW (JobSearch.POSTED): a re-posted job counts as new, an old posting we only just found does not.
      */
     static final String MATCH = """
             INSERT INTO alert_matches (user_id, job_id)
@@ -54,8 +65,7 @@ public class AlertMatchRepository {
             JOIN telegram_links t ON t.user_id = p.user_id AND t.active
             WHERE j.id = ANY(:jobIds)
               AND j.closed_at IS NULL AND j.country_codes @> ARRAY[CAST(:country AS text)]
-              AND j.first_seen_at >= :firstSeenSince
-            """ + "  AND " + Conditions.ALL + """
+            """ + "  AND " + JobSearch.POSTED + " >= :postedSince\n  AND " + Conditions.ALL + """
             ON CONFLICT (user_id, job_id) DO NOTHING
             """;
 
@@ -96,17 +106,26 @@ public class AlertMatchRepository {
 
     // ---------------------------------------------------------------- matching
 
-    /** Locks up to `limit` ready queued jobs for the caller's transaction. */
-    public List<Long> claimQueuedJobs(int limit) {
-        return jdbc.sql(CLAIM_JOBS).param("limit", limit).query(Long.class).list();
+    /**
+     * Locks up to `limit` ready queued jobs for the caller's transaction.
+     *
+     * @param gapFillFamilies the families the gap fill asks about (jobagent.gap-fill.families)
+     * @param gapFillWait     how long a job may wait for its gap fill
+     */
+    public List<Long> claimQueuedJobs(int limit, List<String> gapFillFamilies, Duration gapFillWait) {
+        return jdbc.sql(CLAIM_JOBS)
+                .param("limit", limit)
+                .param("families", gapFillFamilies.toArray(String[]::new))
+                .param("waitedSince", Timestamp.from(Instant.now().minus(gapFillWait)))
+                .query(Long.class).list();
     }
 
-    /** Writes the matches of these jobs (only those first seen within maxJobAge); returns how many pairs were added. */
+    /** Writes the matches of these jobs (only those posted within maxJobAge); returns how many pairs were added. */
     public int match(List<Long> jobIds, String country, Duration maxJobAge) {
         return jdbc.sql(MATCH)
                 .param("jobIds", jobIds.toArray(Long[]::new))
                 .param("country", country)
-                .param("firstSeenSince", Timestamp.from(Instant.now().minus(maxJobAge)))
+                .param("postedSince", Timestamp.from(Instant.now().minus(maxJobAge)))
                 .update();
     }
 
@@ -201,15 +220,20 @@ public class AlertMatchRepository {
                 .update();
     }
 
-    /** A failed send: back to PENDING after `delay`, or FAILED once maxAttempts is reached. */
-    public void retryLater(long userId, List<Long> jobIds, Duration delay, int maxAttempts, String error) {
+    /**
+     * A failed send: back to PENDING after `delay`, or FAILED once maxAttempts is reached. countAttempt = false (Telegram
+     * only asked us to slow down, 429) waits without using up a try.
+     */
+    public void retryLater(long userId, List<Long> jobIds, Duration delay, boolean countAttempt, int maxAttempts,
+                           String error) {
         jdbc.sql("""
                         UPDATE alert_matches
-                        SET attempts = attempts + 1, last_error = :error, claimed_at = NULL,
-                            status = CASE WHEN attempts + 1 >= :maxAttempts THEN 'FAILED' ELSE 'PENDING' END,
+                        SET attempts = attempts + :step, last_error = :error, claimed_at = NULL,
+                            status = CASE WHEN attempts + :step >= :maxAttempts THEN 'FAILED' ELSE 'PENDING' END,
                             next_attempt_at = :next
                         WHERE user_id = :userId AND job_id = ANY(:jobIds)
                         """)
+                .param("step", countAttempt ? 1 : 0)
                 .param("error", error)
                 .param("maxAttempts", maxAttempts)
                 .param("next", Timestamp.from(Instant.now().plus(delay)))
