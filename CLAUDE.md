@@ -54,6 +54,14 @@ NEXT, IN THIS ORDER (user: "we'll be following your recommendation"; explain the
       Next.js page, __NEXT_DATA__ (~830 KB) holds all 71 positions (~19 tech), one request per crawl; job pages /careers/<slug>-<id>).
       Each: adapter + migration row + adapter test with a saved sample + local crawl + rules check. Navi (TurboHire, 37 jobs mostly
       business) LATER.
+STEP (1) DONE LOCALLY 2026-10-12 (UNCOMMITTED): user DROPPED Uniphore, Mindtickle, UKG; V43__seed_round3_companies.sql adds 9 (arcesium,
+imc, optiver, alphagrep, nk-securities, observe-ai, agoda, zendesk, eightfold-ai); applied to the local db by a test run on 8091. Crawl: all 9
+OK, 120 India jobs, all with descriptions + posting dates; Zendesk 15 (= its own India country facet; the probe's ~28 double counted);
+Eightfold AI 3 'Remote' jobs dropped = remote_global sales roles (correct); AlphaGrep 2 'Multiple Location' jobs dropped (no country).
+Rules check: 13 unclassified (bank/trading business roles, IMC event postings), 11 guessed (Eightfold 'Senior Engineer' etc.), no rule
+change (one-offs: NK 'Network Infrastructure Manager' -> SWE via dept, IMC 'IT Operations Engineer' -> OPERATIONS, Arcesium 'Senior
+Consultant - Margin Calculator' -> SWE via dept Technology). API/status/facets checks OK; 120 queued for alerts, only 5 posted < 2 days.
+NEXT: commit when asked, LinkedIn ids for the 9 later, then step (2) Apple + D. E. Shaw.
 OPEN / BACKLOG (offered 2026-10-12, user picked companies first): close sign-up (JOBAGENT_AUTH_SIGNUP_ENABLED=false on the Air) or an
 Anthropic API key BEFORE other people use the app (resume reads run on the user's Claude subscription); pin ubuntu-latest -> ubuntu-24.04
 in .github/workflows/deploy.yml (GitHub moves the label to Ubuntu 26 on 2026-10-19); log rotation on the Air (DEBUG log grows); nightly
