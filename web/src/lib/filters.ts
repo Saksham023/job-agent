@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { HIDEABLE, JOB_STATUSES, type Filters, type JobStatus, type Sort } from './api'
+import { HIDEABLE, SHOW_ONLY, type Filters, type JobStatus, type Sort, type StatusFilter } from './api'
 
 // The filters live in the URL (?family=DATA_ML&min=0&max=3...), so every search can be bookmarked and shared,
 // and the back button undoes a filter change.
@@ -38,7 +38,10 @@ export function parse(params: URLSearchParams): Filters {
     cities: params.getAll('city'),
     skills: params.getAll('skill'),
     postedWithinDays: int(params.get('posted')),
-    statuses: params.getAll('status').filter((s): s is JobStatus => JOB_STATUSES.includes(s as JobStatus)),
+    // "NOT_INTERESTED" is the old name of HIDDEN (saved links)
+    statuses: [...new Set(params.getAll('status').map((s) => (s === 'NOT_INTERESTED' ? 'HIDDEN' : s)))].filter((s): s is StatusFilter =>
+      SHOW_ONLY.includes(s as StatusFilter),
+    ),
     hidden: params.getAll('hide').filter((s): s is JobStatus => HIDEABLE.includes(s as JobStatus)),
     sort: sort === 'company' || sort === 'experience' ? (sort as Sort) : 'newest',
   }

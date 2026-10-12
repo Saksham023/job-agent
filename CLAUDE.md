@@ -79,6 +79,18 @@ as posted on first sight (like Atlassian): matching ones alert once. Apple multi
 chose OPTION 1 = one card, link = first city's page (Apple's own city-less link redirects there too); per-city links NOT wanted.
 Committed together with V44 (c767bd7, pushed). LinkedIn ids round 4 (user-verified, 11 companies) in V45__add_round4_linkedin_ids.sql
 (dry run: 11 updated, every enabled company has an id except Squarepoint); research/linkedin-ids-checklist.html now lists round 4.
+HIDE (2026-10-12, user chose OPTION B; UNCOMMITTED, 397 tests): "Not interested" renamed "Hidden" AND made SEPARATE from the status, so a
+job can be Applied + hidden (user hides jobs right after applying). V46__hide_jobs_separately.sql: user_job_status.hidden boolean,
+status nullable (SAVED/APPLIED/REFERRAL_ASKED), NOT_INTERESTED rows -> hidden + no status, CHECK status or hidden. JobStatus enum =
+3 statuses + HIDDEN (filter value only; parse maps the old NOT_INTERESTED to HIDDEN), JobStatus.STATUSES. JobStatusRepository: set
+(keeps hidden), clear (row deleted if not hidden), hide, unhide (row deleted if no status). JobStatusController: PUT/DELETE
+/api/v1/me/jobs/{id}/status and /hidden. JobSearch: default leaves out hidden + also-hide statuses; status=HIDDEN = hidden jobs (OR with
+statuses); facet counts per status + HIDDEN. JobCard/JobDetail.hidden. Web: api.ts (JobStatus 3, StatusFilter, SHOW_ONLY, setJobHidden),
+lib/status.ts (Marks {status, hidden}, shown(), useSetMarks, statusChange/hiddenChange, toast texts), JobStatus.tsx (StatusChip shows
+status + Hidden chips, menu: 3 statuses + Clear status + Hide/Unhide, HideButton eye on the card, drawer: 3 statuses + Hide),
+FilterPanel Show only adds Hidden, help text, filters.ts maps ?status=NOT_INTERESTED -> HIDDEN. Tested: 17 API checks, local V46 (user's 5
+Not interested -> hidden, 2 Applied unchanged), browser: Applied then Hide -> DB APPLIED + hidden, Hidden view chips, Unhide toast, counts,
+drawer. Committed at the user's request.
 OPEN / BACKLOG (offered 2026-10-12, user picked companies first): close sign-up (JOBAGENT_AUTH_SIGNUP_ENABLED=false on the Air) or an
 Anthropic API key BEFORE other people use the app (resume reads run on the user's Claude subscription); pin ubuntu-latest -> ubuntu-24.04
 in .github/workflows/deploy.yml (GitHub moves the label to Ubuntu 26 on 2026-10-19); log rotation on the Air (DEBUG log grows); nightly

@@ -13,13 +13,15 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * The signed-in user's status for one job.
+ * The signed-in user's marks on one job: its status and, separately, whether it is hidden.
  *
- * PUT    /api/v1/me/jobs/{id}/status   {"status": "APPLIED"}  set or change it
- * DELETE /api/v1/me/jobs/{id}/status                          clear it
+ * PUT    /api/v1/me/jobs/{id}/status   {"status": "APPLIED"}  set or change the status
+ * DELETE /api/v1/me/jobs/{id}/status                          clear the status (a hidden job stays hidden)
+ * PUT    /api/v1/me/jobs/{id}/hidden                          hide the job (its status stays)
+ * DELETE /api/v1/me/jobs/{id}/hidden                          show it again
  */
 @RestController
-@RequestMapping("/api/v1/me/jobs/{id}/status")
+@RequestMapping("/api/v1/me/jobs/{id}")
 public class JobStatusController {
 
     public record Body(String status) {
@@ -31,7 +33,7 @@ public class JobStatusController {
         this.statuses = statuses;
     }
 
-    @PutMapping
+    @PutMapping("/status")
     public ResponseEntity<Void> set(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody Body body) {
         if (!statuses.set(userId(jwt), id, JobStatus.parse(body == null ? null : body.status()))) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No job " + id);
@@ -39,13 +41,27 @@ public class JobStatusController {
         return ResponseEntity.noContent().build();
     }
 
-    @DeleteMapping
+    @DeleteMapping("/status")
     public ResponseEntity<Void> clear(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
         statuses.clear(userId(jwt), id);
         return ResponseEntity.noContent().build();
     }
 
-    /** Statuses belong to a user account: the shared admin key has none. */
+    @PutMapping("/hidden")
+    public ResponseEntity<Void> hide(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
+        if (!statuses.hide(userId(jwt), id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No job " + id);
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/hidden")
+    public ResponseEntity<Void> unhide(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
+        statuses.unhide(userId(jwt), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Marks belong to a user account: the shared admin key has none. */
     private static long userId(Jwt jwt) {
         if (jwt == null) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Sign in to mark jobs");

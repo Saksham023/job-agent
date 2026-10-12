@@ -4,14 +4,22 @@ import { Check, Eye, EyeOff, MoreHorizontal, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { JOB_STATUSES, type JobStatus } from '../lib/api'
-import { dismissToast, STATUS, useSetStatus, useToast } from '../lib/status'
+import { dismissToast, hiddenChange, STATUS, statusChange, useSetMarks, useToast, type Marks } from '../lib/status'
 
-type Job = { id: number; title: string; status: JobStatus | null }
+type Job = { id: number; title: string } & Marks
 
-/** The status a job carries, as a small chip (nothing when it has none). */
-export function StatusChip({ status }: { status: JobStatus | null }) {
-  if (!status) return null
-  const { label, icon: Icon, chip } = STATUS[status]
+/** The status a job carries and whether it is hidden, as small chips (nothing when it has neither). */
+export function StatusChip({ status, hidden }: Marks) {
+  return (
+    <>
+      {status && <Chip mark={status} />}
+      {hidden && <Chip mark="HIDDEN" />}
+    </>
+  )
+}
+
+function Chip({ mark }: { mark: keyof typeof STATUS }) {
+  const { label, icon: Icon, chip } = STATUS[mark]
   return (
     <span className={clsx('inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold', chip)}>
       <Icon size={11} /> {label}
@@ -29,7 +37,7 @@ export function StatusMenu({ job }: { job: Job }) {
   const button = useRef<HTMLButtonElement>(null)
   const menu = useRef<HTMLDivElement>(null)
   const [place, setPlace] = useState<{ top: number; left: number } | null>(null)
-  const set = useSetStatus()
+  const set = useSetMarks()
 
   /** Puts the menu under the button (above when there is no room); closes it once the button is out of view. */
   const position = () => {
@@ -40,7 +48,7 @@ export function StatusMenu({ job }: { job: Job }) {
       return
     }
     const width = 208
-    const height = 228
+    const height = 270
     const below = r.bottom + 6 + height < window.innerHeight
     setPlace({
       top: below ? r.bottom + 6 : r.top - 6 - height,
@@ -73,7 +81,7 @@ export function StatusMenu({ job }: { job: Job }) {
 
   const choose = (status: JobStatus | null) => {
     setOpen(false)
-    if (status !== job.status) set.mutate({ jobId: job.id, title: job.title, status, before: job.status })
+    if (status !== job.status) set.mutate(statusChange(job, status))
   }
 
   return (
@@ -132,17 +140,25 @@ export function StatusMenu({ job }: { job: Job }) {
                 )
               })}
               {job.status && (
-                <>
-                  <div className="my-1 h-px bg-slate-200/70 dark:bg-white/10" />
-                  <button
-                    role="menuitem"
-                    onClick={() => choose(null)}
-                    className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5"
-                  >
-                    <X size={15} /> Clear status
-                  </button>
-                </>
+                <button
+                  role="menuitem"
+                  onClick={() => choose(null)}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5"
+                >
+                  <X size={15} /> Clear status
+                </button>
               )}
+              <div className="my-1 h-px bg-slate-200/70 dark:bg-white/10" />
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false)
+                  set.mutate(hiddenChange(job, !job.hidden))
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/5"
+              >
+                {job.hidden ? <Eye size={15} /> : <EyeOff size={15} />} {job.hidden ? 'Unhide' : 'Hide'}
+              </button>
             </motion.div>
           )}
         </AnimatePresence>,
@@ -153,18 +169,18 @@ export function StatusMenu({ job }: { job: Job }) {
 }
 
 /**
- * One click "Not interested" in the card's corner (the action used most); on a job already marked so (the "Not
- * interested" view) it shows the job again. The other statuses stay in the "..." menu.
+ * One click "Hide" in the card's corner (the action used most, e.g. right after applying); the job keeps its status.
+ * On a hidden job (the "Hidden" view) it shows the job again. The statuses stay in the "..." menu.
  */
-export function NotInterestedButton({ job }: { job: Job }) {
-  const set = useSetStatus()
-  const hidden = job.status === 'NOT_INTERESTED'
-  const label = hidden ? 'Show this job again' : 'Not interested'
+export function HideButton({ job }: { job: Job }) {
+  const set = useSetMarks()
+  const hidden = job.hidden
+  const label = hidden ? 'Unhide' : 'Hide'
   return (
     <button
       onClick={(e) => {
         e.stopPropagation()
-        set.mutate({ jobId: job.id, title: job.title, status: hidden ? null : 'NOT_INTERESTED', before: job.status })
+        set.mutate(hiddenChange(job, !hidden))
       }}
       aria-label={label}
       title={label}
@@ -175,11 +191,11 @@ export function NotInterestedButton({ job }: { job: Job }) {
   )
 }
 
-/** The four statuses as buttons (the job drawer); clicking the active one clears it. */
+/** The three statuses and Hide as buttons (the job drawer); clicking an active one clears it. */
 export function StatusButtons({ job }: { job: Job }) {
-  const set = useSetStatus()
+  const set = useSetMarks()
   return (
-    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" role="group" aria-label="Your status for this job">
+    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" role="group" aria-label="Your marks for this job">
       {JOB_STATUSES.map((status) => {
         const { label, icon: Icon } = STATUS[status]
         const active = job.status === status
@@ -187,7 +203,7 @@ export function StatusButtons({ job }: { job: Job }) {
           <button
             key={status}
             aria-pressed={active}
-            onClick={() => set.mutate({ jobId: job.id, title: job.title, status: active ? null : status, before: job.status })}
+            onClick={() => set.mutate(statusChange(job, active ? null : status))}
             className={clsx(
               'flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition',
               active
@@ -199,14 +215,26 @@ export function StatusButtons({ job }: { job: Job }) {
           </button>
         )
       })}
+      <button
+        aria-pressed={job.hidden}
+        onClick={() => set.mutate(hiddenChange(job, !job.hidden))}
+        className={clsx(
+          'flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition',
+          job.hidden
+            ? 'border-violet-500 bg-violet-500/10 text-violet-700 dark:text-violet-200'
+            : 'border-slate-200 text-slate-600 hover:border-violet-400 hover:text-violet-600 dark:border-white/10 dark:text-slate-300 dark:hover:text-violet-300',
+        )}
+      >
+        <EyeOff size={14} className="shrink-0" /> <span className="truncate">{job.hidden ? 'Hidden' : 'Hide'}</span>
+      </button>
     </div>
   )
 }
 
-/** "Hidden … · Undo" after a job is marked not interested, or an error when the server refused a change. */
+/** "Hidden … · Undo" after a job leaves the open list, or an error when the server refused a change. */
 export function StatusToast() {
   const toast = useToast()
-  const set = useSetStatus()
+  const set = useSetMarks()
   return createPortal(
     <AnimatePresence>
       {toast && (

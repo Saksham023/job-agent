@@ -21,9 +21,9 @@ import java.util.Map;
  * @param skills          canonical skills; the job must mention all of them (required or preferred)
  * @param query           keyword in the title or the company name
  * @param postedWithinDays only jobs posted in the last N days
- * @param statuses        only jobs the user marked with one of these statuses; empty = every job except the ones the
- *                        user marked NOT_INTERESTED (and those in `hidden`)
- * @param hidden          statuses the user also hides for now (e.g. APPLIED), on top of NOT_INTERESTED; ignored while
+ * @param statuses        only jobs the user marked with one of these (HIDDEN = the hidden jobs, whatever their status);
+ *                        empty = every job except the user's hidden jobs (and those with a status in `hidden`)
+ * @param hidden          statuses the user also hides for now (e.g. APPLIED), on top of the hidden jobs; ignored while
  *                        `statuses` picks what to show
  * @param userId          whose statuses count (the signed-in user); null = no user (the shared admin key): statuses
  *                        play no part and a status filter matches nothing
@@ -57,8 +57,8 @@ public record JobSearch(List<String> companies, List<JobFamily> families, Intege
     }
 
     /**
-     * The status part of every search query: each job's status for this user (s.status, NULL = none). The search's
-     * FROM clauses add it after job_requirements; the WHERE clause always binds :userId.
+     * The status part of every search query: each job's marks for this user (s.status, NULL = none; s.hidden, NULL when
+     * the job has no row). The search's FROM clauses add it after job_requirements; the WHERE clause always binds :userId.
      */
     public static final String STATUS_JOIN = " LEFT JOIN user_job_status s ON s.job_id = j.id AND s.user_id = CAST(:userId AS bigint)";
 
@@ -115,10 +115,12 @@ public record JobSearch(List<String> companies, List<JobFamily> families, Intege
         params.put("country", country);
         params.put("userId", userId);
         if (!statuses.isEmpty()) {
-            conditions.add(userId == null ? "false" : "s.status = ANY(CAST(:statuses AS text[]))");
-            params.put("statuses", statuses.stream().map(Enum::name).toArray(String[]::new));
+            conditions.add(userId == null ? "false" : statuses.contains(JobStatus.HIDDEN)
+                    ? "(s.status = ANY(CAST(:statuses AS text[])) OR s.hidden)"
+                    : "s.status = ANY(CAST(:statuses AS text[]))");
+            params.put("statuses", statuses.stream().filter(JobStatus.STATUSES::contains).map(Enum::name).toArray(String[]::new));
         } else if (userId != null) {
-            conditions.add("(s.status IS NULL OR s.status <> ALL(CAST(:hidden AS text[])))");
+            conditions.add("(s.job_id IS NULL OR (NOT s.hidden AND (s.status IS NULL OR s.status <> ALL(CAST(:hidden AS text[])))))");
             params.put("hidden", hiddenStatuses().stream().map(Enum::name).toArray(String[]::new));
         }
 
@@ -177,8 +179,8 @@ public record JobSearch(List<String> companies, List<JobFamily> families, Intege
     /**
      * This search without its own selection in one "any of" list, for that list's counts: with Amazon picked, the
      * other companies still show how many jobs they would add. Skills are "all of", so their counts keep the
-     * selected skills (each count = jobs left after adding that skill). For the status list it selects EVERY status,
-     * so each status (Not interested too) is counted under the other filters.
+     * selected skills (each count = jobs left after adding that skill). For the status list it selects EVERY status
+     * and the hidden jobs, so each is counted under the other filters.
      */
     public JobSearch without(Facet facet) {
         return new JobSearch(facet == Facet.COMPANY ? List.of() : companies, facet == Facet.FAMILY ? List.of() : families,
@@ -187,11 +189,9 @@ public record JobSearch(List<String> companies, List<JobFamily> families, Intege
                 userId);
     }
 
-    /** What the default view leaves out: NOT_INTERESTED always, plus what the user chose to hide for now. */
+    /** The statuses the default view also leaves out for now (hidden jobs are always left out). */
     public List<JobStatus> hiddenStatuses() {
-        List<JobStatus> all = new ArrayList<>(List.of(JobStatus.NOT_INTERESTED));
-        hidden.stream().filter(s -> !all.contains(s)).forEach(all::add);
-        return all;
+        return hidden.stream().filter(JobStatus.STATUSES::contains).distinct().toList();
     }
 
     /**

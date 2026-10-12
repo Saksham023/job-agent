@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { Briefcase, Building2, Calendar, Check, ChevronDown, ListChecks, Layers, MapPin, RotateCcw, Search, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { HIDEABLE, JOB_STATUSES, type Facets, type Filters, type Meta, type UserProfile } from '../lib/api'
+import { HIDEABLE, SHOW_ONLY, type Facets, type Filters, type Meta, type UserProfile } from '../lib/api'
 import { activeCount, toggle } from '../lib/filters'
 import { STATUS } from '../lib/status'
 import { Avatar } from './Avatar'
@@ -130,7 +130,7 @@ export function MyJobsPicker({ facets, filters, update }: { facets: Facets | und
     <div className="space-y-3">
       <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Show only</p>
       <div className="-mt-1.5 flex flex-wrap gap-1.5">
-        {JOB_STATUSES.map((status) => {
+        {SHOW_ONLY.map((status) => {
           const Icon = STATUS[status].icon
           return (
             <Chip key={status} active={filters.statuses.includes(status)} count={facets?.statuses?.[status] ?? 0} onClick={() => update({ statuses: toggle(filters.statuses, status) })}>
@@ -156,8 +156,8 @@ export function MyJobsPicker({ facets, filters, update }: { facets: Facets | und
       </div>
       <p className="text-[11px] text-slate-400">
         {showing
-          ? 'Showing only the jobs you marked like this.'
-          : '"Not interested" jobs are always hidden. Pick "Also hide" to hide more for now, or "Show only" to see marked jobs.'}
+          ? 'Showing only the jobs you marked or hid like this.'
+          : 'Hidden jobs never show here. Pick "Also hide" to leave out more for now, or "Show only" to see the jobs you marked or hid.'}
       </p>
     </div>
   )

@@ -30,8 +30,8 @@ import java.util.Map;
  *
  * GET /api/v1/meta        companies, job families, cities, skills (each with open job counts) and totals
  * GET /api/v1/jobs        search: company, family, minYears, maxYears, includeUnstated, city, skill, q,
- *                         postedWithinDays, status (the signed-in user's: SAVED, APPLIED, REFERRAL_ASKED, NOT_INTERESTED;
- *                         none = everything except NOT_INTERESTED), hide (statuses also hidden for now, e.g.
+ *                         postedWithinDays, status (the signed-in user's: SAVED, APPLIED, REFERRAL_ASKED, or HIDDEN for
+ *                         the jobs they hid; none = everything except hidden jobs), hide (statuses also hidden for now, e.g.
  *                         APPLIED; ignored while status is given), sort (newest|company|experience), page, size; repeat
  *                         a parameter for several values (?family=SOFTWARE_ENGINEERING&family=DATA_ML)
  * GET /api/v1/facets      live counts for every filter list under the current filters (same parameters)

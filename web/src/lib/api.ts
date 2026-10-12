@@ -20,12 +20,17 @@ export type Totals = {
 
 export type Meta = { totals: Totals; companies: Company[]; families: Family[]; cities: Count[]; skills: Count[] }
 
-/** What the signed-in user marked a job as. NOT_INTERESTED jobs are hidden from the normal search. */
-export type JobStatus = 'SAVED' | 'APPLIED' | 'REFERRAL_ASKED' | 'NOT_INTERESTED'
+/** What the signed-in user marked a job as (at most one). Hiding a job is separate: a job can be Applied AND hidden. */
+export type JobStatus = 'SAVED' | 'APPLIED' | 'REFERRAL_ASKED'
 
-export const JOB_STATUSES: JobStatus[] = ['SAVED', 'APPLIED', 'REFERRAL_ASKED', 'NOT_INTERESTED']
+export const JOB_STATUSES: JobStatus[] = ['SAVED', 'APPLIED', 'REFERRAL_ASKED']
 
-/** The statuses one can hide for now ("Not interested" is always hidden). */
+/** What "Show only" can pick: a status, or HIDDEN for the jobs the user hid (whatever their status). */
+export type StatusFilter = JobStatus | 'HIDDEN'
+
+export const SHOW_ONLY: StatusFilter[] = [...JOB_STATUSES, 'HIDDEN']
+
+/** The statuses one can also hide for now (hidden jobs are always left out). */
 export const HIDEABLE: JobStatus[] = ['SAVED', 'APPLIED', 'REFERRAL_ASKED']
 
 export type JobCard = {
@@ -45,6 +50,8 @@ export type JobCard = {
   url: string
   /** the signed-in user's status for this job, null = none */
   status: JobStatus | null
+  /** the signed-in user hid this job (left out of the normal search) */
+  hidden: boolean
 }
 
 export type JobPage = { total: number; page: number; size: number; hasMore: boolean; jobs: JobCard[] }
@@ -88,9 +95,9 @@ export type Filters = {
   cities: string[]
   skills: string[]
   postedWithinDays: number | null
-  /** only jobs I marked with one of these; empty = all jobs except "Not interested" */
-  statuses: JobStatus[]
-  /** statuses also hidden for now (e.g. APPLIED), on top of "Not interested"; ignored while `statuses` is set */
+  /** only jobs I marked with one of these (HIDDEN = the jobs I hid); empty = all jobs except the hidden ones */
+  statuses: StatusFilter[]
+  /** statuses also hidden for now (e.g. APPLIED), on top of the hidden jobs; ignored while `statuses` is set */
   hidden: JobStatus[]
   sort: Sort
 }
@@ -137,6 +144,12 @@ export async function setJobStatus(jobId: number, status: JobStatus | null): Pro
       ? { method: 'DELETE' }
       : { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) },
   )
+  if (!response.ok) throw new Error(await errorOf(response))
+}
+
+/** Hides one job from the signed-in user's search, or shows it again; its status stays. */
+export async function setJobHidden(jobId: number, hidden: boolean): Promise<void> {
+  const response = await authFetch(`/api/v1/me/jobs/${jobId}/hidden`, { method: hidden ? 'PUT' : 'DELETE' })
   if (!response.ok) throw new Error(await errorOf(response))
 }
 

@@ -4,7 +4,7 @@ import { ArrowUpRight, Briefcase, Globe2, MapPin } from 'lucide-react'
 import type { JobCard as Job } from '../lib/api'
 import { ago, FAMILY_SHORT, isFresh, years } from '../lib/format'
 import { Avatar } from './Avatar'
-import { NotInterestedButton, StatusChip, StatusMenu } from './JobStatus'
+import { HideButton, StatusChip, StatusMenu } from './JobStatus'
 
 export function JobCard({ job, index, onOpen }: { job: Job; index: number; onOpen: () => void }) {
   const fresh = isFresh(job.postedAt)
@@ -22,7 +22,7 @@ export function JobCard({ job, index, onOpen }: { job: Job; index: number; onOpe
     >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/0 via-transparent to-cyan-500/0 opacity-0 transition-opacity duration-300 group-hover:from-violet-500/[0.07] group-hover:to-cyan-500/[0.06] group-hover:opacity-100" />
       <div className="absolute top-3 right-3 z-10">
-        <NotInterestedButton job={job} />
+        <HideButton job={job} />
       </div>
       <div className="relative flex items-start gap-3.5 pr-7">
         <Avatar slug={job.companySlug} name={job.company} />
@@ -60,7 +60,7 @@ export function JobCard({ job, index, onOpen }: { job: Job; index: number; onOpe
 
       <div className="relative mt-4 flex items-end justify-between gap-3">
         <div className="flex min-w-0 flex-wrap gap-1.5">
-          <StatusChip status={job.status} />
+          <StatusChip status={job.status} hidden={job.hidden} />
           {job.family && (
             <span className="rounded-md bg-violet-500/10 px-2 py-1 text-[11px] font-semibold text-violet-700 dark:text-violet-300">
               {FAMILY_SHORT[job.family] ?? job.family}

@@ -29,10 +29,11 @@ public class PublicJobRepository {
                          Instant lastCrawlAt) {
     }
 
-    /** One job in a result list; status = what the signed-in user marked it as (null = nothing). */
+    /** One job in a result list; status = what the signed-in user marked it as (null = nothing), hidden = they hid it. */
     public record JobCard(long id, String title, String companySlug, String company, List<String> cities, boolean remote,
                           Integer minYears, Integer maxYears, boolean yearsStated, String family,
-                          String specialization, List<String> skills, Instant postedAt, String url, String status) {
+                          String specialization, List<String> skills, Instant postedAt, String url, String status,
+                          boolean hidden) {
     }
 
     /** One job in full. */
@@ -41,7 +42,8 @@ public class PublicJobRepository {
                             Instant postedAt, Integer minYears, Integer maxYears,
                             boolean yearsStated, String yearsEvidence, String family, List<String> secondaryFamilies, String specialization,
                             List<String> requiredSkills, List<String> preferredSkills, List<String> primaryLanguages,
-                            String description, String linkedinCompanyId, int otherCountries, String status) {
+                            String description, String linkedinCompanyId, int otherCountries, String status,
+                            boolean hidden) {
     }
 
     private static final String OPEN = "j.closed_at IS NULL AND j.country_codes @> ARRAY[CAST(:country AS text)]";
@@ -64,7 +66,7 @@ public class PublicJobRepository {
             """ + JobSearch.STATED + """
              AS years_stated, r.family, r.specialization,
             (r.required_skills || r.preferred_skills)[1 : 6] AS skills, """ + JobSearch.POSTED + """
-             AS posted_at, j.url, s.status
+             AS posted_at, j.url, s.status, coalesce(s.hidden, false) AS hidden
             """;
 
     private final JdbcClient jdbc;
@@ -97,7 +99,7 @@ public class PublicJobRepository {
     /**
      * Live counts for the filter lists under the current search (see JobSearch.without). A family counts a job when it
      * is the job's family or one of its secondary families, exactly like the family filter. statuses = how many jobs
-     * the user marked with each status (empty without a user).
+     * the user marked with each status, and HIDDEN = how many they hid (empty without a user).
      */
     public record Facets(Map<String, Integer> families, Map<String, Integer> companies, Map<String, Integer> cities,
                          int remote, List<Count> skills, Map<String, Integer> statuses) {
@@ -129,8 +131,9 @@ public class PublicJobRepository {
                         .params(skills.params())
                         .query((rs, n) -> new Count(rs.getString("name"), rs.getInt("jobs"))).list(),
                 search.userId() == null ? Map.of()
-                        : countMap("SELECT s.status AS name, count(*) AS jobs" + FROM + " WHERE " + statuses.sql()
-                                + " GROUP BY 1", statuses));
+                        : countMap("SELECT mark AS name, count(*) AS jobs" + FROM
+                                + ", unnest(ARRAY[s.status, CASE WHEN s.hidden THEN 'HIDDEN' END]) AS mark WHERE "
+                                + statuses.sql() + " AND mark IS NOT NULL GROUP BY 1", statuses));
     }
 
     private Map<String, Integer> countMap(String sql, Where where) {
@@ -164,7 +167,8 @@ public class PublicJobRepository {
                                """ + JobSearch.STATED + """
                          AS years_stated, r.years_evidence, r.family, r.secondary_families, r.specialization,
                                r.required_skills, r.preferred_skills, r.primary_languages, j.description,
-                               c.config ->> 'linkedinCompanyId' AS linkedin_company_id, s.status
+                               c.config ->> 'linkedinCompanyId' AS linkedin_company_id, s.status,
+                               coalesce(s.hidden, false) AS hidden
                         FROM jobs j JOIN companies c ON c.id = j.company_id
                         LEFT JOIN job_requirements r ON r.job_id = j.id
                         """ + JobSearch.STATUS_JOIN + """
@@ -181,7 +185,8 @@ public class PublicJobRepository {
                         rs.getBoolean("years_stated"), rs.getString("years_evidence"), rs.getString("family"),
                         list(rs, "secondary_families"), rs.getString("specialization"), list(rs, "required_skills"),
                         list(rs, "preferred_skills"), list(rs, "primary_languages"), rs.getString("description"),
-                        rs.getString("linkedin_company_id"), rs.getInt("other_countries"), rs.getString("status")))
+                        rs.getString("linkedin_company_id"), rs.getInt("other_countries"), rs.getString("status"),
+                        rs.getBoolean("hidden")))
                 .optional();
     }
 
@@ -250,7 +255,8 @@ public class PublicJobRepository {
         return new JobCard(rs.getLong("id"), rs.getString("title"), rs.getString("slug"), rs.getString("name"),
                 list(rs, "cities"), rs.getBoolean("remote"), integer(rs, "min_years"), integer(rs, "max_years"),
                 rs.getBoolean("years_stated"), rs.getString("family"), rs.getString("specialization"),
-                list(rs, "skills"), instant(rs, "posted_at"), rs.getString("url"), rs.getString("status"));
+                list(rs, "skills"), instant(rs, "posted_at"), rs.getString("url"), rs.getString("status"),
+                rs.getBoolean("hidden"));
     }
 
     private static List<String> list(ResultSet rs, String column) throws SQLException {

@@ -117,30 +117,34 @@ class JobSearchTest {
     }
 
     @Test
-    void aSignedInUsersNotInterestedJobsAreHiddenByDefault() {
+    void aSignedInUsersHiddenJobsAreLeftOutByDefault() {
         Where where = withStatus(List.of(), 7L).where("IN");
-        assertThat(where.sql()).contains("(s.status IS NULL OR s.status <> ALL(CAST(:hidden AS text[])))");
-        assertThat((String[]) where.params().get("hidden")).containsExactly("NOT_INTERESTED");
+        assertThat(where.sql()).contains(
+                "(s.job_id IS NULL OR (NOT s.hidden AND (s.status IS NULL OR s.status <> ALL(CAST(:hidden AS text[])))))");
+        assertThat((String[]) where.params().get("hidden")).isEmpty();
         assertThat(where.params()).containsEntry("userId", 7L).doesNotContainKey("statuses");
     }
 
     @Test
-    void appliedJobsCanBeHiddenForNowOnTopOfNotInterested() {
-        Where where = withStatus(List.of(), List.of(JobStatus.APPLIED, JobStatus.NOT_INTERESTED), 7L).where("IN");
-        assertThat((String[]) where.params().get("hidden")).containsExactly("NOT_INTERESTED", "APPLIED");
-        // picking statuses to show wins: nothing is hidden then
+    void appliedJobsCanBeHiddenForNowOnTopOfTheHiddenJobs() {
+        Where where = withStatus(List.of(), List.of(JobStatus.APPLIED, JobStatus.HIDDEN), 7L).where("IN");
+        assertThat((String[]) where.params().get("hidden")).containsExactly("APPLIED");    // HIDDEN is not a status
+        // picking what to show wins: nothing is hidden then
         Where shown = withStatus(List.of(JobStatus.APPLIED), List.of(JobStatus.APPLIED), 7L).where("IN");
-        assertThat(shown.sql()).contains("s.status = ANY").doesNotContain(":hidden");
+        assertThat(shown.sql()).contains("s.status = ANY").doesNotContain(":hidden").doesNotContain("s.hidden");
         // the hidden choice survives the facet copies
         assertThat(withStatus(List.of(), List.of(JobStatus.SAVED), 7L).without(JobSearch.Facet.COMPANY).hidden())
                 .containsExactly(JobStatus.SAVED);
     }
 
     @Test
-    void aStatusFilterShowsOnlyThoseStatusesNotInterestedIncluded() {
-        Where where = withStatus(List.of(JobStatus.APPLIED, JobStatus.NOT_INTERESTED), 7L).where("IN");
-        assertThat(where.sql()).contains("s.status = ANY(CAST(:statuses AS text[]))").doesNotContain("IS DISTINCT FROM");
-        assertThat((String[]) where.params().get("statuses")).containsExactly("APPLIED", "NOT_INTERESTED");
+    void showOnlyHiddenListsTheHiddenJobsWhateverTheirStatus() {
+        Where where = withStatus(List.of(JobStatus.APPLIED, JobStatus.HIDDEN), 7L).where("IN");
+        assertThat(where.sql()).contains("(s.status = ANY(CAST(:statuses AS text[])) OR s.hidden)");
+        assertThat((String[]) where.params().get("statuses")).containsExactly("APPLIED");
+        Where hiddenOnly = withStatus(List.of(JobStatus.HIDDEN), 7L).where("IN");
+        assertThat((String[]) hiddenOnly.params().get("statuses")).isEmpty();
+        assertThat(hiddenOnly.sql()).contains("OR s.hidden)");
     }
 
     @Test
@@ -163,9 +167,9 @@ class JobSearchTest {
     }
 
     @Test
-    void onlyTheFourKnownStatusesAreAccepted() {
-        assertThat(JobStatus.parse(List.of("applied", " Not_Interested ", "applied"))).containsExactly(JobStatus.APPLIED,
-                JobStatus.NOT_INTERESTED);
+    void onlyTheKnownStatusesAreAcceptedAndTheOldNameMeansHidden() {
+        assertThat(JobStatus.parse(List.of("applied", " Not_Interested ", "hidden", "applied")))
+                .containsExactly(JobStatus.APPLIED, JobStatus.HIDDEN);
         assertThatThrownBy(() -> JobStatus.parse("INTERVIEWING")).hasMessageContaining("status must be one of");
         assertThatThrownBy(() -> JobStatus.parse((String) null)).isInstanceOf(IllegalArgumentException.class);
     }
