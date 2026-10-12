@@ -62,6 +62,22 @@ Rules check: 13 unclassified (bank/trading business roles, IMC event postings), 
 change (one-offs: NK 'Network Infrastructure Manager' -> SWE via dept, IMC 'IT Operations Engineer' -> OPERATIONS, Arcesium 'Senior
 Consultant - Margin Calculator' -> SWE via dept Technology). API/status/facets checks OK; 120 queued for alerts, only 5 posted < 2 days.
 NEXT: commit when asked, LinkedIn ids for the 9 later, then step (2) Apple + D. E. Shaw.
+STEP (1) COMMITTED 8dcf122 + pushed. STEP (2) BUILT 2026-10-12 (UNCOMMITTED, 397 tests): crawl/adapter/AppleAdapter (platform "apple": India
+search pages jobs.apple.com/en-in/search?location=india-INDC&page=N, data in window.__staticRouterHydrationData = JSON.parse("..."),
+entries grouped by positionId = one job with all its cities (174 entries -> 159 roles), one job page per role
+(/details/<id>/<slug>, PIPE- ids use the positionId) with description/responsibilities/minimum+preferred qualifications, DetailCache
+reuse, Batcher, ShutdownSignal; Apple Retail store roles (managedPipelineRole true) report the CURRENT time as posting time on every
+request -> ignored (posted null, not in the list fingerprint), found in the live re-crawl), crawl/adapter/DeShawAdapter (platform
+"deshaw": one request to www.deshawindia.com/careers, __NEXT_DATA__ props.pageProps.regularJobs = all 75 positions incl. 6 "All positions
+in ..." general applications KEPT (user's choice), text fields may be a LIST of strings, no posting date, link = lower-case slug),
+crawl/adapter/PlainText (plain lines/bullets -> HTML), tests AppleAdapterTest/DeShawAdapterTest with pages in src/test/resources/crawl/,
+V44__add_apple_and_deshaw.sql, CONFIGURATION.md rows. User kept Apple Retail roles. Local crawl (8091): D. E. Shaw 75 in 3 s; Apple 159
+roles in 7.7 min first time, then 15 s (0 pages fetched, 159 reused). Rules check: years right on almost all; D. E. Shaw tech = SWE (6
+'Tech Ops'/'Legal Tech' UNCLASSIFIED with SWE secondary -> gap fill); Apple SWE/SRE/ML right, store roles UNCLASSIFIED, hardware
+'Product Design Engineer' -> DESIGN (2 jobs, one-off, no rule). API/status checks OK. Alerts: D. E. Shaw has no dates, so its 75 count
+as posted on first sight (like Atlassian): matching ones alert once. Apple multi-city roles (12 of 159): one requisition (PIPE-<positionId>), identical text, every city page lists all offices; user
+chose OPTION 1 = one card, link = first city's page (Apple's own city-less link redirects there too); per-city links NOT wanted.
+Committed together with V44. NEXT: LinkedIn ids for round 3 + Apple/D. E. Shaw (user collects by hand).
 OPEN / BACKLOG (offered 2026-10-12, user picked companies first): close sign-up (JOBAGENT_AUTH_SIGNUP_ENABLED=false on the Air) or an
 Anthropic API key BEFORE other people use the app (resume reads run on the user's Claude subscription); pin ubuntu-latest -> ubuntu-24.04
 in .github/workflows/deploy.yml (GitHub moves the label to Ubuntu 26 on 2026-10-19); log rotation on the Air (DEBUG log grows); nightly

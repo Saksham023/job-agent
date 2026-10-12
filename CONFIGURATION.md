@@ -254,6 +254,11 @@ and reproducible, put the same `UPDATE` in a new Flyway migration (`src/main/res
 | Amazon | `delayMs` | no | `1000` | pause per list page |
 | Atlassian | `country` | no | `IN` | ISO code; a posting is kept when a location names that country in English ("India", never "Indiana") |
 | Atlassian | `url` | no | `https://www.atlassian.com/endpoint/careers/listings` | the one list request (all postings worldwide, full text) |
+| Apple | `locale` | no | `en-in` | the site's language and country path (`jobs.apple.com/en-in/...`) |
+| Apple | `location` | no | `india-INDC` | the search's location filter (`search?location=india-INDC`) |
+| Apple | `delayMs` | no | `1000` | pause before every page (search pages + one job page per new role) |
+| D. E. Shaw | `url` | no | `https://www.deshawindia.com/careers` | the one careers page (all India positions with full text); job links are `url` + `/` + the job's slug |
+| D. E. Shaw | `country` | no | `IN` | ISO code of the site's offices (the India site lists only Indian offices) |
 
 ## 3. Data files (rules, edited by hand)
 
