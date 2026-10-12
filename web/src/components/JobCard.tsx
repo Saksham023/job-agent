@@ -4,7 +4,7 @@ import { ArrowUpRight, Briefcase, Globe2, MapPin } from 'lucide-react'
 import type { JobCard as Job } from '../lib/api'
 import { ago, FAMILY_SHORT, isFresh, years } from '../lib/format'
 import { Avatar } from './Avatar'
-import { StatusChip, StatusMenu } from './JobStatus'
+import { NotInterestedButton, StatusChip, StatusMenu } from './JobStatus'
 
 export function JobCard({ job, index, onOpen }: { job: Job; index: number; onOpen: () => void }) {
   const fresh = isFresh(job.postedAt)
@@ -21,7 +21,10 @@ export function JobCard({ job, index, onOpen }: { job: Job; index: number; onOpe
       className="glass group relative cursor-pointer overflow-hidden rounded-2xl p-5 transition-shadow hover:shadow-xl hover:shadow-violet-500/10"
     >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/0 via-transparent to-cyan-500/0 opacity-0 transition-opacity duration-300 group-hover:from-violet-500/[0.07] group-hover:to-cyan-500/[0.06] group-hover:opacity-100" />
-      <div className="relative flex items-start gap-3.5">
+      <div className="absolute top-3 right-3 z-10">
+        <NotInterestedButton job={job} />
+      </div>
+      <div className="relative flex items-start gap-3.5 pr-7">
         <Avatar slug={job.companySlug} name={job.company} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-[13px] text-slate-500 dark:text-slate-400">

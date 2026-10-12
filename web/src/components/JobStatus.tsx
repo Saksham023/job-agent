@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
-import { Check, MoreHorizontal, X } from 'lucide-react'
+import { Check, Eye, EyeOff, MoreHorizontal, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { JOB_STATUSES, type JobStatus } from '../lib/api'
@@ -149,6 +149,29 @@ export function StatusMenu({ job }: { job: Job }) {
         document.body,
       )}
     </>
+  )
+}
+
+/**
+ * One click "Not interested" in the card's corner (the action used most); on a job already marked so (the "Not
+ * interested" view) it shows the job again. The other statuses stay in the "..." menu.
+ */
+export function NotInterestedButton({ job }: { job: Job }) {
+  const set = useSetStatus()
+  const hidden = job.status === 'NOT_INTERESTED'
+  const label = hidden ? 'Show this job again' : 'Not interested'
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        set.mutate({ jobId: job.id, title: job.title, status: hidden ? null : 'NOT_INTERESTED', before: job.status })
+      }}
+      aria-label={label}
+      title={label}
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-400"
+    >
+      {hidden ? <Eye size={16} /> : <EyeOff size={16} />}
+    </button>
   )
 }
 

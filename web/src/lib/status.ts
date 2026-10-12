@@ -87,7 +87,13 @@ function setToast(next: Toast) {
 }
 
 function showUndo(change: Change) {
-  setToast({ id: Date.now(), text: `Hidden “${change.title}”`, undo: { ...change, status: change.before, before: change.status, undone: true } })
+  const text =
+    change.status === 'NOT_INTERESTED' || change.status == null && change.before == null
+      ? `Hidden “${change.title}”`
+      : change.status == null
+        ? `“${change.title}” is back in your search`
+        : `Marked “${change.title}” as ${STATUS[change.status].label}`
+  setToast({ id: Date.now(), text, undo: { ...change, status: change.before, before: change.status, undone: true } })
 }
 
 function showError(text: string) {
