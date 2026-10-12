@@ -32,11 +32,11 @@
 <body>
 <main>
   <h1>LinkedIn company ids</h1>
-  <p class="lead">Round 3: the 20 companies added in V37. For the "Find your connections" button. With a verified id the button finds people <b>currently</b> at the company; without one it falls back to a name search.</p>
+  <p class="lead">Round 4: the 9 companies added in V43 plus Apple and D. E. Shaw (V44). For the "Find your connections" button. With a verified id the button finds people <b>currently</b> at the company; without one it falls back to a name search.</p>
   <ol class="how">
     <li><b>Candidate given</b> (none this round): click <i>check</i>. If LinkedIn opens <b>that company's</b> page, tick "correct". If it opens another company, tick "wrong".</li>
     <li><b>No candidate (or wrong):</b> click <i>find</i>, open the company's main page (most followers, right logo), click <i>See all N employees</i>, copy the <b>whole address</b> from the address bar and paste it into the box. The number is picked out for you (the green line shows it). A "See all jobs" address (<code>f_C=</code>) works too.</li>
-    <li><b>Company hiring under several pages</b> (e.g. Samsung Electronics + Samsung R&amp;D Institute Bangalore / Noida): paste each page's address (or number) into the same box, separated by spaces. All of them are kept and the button searches them together.</li>
+    <li><b>Company hiring under several pages</b> (e.g. Samsung Electronics + Samsung R&amp;D Institute; this round maybe D. E. Shaw &amp; Co. + D. E. Shaw India): paste each page's address (or number) into the same box, separated by spaces. All of them are kept and the button searches them together.</li>
     <li>Press <b>Copy results</b> and paste the text into the chat.</li>
   </ol>
   <table>
@@ -47,13 +47,11 @@
   <textarea id="out" readonly placeholder="Results appear here"></textarea>
 </main>
 <script>
-// Round 3 (2026-10-11): the 20 well-paying companies added in V37. Rounds 1-2 and Atlassian are already stored.
+// Round 4 (2026-10-12): the 9 companies added in V43, plus Apple and D. E. Shaw (V44). Earlier rounds are already stored.
 const COMPANIES = [
-  ['swiggy','Swiggy',''], ['okta','Okta',''], ['morgan-stanley','Morgan Stanley',''], ['ebay','eBay',''],
-  ['mongodb','MongoDB',''], ['tekion','Tekion',''], ['inmobi','InMobi',''], ['crowdstrike','CrowdStrike',''],
-  ['gitlab','GitLab',''], ['glean','Glean',''], ['squarepoint','Squarepoint Capital',''], ['elastic','Elastic',''],
-  ['druva','Druva',''], ['grab','Grab',''], ['harness','Harness',''], ['worldquant','WorldQuant',''],
-  ['openai','OpenAI',''], ['atlan','Atlan',''], ['anthropic','Anthropic',''], ['deliveroo','Deliveroo','']
+  ['apple','Apple',''], ['deshaw','D. E. Shaw',''], ['arcesium','Arcesium',''], ['imc','IMC Trading',''],
+  ['optiver','Optiver',''], ['alphagrep','AlphaGrep',''], ['nk-securities','NK Securities',''], ['observe-ai','Observe.AI',''],
+  ['agoda','Agoda',''], ['zendesk','Zendesk',''], ['eightfold-ai','Eightfold AI','']
 ];
 /**
  * Every company id in what was typed or pasted: people-search addresses (currentCompany=["1586"], also URL-encoded),

@@ -77,7 +77,8 @@ roles in 7.7 min first time, then 15 s (0 pages fetched, 159 reused). Rules chec
 'Product Design Engineer' -> DESIGN (2 jobs, one-off, no rule). API/status checks OK. Alerts: D. E. Shaw has no dates, so its 75 count
 as posted on first sight (like Atlassian): matching ones alert once. Apple multi-city roles (12 of 159): one requisition (PIPE-<positionId>), identical text, every city page lists all offices; user
 chose OPTION 1 = one card, link = first city's page (Apple's own city-less link redirects there too); per-city links NOT wanted.
-Committed together with V44. NEXT: LinkedIn ids for round 3 + Apple/D. E. Shaw (user collects by hand).
+Committed together with V44 (c767bd7, pushed). LinkedIn ids round 4 (user-verified, 11 companies) in V45__add_round4_linkedin_ids.sql
+(dry run: 11 updated, every enabled company has an id except Squarepoint); research/linkedin-ids-checklist.html now lists round 4.
 OPEN / BACKLOG (offered 2026-10-12, user picked companies first): close sign-up (JOBAGENT_AUTH_SIGNUP_ENABLED=false on the Air) or an
 Anthropic API key BEFORE other people use the app (resume reads run on the user's Claude subscription); pin ubuntu-latest -> ubuntu-24.04
 in .github/workflows/deploy.yml (GitHub moves the label to Ubuntu 26 on 2026-10-19); log rotation on the Air (DEBUG log grows); nightly
