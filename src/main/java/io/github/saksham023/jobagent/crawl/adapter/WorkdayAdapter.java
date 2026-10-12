@@ -42,7 +42,9 @@ import static io.github.saksham023.jobagent.crawl.adapter.JsonFields.text;
  * Location_Country, locationHierarchy1, a long custom name at Salesforce) and some only have city entries. So the
  * first, unfiltered call reads the facets: a facet with a value named exactly like the country ("India") wins;
  * otherwise every "locations" entry our LocationParser places in that country is used. Free-text search is never
- * used ("India" also matches "Indiana").
+ * used ("India" also matches "Indiana"). A tenant that hires ONLY in the country (config.singleCountry, JioStar) is
+ * listed without any filter: some of its postings have a blank location in the list (only their page names the city),
+ * and a location filter would never return them; the normal country check after the detail still applies.
  *
  * The department comes from the job-category facet (default "jobFamilyGroup", e.g. "Engineering"): the list is read
  * once per category, which also tells each job's category. Jobs in no category are picked up by a plain listing.
@@ -100,11 +102,12 @@ public class WorkdayAdapter implements JobBoardAdapter {
         WorkdayConfig config = WorkdayConfig.from(company);
 
         JsonNode unfiltered = listPage(config, Map.of(), 0);
-        Map<String, List<String>> countryFilter = countryFilter(unfiltered.path("facets"), config.country(), locationParser);
-        if (countryFilter.isEmpty()) {
+        Map<String, List<String>> countryFilter = config.singleCountry() ? Map.of()
+                : countryFilter(unfiltered.path("facets"), config.country(), locationParser);
+        if (countryFilter.isEmpty() && !config.singleCountry()) {
             throw new IllegalStateException(company.slug() + ": no Workday facet for country " + config.country());
         }
-        log.info("{}: Workday country filter {}", company.slug(), countryFilter);
+        log.info("{}: Workday country filter {}", company.slug(), config.singleCountry() ? "none (single-country tenant)" : countryFilter);
 
         DetailCache.Known known = detailCache.load(company.id());
         Batcher batcher = new Batcher(sink);
@@ -294,7 +297,7 @@ public class WorkdayAdapter implements JobBoardAdapter {
                 title(summary, detail),
                 summary.department(),
                 null,
-                info == null ? summaryLocations(posting, remote) : locations(info, remote),
+                orCountry(config, info == null ? summaryLocations(posting, remote) : locations(info, remote), remote),
                 info == null ? null : text(info, "timeType"),
                 url != null ? url : config.siteUrl() + path,
                 info == null ? null : text(info, "jobDescription"),
@@ -339,10 +342,16 @@ public class WorkdayAdapter implements JobBoardAdapter {
         return words.isEmpty() ? null : words;
     }
 
-    /** The main location carries the requisition's country code; additional locations are text only. */
-    private static List<RawLocation> locations(JsonNode info, Boolean remote) {
+    /**
+     * The main location carries the requisition's country code; additional locations are text only. A blank main
+     * location (some JioStar postings) falls back to the requisition location's name ("Bengaluru").
+     */
+    static List<RawLocation> locations(JsonNode info, Boolean remote) {
         List<RawLocation> locations = new ArrayList<>();
         String main = text(info, "location");
+        if (main == null) {
+            main = text(info.path("jobRequisitionLocation"), "descriptor");
+        }
         String country = isoCountry(text(info.path("jobRequisitionLocation").path("country"), "alpha2Code"));
         if (main != null || country != null) {
             locations.add(new RawLocation(main, null, null, country, remote));
@@ -354,6 +363,12 @@ public class WorkdayAdapter implements JobBoardAdapter {
             }
         }
         return locations;
+    }
+
+    /** A single-country tenant's posting with no location at all (two at JioStar) is in that country, city unknown. */
+    static List<RawLocation> orCountry(WorkdayConfig config, List<RawLocation> locations, Boolean remote) {
+        return locations.isEmpty() && config.singleCountry()
+                ? List.of(new RawLocation(null, null, null, config.country(), remote)) : locations;
     }
 
     /** Without a detail only "Pune, India" style text is usable; "3 Locations" says nothing. */
@@ -379,9 +394,11 @@ public class WorkdayAdapter implements JobBoardAdapter {
     /**
      * The typed view of companies.config for Workday rows:
      * {"host": "adobe.wd5.myworkdayjobs.com", "tenant": "adobe", "site": "external_experienced"}, plus optional
-     * "country" (ISO code, default "IN") and "departmentFacet" (default "jobFamilyGroup").
+     * "country" (ISO code, default "IN"), "departmentFacet" (default "jobFamilyGroup") and "singleCountry" (true when
+     * the tenant only hires in that country: no country filter on the list, see the class comment).
      */
-    record WorkdayConfig(String host, String tenant, String site, String country, String departmentFacet) {
+    record WorkdayConfig(String host, String tenant, String site, String country, String departmentFacet,
+                         boolean singleCountry) {
 
         static WorkdayConfig from(Company company) {
             String host = required(company, "host");
@@ -390,7 +407,8 @@ public class WorkdayAdapter implements JobBoardAdapter {
             String country = text(company.config(), "country");
             String departmentFacet = text(company.config(), "departmentFacet");
             return new WorkdayConfig(host, tenant, site, country != null ? country.toUpperCase(Locale.ROOT) : "IN",
-                    departmentFacet != null ? departmentFacet : "jobFamilyGroup");
+                    departmentFacet != null ? departmentFacet : "jobFamilyGroup",
+                    company.config().path("singleCountry").asBoolean(false));
         }
 
         /** Base of the JSON API: list = apiBase + "/jobs", detail = apiBase + externalPath. */

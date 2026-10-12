@@ -4,7 +4,7 @@
 # Avoid short aliases that are also state codes (LA = Louisiana, KL = Kerala): "Kochi, KL" must stay in India.
 # --- India ---
 IN,Karnataka,Bengaluru,Bangalore|BLR|Bengaluru Urban|Bangalore Urban|Whitefield|Electronic City|Koramangala|Bellandur|Marathahalli,100,
-IN,Telangana,Hyderabad,Secunderabad|HYD|Cyberabad|HITEC City|Gachibowli,100,
+IN,Telangana,Hyderabad,Secunderabad|HYD|Cyberabad|HITEC City|Gachibowli|Hyderbad,100,
 IN,Maharashtra,Pune,Poona|Hinjewadi|Hinjawadi|Kharadi|Magarpatta|Viman Nagar,100,
 IN,Maharashtra,Mumbai,Bombay|Andheri|Powai|Bandra Kurla Complex|BKC|Goregaon|Malad|Lower Parel|Vikhroli,100,MMR
 IN,Maharashtra,Navi Mumbai,Airoli|Vashi|Belapur|Ghansoli,70,MMR

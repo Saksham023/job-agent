@@ -96,7 +96,36 @@ Anthropic API key BEFORE other people use the app (resume reads run on the user'
 in .github/workflows/deploy.yml (GitHub moves the label to Ubuntu 26 on 2026-10-19); log rotation on the Air (DEBUG log grows); nightly
 pg_dump backup; admin dashboard (crawl history, errors, server stats, Claude usage; then CSVs into DB tables); faster alerts (15-min
 rounds for quick servers); duplicate postings; Workday re-posts show first_seen in POSTED (UI quirk); README numbers (~66 companies,
-~7,000 jobs); IBM / Deutsche Bank / AMD / Intuit adapters: user NOT interested (not high-paying enough); Cisco not targeted.
+~7,000 jobs); IBM / Deutsche Bank / AMD adapters: user NOT interested (not high-paying enough); Cisco not targeted. INTUIT IS WANTED
+(user 2026-10-13: the earlier note lumping it with IBM/DB/AMD was wrong).
+ROUND 5 (2026-10-13, UNCOMMITTED): V47__seed_round5_companies.sql = 18 companies from the user's tier list on existing platforms (user: add
+tier 1/1.5/2 even with 0 India jobs now): GH doordash (doordashindia; DoorDash has per-region boards), hackerrank, couchbase (couchbaseinc),
+apollo-io (apolloio), yugabyte, bitgo, cockroach-labs, tessell (tessellinc), prophecy (prophecysimpledatalabs), compass (urbancompass); Ashby
+nightfall-ai, uipath, lg-ads (Alphonso); SR cars24; Workday jiostar (wd102/JioStar, India-only), target (wd5/targetcareers), cloudera (wd5/
+External_Career); Oracle dp-world (ehpv.fa.em2 / CX_1). Local crawl: all OK, 526 jobs (JioStar 227, DP World 151, Target 57...). FOUND (fixes
+proposed, waiting for the user's OK): (1) LocationParser leaves 'in' after hybrid/onsite ('Hybrid in Bengaluru, India' -> no city: all 18
+HackerRank jobs; 'Onsite in Bangalore' unresolved -> 1 job dropped); (2) ' > ' separator ('India > Mumbai > Remote', Cloudera's only India job
+dropped); (3) 'Hyderbad' typo (1 DoorDash job, country ok, no city); (4) 9 JioStar jobs have a blank location in the Workday list (detail has
+jobRequisitionLocation Bengaluru/IN) so the India facet filter misses them; (5) JioStar puts requirements under 'Preferred education and
+experience' -> years read right but LOW (website shows 'not stated'; 267 such jobs DB-wide, Amazon 67); the Air's gap fill re-asks LOW years
+for tech families. Empty descriptions at JioStar ('NA') and DP World are empty at the source.
+FIXES 1-4 DONE (user OK, UNCOMMITTED, 402 tests): LocationParser drops 'in'/'at' after a work-mode word (MODE_PREPOSITION,
+withoutWorkMode) and splits on ' > '; cities.csv Hyderabad alias 'Hyderbad'; diff over all 400 stored location texts: exactly the 5 intended
+changed. WorkdayAdapter config.singleCountry (JioStar in V47): list read without a country filter, blank main location falls back to
+jobRequisitionLocation.descriptor, a posting with no location at all gets the country (orCountry); CONFIGURATION.md row; tests. V47 was
+re-run locally (old run deleted: jobs, crawl_runs, companies, flyway row 47) so the local checksum matches the edited file. Re-crawl: JioStar
+236/236, HackerRank 18 in Bengaluru, Cloudera 1 (Mumbai), DoorDash Hyderbad -> Hyderabad. Fix 5 (JioStar 'Preferred' years LOW) left to the
+Air's gap fill, no rule change.
+PARKED 2026-10-13 (user: "park that, add to the backlog"; research by probe round 5, tier list screenshot): Kotak (Oracle hcbt.fa.em2 / CX,
+~15,900 India jobs, almost all branch banking: needs an Oracle keyword/category filter option first, ~150 tech); NEW ADAPTERS: TurboHire
+(Navi orgId 3e818601-0baa-429c-b6f8-4b21903ae0e6 37 jobs, Ola olacareers.turbohire.co orgId e0c1eb37-eb7a-4ca4-bcc5-d59ce4ce9212 0 jobs,
+Flipkart flipkart.turbohire.co orgId 4d757ba0-3d57-448a-b82c-238ed87ac90f 5 jobs; token api.turbohire.co/api/token/noauth with Origin,
+then POST careerpagev2/filteredjobs), Intuit (Radancy jobs.intuit.com India facet 1269750, 31), Upstox (open feed
+service.upstox.com/content/open/v1/jobs/, 22 with post_on_careers_page=1), Bloomberg (Avature bloomberg.avature.net/careers, ~10 Pune, HTML),
+Procore (careers.procore.com/jobs/search HTML, robots disallows /api/, 10), Apna (Workable account apna, 143 mostly non-tech), CoinSwitch
+(Recruiterflow, 6). NOT POSSIBLE: Gojek (bot checkpoint), Indeed (403), Confluent (403/429, Ashby empty), CoinDCX, Khatabook, MobiKwik,
+Udaan, Rupeek, Rupifi, Moonfrog, Zomato/Eternal, Angel One (no public list), Cure.fit (Zwayam), MotorQ (Dover), HackerEarth + Codenation
+(JazzHR, no India tech).
 LOCAL RUN for the user's own look (they did this twice): backend `source ~/.zshrc; JOBAGENT_LLM_CLAUDECLI_COMMAND=~/.local/bin/claude
 <JDK25>/bin/java -jar target/jobagent-0.0.1-SNAPSHOT.jar` (port 8080, run in background) + preview_start "web" (Vite 5173, proxies /api
 to 8080); rebuild the jar first if the backend changed (`./mvnw -q -o package -DskipTests`, JDK 25 path); stop with pkill + preview_stop.

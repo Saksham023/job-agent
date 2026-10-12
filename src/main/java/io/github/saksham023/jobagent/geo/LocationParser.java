@@ -40,14 +40,18 @@ public class LocationParser {
     private static final Pattern REMOTE = Pattern.compile("(?i)\\b(?:remote|virtual|work from home|wfh|anywhere)\\b");
     private static final Pattern HYBRID = Pattern.compile("(?i)\\b(?:hybrid|on-?site|in-?office)\\b");
 
+    /** The word that may follow a work-mode word: "Hybrid in Bengaluru", "Onsite at Pune", "Remote in India" (HackerRank). */
+    private static final Pattern MODE_PREPOSITION = Pattern.compile("(?i)^\\s*(?:in|at)\\b");
+
     /** Leftover dashes, colons, & and / at the edges of a part, e.g. " - Indiana" -> "Indiana". */
     private static final Pattern EDGE_JUNK = Pattern.compile("^[\\s\\-\\u2013\\u2014:&/]+|[\\s\\-\\u2013\\u2014:&/]+$");
 
     /**
-     * Between parts of one location: commas, a dash with spaces around it ("USA - Update Location"), and a dash
-     * right after a word with a space after it ("Remote- India- Gurugram"; "Bengaluru-VTP" stays one part).
+     * Between parts of one location: commas, a dash with spaces around it ("USA - Update Location"), a dash right
+     * after a word with a space after it ("Remote- India- Gurugram"; "Bengaluru-VTP" stays one part), and " > " in
+     * Workday location paths ("India > Mumbai > Remote", Cloudera).
      */
-    private static final Pattern PART_SEPARATOR = Pattern.compile(",|\\s+[-\\u2013\\u2014]\\s+|(?<=\\p{L})[-\\u2013\\u2014]\\s+");
+    private static final Pattern PART_SEPARATOR = Pattern.compile(",|\\s+[-\\u2013\\u2014>]\\s+|(?<=\\p{L})[-\\u2013\\u2014]\\s+");
 
     /** Workday location codes with dots: "IND.Pune", "IND.BLR.Home Office" (country code first). */
     private static final Pattern DOTTED_CODE = Pattern.compile("^[A-Z]{2,3}\\.(?=\\S)");
@@ -120,8 +124,7 @@ public class LocationParser {
 
     /** "Remote - Indiana, USA" -> ["Indiana", "USA"]; "Bangalore or Pune (Hybrid)" -> ["Bangalore", "Pune"]. */
     private List<String> parts(String segment) {
-        String cleaned = REMOTE.matcher(segment).replaceAll(" ");
-        cleaned = HYBRID.matcher(cleaned).replaceAll(" ");
+        String cleaned = withoutWorkMode(withoutWorkMode(segment, REMOTE), HYBRID);
         cleaned = cleaned.replace('(', ' ').replace(')', ' ');
         if (DOTTED_CODE.matcher(cleaned.strip()).lookingAt()) {
             cleaned = cleaned.replace('.', ',');                      // "IND.Pune" -> "IND,Pune"
@@ -139,6 +142,19 @@ public class LocationParser {
             }
         }
         return parts;
+    }
+
+    /** The text with every work-mode word removed, and the "in"/"at" right after it ("Hybrid in Pune" -> " Pune"). */
+    private static String withoutWorkMode(String text, Pattern mode) {
+        Matcher matcher = mode.matcher(text);
+        StringBuilder out = new StringBuilder();
+        int last = 0;
+        while (matcher.find()) {
+            out.append(text, last, matcher.start()).append(' ');
+            Matcher preposition = MODE_PREPOSITION.matcher(text).region(matcher.end(), text.length());
+            last = preposition.lookingAt() ? preposition.end() : matcher.end();
+        }
+        return out.append(text.substring(last)).toString();
     }
 
     /** Splits on or/and/&// only when the whole part is not itself a name and every piece is a known place. */

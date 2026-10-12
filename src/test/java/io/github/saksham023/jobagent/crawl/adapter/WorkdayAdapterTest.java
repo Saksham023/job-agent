@@ -27,7 +27,7 @@ class WorkdayAdapterTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final LocationParser PARSER = new LocationParser(new Gazetteer());
     private static final WorkdayConfig CONFIG =
-            new WorkdayConfig("sec.wd3.myworkdayjobs.com", "sec", "Samsung_Careers", "IN", "jobFamilyGroup");
+            new WorkdayConfig("sec.wd3.myworkdayjobs.com", "sec", "Samsung_Careers", "IN", "jobFamilyGroup", false);
 
     private static JsonNode json(String text) {
         return JSON.readTree(text);
@@ -168,5 +168,31 @@ class WorkdayAdapterTest {
         assertThat(WorkdayAdapter.listHash(new WorkdayAdapter.Summary(moved, "Engineering"))).isNotEqualTo(hash);
         assertThat(WorkdayAdapter.externalId("/job/Bangalore/Senior-Staff-Engineer_R120924"))
                 .isEqualTo("Senior-Staff-Engineer_R120924");
+    }
+
+    @Test
+    void aBlankMainLocationFallsBackToTheRequisitionLocation() {                // JioStar, 2026-10-13
+        JsonNode info = json("""
+                {"title": "Staff Software Development Engineer", "location": "", "additionalLocations": null,
+                 "jobRequisitionLocation": {"descriptor": "Bengaluru",
+                   "country": {"descriptor": "India", "alpha2Code": "IN"}}}""");
+
+        assertThat(WorkdayAdapter.locations(info, null)).singleElement().satisfies(location -> {
+            assertThat(location.text()).isEqualTo("Bengaluru");
+            assertThat(location.countryCode()).isEqualTo("IN");
+        });
+    }
+
+    @Test
+    void aSingleCountryTenantIsReadFromItsConfig() {
+        Company jiostar = new Company(1, "jiostar", "JioStar", "workday", json("""
+                {"host": "jiostar.wd102.myworkdayjobs.com", "tenant": "jiostar", "site": "JioStar", "singleCountry": true}"""),
+                null, true, null, null, null);
+        WorkdayConfig config = WorkdayConfig.from(jiostar);
+        assertThat(config.singleCountry()).isTrue();
+        assertThat(CONFIG.singleCountry()).isFalse();
+        // a posting with no location at all: in the country for a single-country tenant, dropped elsewhere
+        assertThat(WorkdayAdapter.orCountry(config, List.of(), null)).extracting(RawLocation::countryCode).containsExactly("IN");
+        assertThat(WorkdayAdapter.orCountry(CONFIG, List.of(), null)).isEmpty();
     }
 }

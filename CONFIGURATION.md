@@ -235,6 +235,7 @@ and reproducible, put the same `UPDATE` in a new Flyway migration (`src/main/res
 | Workday | `host`, `tenant`, `site` | yes | | e.g. `adobe.wd5.myworkdayjobs.com`, `adobe`, `external_experienced` |
 | Workday | `country` | no | `IN` | country looked up in the facets |
 | Workday | `departmentFacet` | no | `jobFamilyGroup` | facet used to split big lists into smaller queries |
+| Workday | `singleCountry` | no | `false` | `true` for a tenant that only hires in the country (JioStar): its list is read without a country filter, because some postings have a blank location in the list and only their page names the city; the country check after the job page still applies |
 | Eightfold | `host`, `domain` | yes | | e.g. `careers.qualcomm.com`, `qualcomm.com` |
 | Eightfold | `location` | no | `India` | location filter sent to the API |
 | Eightfold | `delayMs` | no | `1000` | starting pace per request (slows down by itself on throttling) |

@@ -279,4 +279,27 @@ class LocationParserTest {
                 .satisfies(location -> assertThat(location.countryCode()).isEqualTo("IN"));
         assertThat(parser.parse(null, null, null)).isEmpty();
     }
+
+    @Test
+    void theWordAfterAWorkModeIsNotPartOfThePlace() {
+        assertThat(single("Hybrid in Bengaluru, India").city()).isEqualTo("Bengaluru");      // HackerRank
+        assertThat(single("Onsite in Bangalore").city()).isEqualTo("Bengaluru");
+        assertThat(single("In-office in Bangalore, India").city()).isEqualTo("Bengaluru");
+        ParsedLocation remote = single("Remote in India");
+        assertThat(remote.countryCode()).isEqualTo("IN");
+        assertThat(remote.remote()).isTrue();
+    }
+
+    @Test
+    void workdayLocationPathsUseGreaterThanSigns() {
+        ParsedLocation location = single("India > Mumbai > Remote");                       // Cloudera
+        assertThat(location.city()).isEqualTo("Mumbai");
+        assertThat(location.remote()).isTrue();
+        assertThat(single("Indiana > Indianapolis").countryCode()).isEqualTo("US");
+    }
+
+    @Test
+    void aCommonMisspellingOfAnIndianCityResolves() {
+        assertThat(single("Hyderbad, India").city()).isEqualTo("Hyderabad");                // DoorDash
+    }
 }
