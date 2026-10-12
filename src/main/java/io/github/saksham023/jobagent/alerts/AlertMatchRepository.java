@@ -41,6 +41,8 @@ public class AlertMatchRepository {
      * cities     any of them, or 'Remote' for remote jobs
      * companies  any of them
      * Only opted-in users with an active Telegram link; a pair already matched is skipped (nobody gets a job twice).
+     * Only jobs first seen recently (jobagent.alerts.max-job-age): an alert is about NEW jobs, so an old job that is
+     * queued again is dropped here.
      */
     static final String MATCH = """
             INSERT INTO alert_matches (user_id, job_id)
@@ -52,6 +54,7 @@ public class AlertMatchRepository {
             JOIN telegram_links t ON t.user_id = p.user_id AND t.active
             WHERE j.id = ANY(:jobIds)
               AND j.closed_at IS NULL AND j.country_codes @> ARRAY[CAST(:country AS text)]
+              AND j.first_seen_at >= :firstSeenSince
             """ + "  AND " + Conditions.ALL + """
             ON CONFLICT (user_id, job_id) DO NOTHING
             """;
@@ -98,11 +101,12 @@ public class AlertMatchRepository {
         return jdbc.sql(CLAIM_JOBS).param("limit", limit).query(Long.class).list();
     }
 
-    /** Writes the matches of these jobs; returns how many new (user, job) pairs were added. */
-    public int match(List<Long> jobIds, String country) {
+    /** Writes the matches of these jobs (only those first seen within maxJobAge); returns how many pairs were added. */
+    public int match(List<Long> jobIds, String country, Duration maxJobAge) {
         return jdbc.sql(MATCH)
                 .param("jobIds", jobIds.toArray(Long[]::new))
                 .param("country", country)
+                .param("firstSeenSince", Timestamp.from(Instant.now().minus(maxJobAge)))
                 .update();
     }
 

@@ -56,7 +56,7 @@ public class AlertMatcher {
             if (jobIds.isEmpty()) {
                 return 0;
             }
-            int added = matches.match(jobIds, matching.country());
+            int added = matches.match(jobIds, matching.country(), properties.maxJobAge());
             matches.dequeue(jobIds);
             if (added > 0) {
                 log.info("Job alerts: {} new jobs matched {} times", jobIds.size(), added);

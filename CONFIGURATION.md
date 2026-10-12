@@ -154,6 +154,7 @@ user. Telegram stays off until a bot token and username are set.
 | `max-jobs-per-message` | `20` | jobs listed in one message; the rest are counted as "and N more" |
 | `max-attempts` | `5` | failed sends before a match is given up (`FAILED`); waits 1, 2, 4, 8... minutes, or what Telegram's 429 asks |
 | `sending-timeout` | `PT5M` | a match stuck in `SENDING` (crash mid-send) is retried after this |
+| `max-job-age` | `P2D` | only jobs first seen within this time are sent: alerts are about new jobs, so an older job that is queued again is never sent |
 | `site-url` | env `JOBAGENT_ALERTS_SITE_URL`, empty | the web app's address, linked in every message |
 | `telegram.bot-token` | env `JOBAGENT_ALERTS_TELEGRAM_BOT_TOKEN`, empty | the bot's token from @BotFather (secret: never in git or chat); empty = Telegram off |
 | `telegram.bot-username` | env `JOBAGENT_ALERTS_TELEGRAM_BOT_USERNAME`, empty | the bot's username without `@` (for the connect link `t.me/<username>?start=<token>`) |

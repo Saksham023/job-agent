@@ -160,11 +160,20 @@ public class GapFillRepository {
     }
 
     /**
-     * Writes the filled fields into job_requirements; fields that are no longer gaps are left alone. When the family or
-     * the years really changed, the job is queued for the job alerts again: users it now fits get it (nobody gets it
-     * twice). Only here, not in reapply(): a rules rebuild re-applies old fills to every job and must not re-alert.
+     * A NEW model answer: writes the filled fields and, when the family or the years really changed, queues the job for
+     * the job alerts again (users it now fits get it; nobody gets it twice).
      */
     public void apply(long jobId, Fill fill, String model) {
+        if (write(jobId, fill, model) > 0) {
+            jdbc.sql("INSERT INTO alert_job_queue (job_id) VALUES (:jobId) ON CONFLICT DO NOTHING").param("jobId", jobId).update();
+        }
+    }
+
+    /**
+     * Writes the filled fields into job_requirements; fields that are no longer gaps are left alone. Returns how many
+     * of the years and the family changed.
+     */
+    private int write(long jobId, Fill fill, String model) {
         String source = source(model);
         int changed = 0;
         if (fill.hasYears()) {
@@ -192,15 +201,14 @@ public class GapFillRepository {
                     .param("source", source)
                     .update();
         }
-        if (changed > 0) {
-            jdbc.sql("INSERT INTO alert_job_queue (job_id) VALUES (:jobId) ON CONFLICT DO NOTHING").param("jobId", jobId).update();
-        }
+        return changed;
     }
 
     /**
      * After a rules re-extraction: applies the stored fill again when the posting has not changed since. When the
      * rules now only guess the family and the stored fill did not use the model's family answer (it was not a gap
-     * then), that answer fills it: no new call.
+     * then), that answer fills it: no new call. Never queues the job for alerts: putting an OLD answer back after a
+     * re-read (e.g. the nightly skill learning re-reads thousands of jobs) is not news.
      */
     public void reapply(long jobId) {
         record Stored(String model, Fill accepted, String family, String specialization, String reason,
@@ -221,7 +229,7 @@ public class GapFillRepository {
                         s.specialization() == null ? null : JobClassifier.Specialization.valueOf(s.specialization()),
                         s.reason(), fill.languages());
             }
-            apply(jobId, fill, s.model());
+            write(jobId, fill, s.model());
         });
     }
 

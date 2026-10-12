@@ -46,6 +46,11 @@ USER'S SETUP PROGRESS (Telegram):
   both quotes. Check for hidden characters: sed -n Np ~/jobagent/env | LC_ALL=C grep -c '[^ -~]'. STEP 10: connect + test message WORK on the live site (2026-10-11 ~13:05). Waiting for the first REAL alert after a crawl round.
   AFTER THAT (2026-10-11): account menu made a solid panel (dark glass was 4% opaque; nested backdrop-blur inside the blurred header does
   nothing), README rewritten short (features: search, profile, referrals, Telegram alerts, MCP), committed by Claude at the user's request.
+  BUG 2026-10-12 (user saw Qualcomm alerts 03:31-03:33 for old jobs): the nightly skill learning re-reads ~2,000 jobs; reapply() wrote
+  the stored Claude family back through apply(), which queued the job when the family "changed" -> 24 of 30 alerts were OLD jobs (first
+  seen 10-06, posted Jul-Sep). FIXED (UNCOMMITTED): GapFillRepository.write() (no queue) for reapply, apply() = write + queue only for a
+  NEW model answer; MATCH requires j.first_seen_at >= now() - jobagent.alerts.max-job-age (P2D). Verified locally: rebuild of all 6,762
+  jobs (599 Claude families put back) -> queue 0; queued old job 31 dropped, just-seen job 37 matched; local data restored.
   (Username cannot change later; display name via /setname. Never paste the token in chat.)
 REMAINING STEPS FOR THE USER (Part B, Air):
   7. ssh serverserver@jobserver.local; cp ~/jobagent/env ~/jobagent/env.bak;

@@ -13,6 +13,8 @@ import java.time.Duration;
  * @param maxJobsPerMessage jobs listed in one Telegram message; the rest are counted as "and N more"
  * @param maxAttempts       failed sends before a match is given up (status FAILED)
  * @param sendingTimeout    a match left in SENDING longer than this (a crash mid-send) is retried
+ * @param maxJobAge         only jobs first seen within this time are sent: an alert is about NEW jobs, so an old job
+ *                          that lands in the queue again (a re-read, a bug) never reaches anyone
  * @param siteUrl           the web app's address, linked in every message ("manage your alert")
  * @param telegram          the bot
  */
@@ -23,6 +25,7 @@ public record AlertProperties(
         @DefaultValue("20") int maxJobsPerMessage,
         @DefaultValue("5") int maxAttempts,
         @DefaultValue("PT5M") Duration sendingTimeout,
+        @DefaultValue("P2D") Duration maxJobAge,
         @DefaultValue("") String siteUrl,
         @DefaultValue Telegram telegram) {
 
