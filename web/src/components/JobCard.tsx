@@ -4,6 +4,7 @@ import { ArrowUpRight, Briefcase, Globe2, MapPin } from 'lucide-react'
 import type { JobCard as Job } from '../lib/api'
 import { ago, FAMILY_SHORT, isFresh, years } from '../lib/format'
 import { Avatar } from './Avatar'
+import { StatusChip, StatusMenu } from './JobStatus'
 
 export function JobCard({ job, index, onOpen }: { job: Job; index: number; onOpen: () => void }) {
   const fresh = isFresh(job.postedAt)
@@ -56,6 +57,7 @@ export function JobCard({ job, index, onOpen }: { job: Job; index: number; onOpe
 
       <div className="relative mt-4 flex items-end justify-between gap-3">
         <div className="flex min-w-0 flex-wrap gap-1.5">
+          <StatusChip status={job.status} />
           {job.family && (
             <span className="rounded-md bg-violet-500/10 px-2 py-1 text-[11px] font-semibold text-violet-700 dark:text-violet-300">
               {FAMILY_SHORT[job.family] ?? job.family}
@@ -67,15 +69,18 @@ export function JobCard({ job, index, onOpen }: { job: Job; index: number; onOpe
             </span>
           ))}
         </div>
-        <a
-          href={job.url}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="flex shrink-0 items-center gap-1 rounded-full bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-600 dark:bg-white dark:text-slate-900 dark:hover:bg-violet-300"
-        >
-          Apply <ArrowUpRight size={13} />
-        </a>
+        <div className="flex shrink-0 items-center gap-2">
+          <StatusMenu job={job} />
+          <a
+            href={job.url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex shrink-0 items-center gap-1 rounded-full bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-600 dark:bg-white dark:text-slate-900 dark:hover:bg-violet-300"
+          >
+            Apply <ArrowUpRight size={13} />
+          </a>
+        </div>
       </div>
     </motion.article>
   )

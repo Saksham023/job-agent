@@ -20,6 +20,14 @@ export type Totals = {
 
 export type Meta = { totals: Totals; companies: Company[]; families: Family[]; cities: Count[]; skills: Count[] }
 
+/** What the signed-in user marked a job as. NOT_INTERESTED jobs are hidden from the normal search. */
+export type JobStatus = 'SAVED' | 'APPLIED' | 'REFERRAL_ASKED' | 'NOT_INTERESTED'
+
+export const JOB_STATUSES: JobStatus[] = ['SAVED', 'APPLIED', 'REFERRAL_ASKED', 'NOT_INTERESTED']
+
+/** The statuses one can hide for now ("Not interested" is always hidden). */
+export const HIDEABLE: JobStatus[] = ['SAVED', 'APPLIED', 'REFERRAL_ASKED']
+
 export type JobCard = {
   id: number
   title: string
@@ -35,6 +43,8 @@ export type JobCard = {
   skills: string[]
   postedAt: string | null
   url: string
+  /** the signed-in user's status for this job, null = none */
+  status: JobStatus | null
 }
 
 export type JobPage = { total: number; page: number; size: number; hasMore: boolean; jobs: JobCard[] }
@@ -62,6 +72,8 @@ export type Facets = {
   cities: Record<string, number>
   remote: number
   skills: Count[]
+  /** how many jobs the user marked with each status, under the other filters */
+  statuses: Record<string, number>
 }
 
 export type Sort = 'newest' | 'company' | 'experience'
@@ -76,6 +88,10 @@ export type Filters = {
   cities: string[]
   skills: string[]
   postedWithinDays: number | null
+  /** only jobs I marked with one of these; empty = all jobs except "Not interested" */
+  statuses: JobStatus[]
+  /** statuses also hidden for now (e.g. APPLIED), on top of "Not interested"; ignored while `statuses` is set */
+  hidden: JobStatus[]
   sort: Sort
 }
 
@@ -100,6 +116,8 @@ export function jobsQuery(filters: Filters, page: number, size = 24): string {
   filters.cities.forEach((c) => p.append('city', c))
   filters.skills.forEach((s) => p.append('skill', s))
   if (filters.postedWithinDays != null) p.set('postedWithinDays', String(filters.postedWithinDays))
+  filters.statuses.forEach((s) => p.append('status', s))
+  filters.hidden.forEach((s) => p.append('hide', s))
   p.set('sort', filters.sort)
   p.set('page', String(page))
   p.set('size', String(size))
@@ -110,6 +128,17 @@ export const fetchJobs = (filters: Filters, page: number) => get<JobPage>(`/api/
 
 export const fetchFacets = (filters: Filters) =>
   get<Facets>(`/api/v1/facets?${jobsQuery({ ...filters, sort: 'newest' }, 0, 1)}`)
+
+/** Sets (or, with null, clears) the signed-in user's status for one job. */
+export async function setJobStatus(jobId: number, status: JobStatus | null): Promise<void> {
+  const response = await authFetch(
+    `/api/v1/me/jobs/${jobId}/status`,
+    status == null
+      ? { method: 'DELETE' }
+      : { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) },
+  )
+  if (!response.ok) throw new Error(await errorOf(response))
+}
 
 // ---------------------------------------------------------------- the signed-in user's profile (read from their resume)
 

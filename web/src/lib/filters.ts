@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import type { Filters, Sort } from './api'
+import { HIDEABLE, JOB_STATUSES, type Filters, type JobStatus, type Sort } from './api'
 
 // The filters live in the URL (?family=DATA_ML&min=0&max=3...), so every search can be bookmarked and shared,
 // and the back button undoes a filter change.
@@ -21,6 +21,8 @@ export const EMPTY: Filters = {
   cities: [],
   skills: [],
   postedWithinDays: null,
+  statuses: [],
+  hidden: [],
   sort: 'newest',
 }
 
@@ -36,6 +38,8 @@ export function parse(params: URLSearchParams): Filters {
     cities: params.getAll('city'),
     skills: params.getAll('skill'),
     postedWithinDays: int(params.get('posted')),
+    statuses: params.getAll('status').filter((s): s is JobStatus => JOB_STATUSES.includes(s as JobStatus)),
+    hidden: params.getAll('hide').filter((s): s is JobStatus => HIDEABLE.includes(s as JobStatus)),
     sort: sort === 'company' || sort === 'experience' ? (sort as Sort) : 'newest',
   }
 }
@@ -51,6 +55,8 @@ export function serialize(filters: Filters, job?: string | null): URLSearchParam
   filters.cities.forEach((c) => p.append('city', c))
   filters.skills.forEach((s) => p.append('skill', s))
   if (filters.postedWithinDays != null) p.set('posted', String(filters.postedWithinDays))
+  filters.statuses.forEach((s) => p.append('status', s))
+  filters.hidden.forEach((s) => p.append('hide', s))
   if (filters.sort !== 'newest') p.set('sort', filters.sort)
   if (job) p.set('job', job)
   return p
@@ -62,6 +68,8 @@ export function activeCount(f: Filters): number {
     f.families.length +
     f.cities.length +
     f.skills.length +
+    f.statuses.length +
+    (f.statuses.length > 0 ? 0 : f.hidden.length) +
     (f.minYears != null || f.maxYears != null ? 1 : 0) +
     (f.postedWithinDays != null ? 1 : 0) +
     (f.q ? 1 : 0)

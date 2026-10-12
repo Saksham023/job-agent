@@ -29,10 +29,10 @@ public class PublicJobRepository {
                          Instant lastCrawlAt) {
     }
 
-    /** One job in a result list. */
+    /** One job in a result list; status = what the signed-in user marked it as (null = nothing). */
     public record JobCard(long id, String title, String companySlug, String company, List<String> cities, boolean remote,
                           Integer minYears, Integer maxYears, boolean yearsStated, String family,
-                          String specialization, List<String> skills, Instant postedAt, String url) {
+                          String specialization, List<String> skills, Instant postedAt, String url, String status) {
     }
 
     /** One job in full. */
@@ -41,7 +41,7 @@ public class PublicJobRepository {
                             Instant postedAt, Integer minYears, Integer maxYears,
                             boolean yearsStated, String yearsEvidence, String family, List<String> secondaryFamilies, String specialization,
                             List<String> requiredSkills, List<String> preferredSkills, List<String> primaryLanguages,
-                            String description, String linkedinCompanyId, int otherCountries) {
+                            String description, String linkedinCompanyId, int otherCountries, String status) {
     }
 
     private static final String OPEN = "j.closed_at IS NULL AND j.country_codes @> ARRAY[CAST(:country AS text)]";
@@ -64,7 +64,7 @@ public class PublicJobRepository {
             """ + JobSearch.STATED + """
              AS years_stated, r.family, r.specialization,
             (r.required_skills || r.preferred_skills)[1 : 6] AS skills, """ + JobSearch.POSTED + """
-             AS posted_at, j.url
+             AS posted_at, j.url, s.status
             """;
 
     private final JdbcClient jdbc;
@@ -77,8 +77,7 @@ public class PublicJobRepository {
 
     public int count(JobSearch search, String country) {
         Where where = search.where(country);
-        return jdbc.sql("SELECT count(*) FROM jobs j JOIN companies c ON c.id = j.company_id "
-                        + "LEFT JOIN job_requirements r ON r.job_id = j.id WHERE " + where.sql())
+        return jdbc.sql("SELECT count(*)" + FROM + " WHERE " + where.sql())
                 .params(where.params())
                 .query(Integer.class)
                 .single();
@@ -86,8 +85,7 @@ public class PublicJobRepository {
 
     public List<JobCard> search(JobSearch search, String country) {
         Where where = search.where(country);
-        return jdbc.sql("SELECT " + CARD_COLUMNS + " FROM jobs j JOIN companies c ON c.id = j.company_id "
-                        + "LEFT JOIN job_requirements r ON r.job_id = j.id WHERE " + where.sql()
+        return jdbc.sql("SELECT " + CARD_COLUMNS + FROM + " WHERE " + where.sql()
                         + " ORDER BY " + search.orderBy() + " LIMIT :limit OFFSET :offset")
                 .params(where.params())
                 .param("limit", search.size())
@@ -98,20 +96,23 @@ public class PublicJobRepository {
 
     /**
      * Live counts for the filter lists under the current search (see JobSearch.without). A family counts a job when it
-     * is the job's family or one of its secondary families, exactly like the family filter.
+     * is the job's family or one of its secondary families, exactly like the family filter. statuses = how many jobs
+     * the user marked with each status (empty without a user).
      */
     public record Facets(Map<String, Integer> families, Map<String, Integer> companies, Map<String, Integer> cities,
-                         int remote, List<Count> skills) {
+                         int remote, List<Count> skills, Map<String, Integer> statuses) {
     }
 
+    /** Every search query reads from here: the job, its company, its requirements and the user's status for it. */
     private static final String FROM = " FROM jobs j JOIN companies c ON c.id = j.company_id "
-            + "LEFT JOIN job_requirements r ON r.job_id = j.id";
+            + "LEFT JOIN job_requirements r ON r.job_id = j.id" + JobSearch.STATUS_JOIN;
 
     public Facets facets(JobSearch search, String country, int topSkills) {
         Where families = search.without(JobSearch.Facet.FAMILY).where(country);
         Where companies = search.without(JobSearch.Facet.COMPANY).where(country);
         Where locations = search.without(JobSearch.Facet.LOCATION).where(country);
         Where skills = search.where(country);
+        Where statuses = search.without(JobSearch.Facet.STATUS).where(country);
         return new Facets(
                 countMap("SELECT f AS name, count(DISTINCT j.id) AS jobs" + FROM
                         + ", unnest(array_append(r.secondary_families, r.family)) AS f WHERE " + families.sql()
@@ -126,7 +127,10 @@ public class PublicJobRepository {
                                 + ", unnest(r.required_skills || r.preferred_skills) AS skill WHERE " + skills.sql()
                                 + " GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT " + topSkills)
                         .params(skills.params())
-                        .query((rs, n) -> new Count(rs.getString("name"), rs.getInt("jobs"))).list());
+                        .query((rs, n) -> new Count(rs.getString("name"), rs.getInt("jobs"))).list(),
+                search.userId() == null ? Map.of()
+                        : countMap("SELECT s.status AS name, count(*) AS jobs" + FROM + " WHERE " + statuses.sql()
+                                + " GROUP BY 1", statuses));
     }
 
     private Map<String, Integer> countMap(String sql, Where where) {
@@ -146,7 +150,8 @@ public class PublicJobRepository {
         return name;
     }
 
-    public Optional<JobDetail> detail(long id, String country) {
+    /** One open job; status = what this user marked it as (userId null = no user). */
+    public Optional<JobDetail> detail(long id, String country, Long userId) {
         return jdbc.sql("""
                         SELECT j.id, j.title, c.slug, c.name, j.url, j.department, j.locations,
                                """ + LOCAL_CITIES + """
@@ -159,13 +164,16 @@ public class PublicJobRepository {
                                """ + JobSearch.STATED + """
                          AS years_stated, r.years_evidence, r.family, r.secondary_families, r.specialization,
                                r.required_skills, r.preferred_skills, r.primary_languages, j.description,
-                               c.config ->> 'linkedinCompanyId' AS linkedin_company_id
+                               c.config ->> 'linkedinCompanyId' AS linkedin_company_id, s.status
                         FROM jobs j JOIN companies c ON c.id = j.company_id
                         LEFT JOIN job_requirements r ON r.job_id = j.id
+                        """ + JobSearch.STATUS_JOIN + """
+
                         WHERE j.id = :id AND j.closed_at IS NULL
                         """)
                 .param("id", id)
                 .param("country", country)
+                .param("userId", userId)
                 .query((rs, n) -> new JobDetail(rs.getLong("id"), rs.getString("title"), rs.getString("slug"),
                         rs.getString("name"), rs.getString("url"), rs.getString("department"), list(rs, "locations"),
                         list(rs, "cities"), rs.getBoolean("remote"), rs.getString("employment_type"),
@@ -173,7 +181,7 @@ public class PublicJobRepository {
                         rs.getBoolean("years_stated"), rs.getString("years_evidence"), rs.getString("family"),
                         list(rs, "secondary_families"), rs.getString("specialization"), list(rs, "required_skills"),
                         list(rs, "preferred_skills"), list(rs, "primary_languages"), rs.getString("description"),
-                        rs.getString("linkedin_company_id"), rs.getInt("other_countries")))
+                        rs.getString("linkedin_company_id"), rs.getInt("other_countries"), rs.getString("status")))
                 .optional();
     }
 
@@ -242,7 +250,7 @@ public class PublicJobRepository {
         return new JobCard(rs.getLong("id"), rs.getString("title"), rs.getString("slug"), rs.getString("name"),
                 list(rs, "cities"), rs.getBoolean("remote"), integer(rs, "min_years"), integer(rs, "max_years"),
                 rs.getBoolean("years_stated"), rs.getString("family"), rs.getString("specialization"),
-                list(rs, "skills"), instant(rs, "posted_at"), rs.getString("url"));
+                list(rs, "skills"), instant(rs, "posted_at"), rs.getString("url"), rs.getString("status"));
     }
 
     private static List<String> list(ResultSet rs, String column) throws SQLException {

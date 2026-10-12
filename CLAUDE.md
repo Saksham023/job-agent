@@ -51,6 +51,39 @@ USER'S SETUP PROGRESS (Telegram):
   seen 10-06, posted Jul-Sep). FIXED (UNCOMMITTED): GapFillRepository.write() (no queue) for reapply, apply() = write + queue only for a
   NEW model answer; MATCH requires j.first_seen_at >= now() - jobagent.alerts.max-job-age (P2D). Verified locally: rebuild of all 6,762
   jobs (599 Claude families put back) -> queue 0; queued old job 31 dropped, just-seen job 37 matched; local data restored.
+  ALERTS REVIEW 2026-10-12 (user: Microsoft job 25767 shown NEW in the UI, no alert): ROOT CAUSE the UI's "new" = derived posted time
+  (JobSearch.POSTED), the alerts' "new" = first seen; job 25767 first seen 10-07, RE-POSTED 10-12 14:09 (upsert UPDATED, never queued;
+  14 such re-posts in 48 h). Also found: old postings first seen late were alerted (17 sent; 1,173 such jobs in 48 h), and the matcher
+  ran before Claude's gap fill (job 1354433 matched 11:43:51, filled 11:43:52). FIXED (UNCOMMITTED, user OK, 384 tests): (A) MATCH uses
+  JobSearch.POSTED (now public) >= now() - max-job-age (P2D); (B) JobRepository.upsert CTE `before` reads the old posted_at, a re-post
+  (posted_at moved forward) is queued too; (C) CLAIM_JOBS skips jobs still awaiting a gap fill (GapFillRepository's rules, gap-fill
+  families) for at most jobagent.alerts.gap-fill-wait (PT30M); (D) AlertSender skips matches when the alert was switched off, 429 does
+  not count as a try (retryLater countAttempt). V41 queues open jobs posted in the last 2 days once (missed re-posts). Verified locally:
+  re-post matched, old posting dropped, gap-fill wait + release after 31 min + match right after a fill, groww crawl queued 3 new + 1
+  re-posted; local data restored. Note: date-only platforms (Workday) re-posts show first_seen in POSTED (ELSE branch), so the UI and
+  alerts both treat them as old (consistent, maybe a UI quirk).
+  JOB STATUS 2026-10-12 (UNCOMMITTED, user's design, 389 tests): per user + job status SAVED / APPLIED / REFERRAL_ASKED / NOT_INTERESTED,
+  ONE ROW PER MARKED JOB (no row = none), no title/company mute rules (user rejected them: titles change daily), no grouping.
+  V42 user_job_status (PK user_id+job_id, cascades); api/JobStatus (enum + parse), JobStatusRepository (set via INSERT..SELECT so an
+  unknown job -> 404, clear), JobStatusController PUT/DELETE /api/v1/me/jobs/{id}/status (admin key = no account -> 403); JobSearch
+  gains statuses + userId (12-arg constructor kept), STATUS_JOIN in every search FROM (PublicJobRepository FROM/count/search/facets +
+  detail), default hides NOT_INTERESTED for a signed-in user, status= shows only those, Facet.STATUS counts every status, Facets.statuses,
+  JobCard/JobDetail.status. Web: lib/status.ts (STATUS labels/icons, useSetStatus optimistic update of every ['jobs'] list + ['job',id],
+  rollback on error, Undo toast after a hide via useSyncExternalStore), components/JobStatus.tsx (StatusChip in the card's tag row,
+  StatusMenu "..." portal menu that follows its button on scroll, StatusButtons 4 in the drawer above Apply, StatusToast), FilterPanel
+  "My jobs" section, ResultsBar pills, filters.ts ?status=. TESTED: 29 API checks (hide, show-only, counts, per-user privacy, change,
+  clear, refusals 400/404/401/403, admin key) all pass; search 13-26 ms, facets 30-50 ms (unchanged); browser desktop + phone, dark +
+  light. Found while testing + fixed: chip crowded the card's top line (moved to the tag row); menu closed on any tiny scroll (now
+  follows its button). Note: the browser pane was hidden, so animations froze in screenshots (not a bug).
+  ALSO HIDE + FILTER BAR (2026-10-12, UNCOMMITTED, 390 tests): JobSearch.hidden (hide= SAVED/APPLIED/REFERRAL_ASKED for now, on top of
+  NOT_INTERESTED; ignored while status= is set; hiddenStatuses()); web Filters.hidden (?hide=), "Also hide" chips, "Hiding X" pills,
+  optimistic update + Undo when a job leaves the open list. LAYOUT = user's OPTION C: left column REMOVED; components/FilterBar.tsx =
+  sticky quick bar under the header (Match my resume, Companies, Location, Skills, My jobs as dropdowns via a portal Dropdown that
+  follows its pill, + "All filters"); "All filters" = right drawer with the full FilterPanel (order: My jobs, Companies, Location,
+  Skills, Job family, Experience, Posted; Esc + body lock), also opened by the phone's floating "Filters" button; FilterPanel exports
+  MatchResumeButton/MyJobsPicker/myJobsCount/CompanyPicker/LocationPicker/SkillPicker; results grid md:2 xl:3 columns; .scrollbar-none.
+  Tested in the browser (desktop dark, phone light): dropdowns, picks in the URL, pill summary "Amazon +1", drawer order, Esc, phone
+  sideways bar, dropdown fits 375 px. Backend on 8080 + Vite 5173 left RUNNING for the user's look (stop them when done).
   (Username cannot change later; display name via /setname. Never paste the token in chat.)
 REMAINING STEPS FOR THE USER (Part B, Air):
   7. ssh serverserver@jobserver.local; cp ~/jobagent/env ~/jobagent/env.bak;

@@ -7,6 +7,7 @@ import { connectionsUrl } from '../lib/linkedin'
 import { fillReferral } from '../lib/referral'
 import { ago, FAMILY_SHORT, years } from '../lib/format'
 import { Avatar } from './Avatar'
+import { StatusButtons } from './JobStatus'
 
 /** The job opened from a card: slides in from the right, closes with Esc, the backdrop or the X. */
 export function JobDrawer({ jobId, onClose, onAddResume }: { jobId: number | null; onClose: () => void; onAddResume: () => void }) {
@@ -69,6 +70,9 @@ function DrawerBody({ jobId, onClose, onAddResume }: { jobId: number; onClose: (
       </div>
       {job && (
         <div className="border-t border-slate-200 p-4 dark:border-white/10">
+          <div className="mb-2.5">
+            <StatusButtons job={job} />
+          </div>
           <a
             href={job.url}
             target="_blank"

@@ -9,6 +9,8 @@ import io.github.saksham023.jobagent.matching.MatchingProperties;
 import io.github.saksham023.jobagent.requirements.JobFamily;
 import io.github.saksham023.jobagent.common.ApiKeyFilter;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,8 +30,10 @@ import java.util.Map;
  *
  * GET /api/v1/meta        companies, job families, cities, skills (each with open job counts) and totals
  * GET /api/v1/jobs        search: company, family, minYears, maxYears, includeUnstated, city, skill, q,
- *                         postedWithinDays, sort (newest|company|experience), page, size; repeat a parameter for
- *                         several values (?family=SOFTWARE_ENGINEERING&family=DATA_ML)
+ *                         postedWithinDays, status (the signed-in user's: SAVED, APPLIED, REFERRAL_ASKED, NOT_INTERESTED;
+ *                         none = everything except NOT_INTERESTED), hide (statuses also hidden for now, e.g.
+ *                         APPLIED; ignored while status is given), sort (newest|company|experience), page, size; repeat
+ *                         a parameter for several values (?family=SOFTWARE_ENGINEERING&family=DATA_ML)
  * GET /api/v1/facets      live counts for every filter list under the current filters (same parameters)
  * GET /api/v1/jobs/{id}   one open job in full
  */
@@ -103,12 +107,15 @@ public class PublicApiController {
                         @RequestParam(required = false) List<String> skill,
                         @RequestParam(required = false) String q,
                         @RequestParam(required = false) Integer postedWithinDays,
+                        @RequestParam(required = false) List<String> status,
+                        @RequestParam(required = false) List<String> hide,
                         @RequestParam(defaultValue = "newest") String sort,
                         @RequestParam(defaultValue = "0") int page,
                         @RequestParam(defaultValue = "24") int size,
+                        @AuthenticationPrincipal Jwt jwt,
                         HttpServletRequest request) {
         JobSearch search = search(company, family, minYears, maxYears, includeUnstated, city, skill, q, postedWithinDays,
-                sort, page, size, request);
+                status, hide, sort, page, size, jwt, request);
         int total = repository.count(search, country);
         List<JobCard> jobs = repository.search(search, country);
         return new JobPage(total, search.page(), search.size(),
@@ -126,23 +133,33 @@ public class PublicApiController {
                                              @RequestParam(required = false) List<String> skill,
                                              @RequestParam(required = false) String q,
                                              @RequestParam(required = false) Integer postedWithinDays,
+                                             @RequestParam(required = false) List<String> status,
+                                             @RequestParam(required = false) List<String> hide,
+                                             @AuthenticationPrincipal Jwt jwt,
                                              HttpServletRequest request) {
         return repository.facets(search(company, family, minYears, maxYears, includeUnstated, city, skill, q,
-                postedWithinDays, "newest", 0, 1, request), country, 80);
+                postedWithinDays, status, hide, "newest", 0, 1, jwt, request), country, 80);
     }
 
     @GetMapping("/jobs/{id}")
-    public JobDetail job(@PathVariable long id) {
-        return repository.detail(id, country)
+    public JobDetail job(@PathVariable long id, @AuthenticationPrincipal Jwt jwt) {
+        return repository.detail(id, country, userId(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No open job " + id));
     }
 
     private static JobSearch search(List<String> company, List<String> family, Integer minYears, Integer maxYears,
                                     boolean includeUnstated, List<String> city, List<String> skill, String q,
-                                    Integer postedWithinDays, String sort, int page, int size, HttpServletRequest request) {
+                                    Integer postedWithinDays, List<String> status, List<String> hide, String sort,
+                                    int page, int size, Jwt jwt, HttpServletRequest request) {
         JobSearch search = new JobSearch(company, JobSearch.families(family), minYears, maxYears, includeUnstated, city,
-                skill, q, postedWithinDays, sort(sort), page, size);
+                skill, q, postedWithinDays, sort(sort), page, size, JobStatus.parse(status), JobStatus.parse(hide),
+                userId(jwt));
         return ApiKeyFilter.isTrusted(request) ? search : search.checkedForVisitor();       // the API key lifts the limits
+    }
+
+    /** The signed-in user; null for a caller with the shared admin key (no account, so no statuses). */
+    private static Long userId(Jwt jwt) {
+        return jwt == null ? null : Long.parseLong(jwt.getSubject());
     }
 
     private static JobSearch.Sort sort(String value) {

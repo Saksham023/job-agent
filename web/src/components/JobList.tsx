@@ -54,7 +54,7 @@ export function JobList({
 
   if (!query.data) {
     return (
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }, (_, i) => <CardSkeleton key={i} />)}
       </div>
     )
@@ -80,7 +80,7 @@ export function JobList({
 
   return (
     <div>
-      <motion.div layout className="grid gap-4 lg:grid-cols-2">
+      <motion.div layout className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <AnimatePresence mode="popLayout">
           {jobs.map((job, i) => (
             <JobCard key={job.id} job={job} index={i} onOpen={() => onOpen(job.id)} />

@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
-import { Briefcase, Building2, Calendar, Check, ChevronDown, Layers, MapPin, RotateCcw, Search, Sparkles, X } from 'lucide-react'
+import { Briefcase, Building2, Calendar, Check, ChevronDown, ListChecks, Layers, MapPin, RotateCcw, Search, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { Facets, Filters, Meta, UserProfile } from '../lib/api'
+import { HIDEABLE, JOB_STATUSES, type Facets, type Filters, type Meta, type UserProfile } from '../lib/api'
 import { activeCount, toggle } from '../lib/filters'
+import { STATUS } from '../lib/status'
 import { Avatar } from './Avatar'
 
 type Props = {
@@ -17,29 +18,15 @@ type Props = {
   onAddResume?: () => void
 }
 
+/**
+ * Every filter (the "All filters" drawer). The ones used on most visits come first; job family and experience come
+ * last, because "Match my resume" usually sets them.
+ */
 export function FilterPanel({ meta, facets, filters, update, reset, profile, onMatch, onAddResume }: Props) {
   const active = activeCount(filters)
-  const canMatch = !!profile && (profile.families.length > 0 || profile.jobYearsFrom != null)
   return (
     <div className="space-y-3">
-      {onMatch && (
-        <button
-          onClick={() => (canMatch ? onMatch(profile!) : onAddResume?.())}
-          className="group flex w-full items-center gap-3 rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-500/10 to-cyan-500/10 px-4 py-3 text-left transition hover:border-violet-500/60"
-        >
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 text-white">
-            <Sparkles size={15} />
-          </span>
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold text-slate-900 dark:text-white">Match my resume</span>
-            <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
-              {canMatch
-                ? `${profile!.families.length} famil${profile!.families.length === 1 ? 'y' : 'ies'}${profile!.jobYearsFrom != null ? ` · ${profile!.jobYearsFrom}–${profile!.jobYearsTo} yrs` : ''}`
-                : 'Add your resume to use this'}
-            </span>
-          </span>
-        </button>
-      )}
+      {onMatch && <MatchResumeButton profile={profile} onMatch={onMatch} onAddResume={onAddResume} />}
       <div className="flex items-center justify-between px-1">
         <h2 className="font-display text-base font-semibold text-slate-900 dark:text-white">Filters</h2>
         <AnimatePresence>
@@ -57,12 +44,8 @@ export function FilterPanel({ meta, facets, filters, update, reset, profile, onM
         </AnimatePresence>
       </div>
 
-      <Section icon={<Layers size={15} />} title="Job family" badge={filters.families.length}>
-        <FamilyPicker meta={meta} facets={facets} selected={filters.families} onChange={(families) => update({ families })} />
-      </Section>
-
-      <Section icon={<Briefcase size={15} />} title="Experience" badge={filters.minYears != null || filters.maxYears != null ? 1 : 0}>
-        <ExperiencePicker filters={filters} update={update} />
+      <Section icon={<ListChecks size={15} />} title="My jobs" badge={myJobsCount(filters)}>
+        <MyJobsPicker facets={facets} filters={filters} update={update} />
       </Section>
 
       <Section icon={<Building2 size={15} />} title="Companies" badge={filters.companies.length}>
@@ -77,6 +60,14 @@ export function FilterPanel({ meta, facets, filters, update, reset, profile, onM
         <SkillPicker meta={meta} facets={facets} selected={filters.skills} onChange={(skills) => update({ skills })} />
       </Section>
 
+      <Section icon={<Layers size={15} />} title="Job family" badge={filters.families.length}>
+        <FamilyPicker meta={meta} facets={facets} selected={filters.families} onChange={(families) => update({ families })} />
+      </Section>
+
+      <Section icon={<Briefcase size={15} />} title="Experience" badge={filters.minYears != null || filters.maxYears != null ? 1 : 0}>
+        <ExperiencePicker filters={filters} update={update} />
+      </Section>
+
       <Section icon={<Calendar size={15} />} title="Posted" badge={filters.postedWithinDays != null ? 1 : 0}>
         <Segmented
           value={filters.postedWithinDays}
@@ -89,6 +80,85 @@ export function FilterPanel({ meta, facets, filters, update, reset, profile, onM
           onChange={(postedWithinDays) => update({ postedWithinDays })}
         />
       </Section>
+    </div>
+  )
+}
+
+/** "Match my resume": sets job family and experience from the profile (or asks for a resume first). */
+export function MatchResumeButton({ profile, onMatch, onAddResume, compact }: { profile?: UserProfile | null; onMatch: (profile: UserProfile) => void; onAddResume?: () => void; compact?: boolean }) {
+  const canMatch = !!profile && (profile.families.length > 0 || profile.jobYearsFrom != null)
+  const summary = canMatch
+    ? `${profile!.families.length} famil${profile!.families.length === 1 ? 'y' : 'ies'}${profile!.jobYearsFrom != null ? ` · ${profile!.jobYearsFrom}–${profile!.jobYearsTo} yrs` : ''}`
+    : 'Add your resume to use this'
+  if (compact) {
+    return (
+      <button
+        onClick={() => (canMatch ? onMatch(profile!) : onAddResume?.())}
+        title={summary}
+        className="flex shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 px-3.5 py-2 text-[13px] font-semibold text-white shadow-md shadow-violet-600/25 transition hover:brightness-110"
+      >
+        <Sparkles size={14} /> Match my resume
+      </button>
+    )
+  }
+  return (
+    <button
+      onClick={() => (canMatch ? onMatch(profile!) : onAddResume?.())}
+      className="group flex w-full items-center gap-3 rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-500/10 to-cyan-500/10 px-4 py-3 text-left transition hover:border-violet-500/60"
+    >
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 text-white">
+        <Sparkles size={15} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-slate-900 dark:text-white">Match my resume</span>
+        <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{summary}</span>
+      </span>
+    </button>
+  )
+}
+
+/** How many "My jobs" choices are active ("Also hide" counts only while "Show only" is not used). */
+export function myJobsCount(filters: Filters): number {
+  return filters.statuses.length + (filters.statuses.length > 0 ? 0 : filters.hidden.length)
+}
+
+// ------------------------------------------------------------------ my jobs
+
+export function MyJobsPicker({ facets, filters, update }: { facets: Facets | undefined; filters: Filters; update: (change: Partial<Filters>) => void }) {
+  const showing = filters.statuses.length > 0
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Show only</p>
+      <div className="-mt-1.5 flex flex-wrap gap-1.5">
+        {JOB_STATUSES.map((status) => {
+          const Icon = STATUS[status].icon
+          return (
+            <Chip key={status} active={filters.statuses.includes(status)} count={facets?.statuses?.[status] ?? 0} onClick={() => update({ statuses: toggle(filters.statuses, status) })}>
+              <span className="inline-flex items-center gap-1.5">
+                <Icon size={13} /> {STATUS[status].label}
+              </span>
+            </Chip>
+          )
+        })}
+      </div>
+      <p className={clsx('text-[11px] font-semibold tracking-wide uppercase', showing ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400')}>Also hide</p>
+      <div className={clsx('-mt-1.5 flex flex-wrap gap-1.5', showing && 'pointer-events-none opacity-40')} aria-disabled={showing}>
+        {HIDEABLE.map((status) => {
+          const Icon = STATUS[status].icon
+          return (
+            <Chip key={status} active={filters.hidden.includes(status)} onClick={() => update({ hidden: toggle(filters.hidden, status) })}>
+              <span className="inline-flex items-center gap-1.5">
+                <Icon size={13} /> {STATUS[status].label}
+              </span>
+            </Chip>
+          )
+        })}
+      </div>
+      <p className="text-[11px] text-slate-400">
+        {showing
+          ? 'Showing only the jobs you marked like this.'
+          : '"Not interested" jobs are always hidden. Pick "Also hide" to hide more for now, or "Show only" to see marked jobs.'}
+      </p>
     </div>
   )
 }
@@ -274,7 +344,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
 
 // ------------------------------------------------------------------ companies
 
-function CompanyPicker({ meta, facets, selected, onChange }: { meta: Meta | undefined; facets: Facets | undefined; selected: string[]; onChange: (v: string[]) => void }) {
+export function CompanyPicker({ meta, facets, selected, onChange }: { meta: Meta | undefined; facets: Facets | undefined; selected: string[]; onChange: (v: string[]) => void }) {
   const [search, setSearch] = useState('')
   const [all, setAll] = useState(false)
   if (!meta) return <Loading />
@@ -324,7 +394,7 @@ function CompanyPicker({ meta, facets, selected, onChange }: { meta: Meta | unde
 
 // ------------------------------------------------------------------ locations
 
-function LocationPicker({ meta, facets, selected, onChange }: { meta: Meta | undefined; facets: Facets | undefined; selected: string[]; onChange: (v: string[]) => void }) {
+export function LocationPicker({ meta, facets, selected, onChange }: { meta: Meta | undefined; facets: Facets | undefined; selected: string[]; onChange: (v: string[]) => void }) {
   const [more, setMore] = useState(false)
   if (!meta) return <Loading />
   const cities = more ? meta.cities : meta.cities.slice(0, 9)
@@ -351,7 +421,7 @@ function LocationPicker({ meta, facets, selected, onChange }: { meta: Meta | und
 
 // ------------------------------------------------------------------ skills
 
-function SkillPicker({ meta, facets, selected, onChange }: { meta: Meta | undefined; facets: Facets | undefined; selected: string[]; onChange: (v: string[]) => void }) {
+export function SkillPicker({ meta, facets, selected, onChange }: { meta: Meta | undefined; facets: Facets | undefined; selected: string[]; onChange: (v: string[]) => void }) {
   const [search, setSearch] = useState('')
   const suggestions = useMemo(() => {
     if (!meta) return []

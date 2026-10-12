@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowDownUp, X } from 'lucide-react'
 import type { Filters, Meta, Sort } from '../lib/api'
+import { STATUS } from '../lib/status'
 import { CountUp } from './CountUp'
 
 type Pill = { key: string; label: string; remove: () => void }
@@ -37,6 +38,8 @@ export function ResultsBar({
     ...filters.companies.map((c) => ({ key: `c-${c}`, label: companyName(c), remove: () => update({ companies: filters.companies.filter((x) => x !== c) }) })),
     ...filters.cities.map((c) => ({ key: `l-${c}`, label: c, remove: () => update({ cities: filters.cities.filter((x) => x !== c) }) })),
     ...filters.skills.map((s) => ({ key: `s-${s}`, label: s, remove: () => update({ skills: filters.skills.filter((x) => x !== s) }) })),
+    ...filters.statuses.map((s) => ({ key: `st-${s}`, label: STATUS[s].label, remove: () => update({ statuses: filters.statuses.filter((x) => x !== s) }) })),
+    ...(filters.statuses.length > 0 ? [] : filters.hidden).map((s) => ({ key: `hide-${s}`, label: `Hiding ${STATUS[s].label}`, remove: () => update({ hidden: filters.hidden.filter((x) => x !== s) }) })),
     ...(filters.postedWithinDays != null
       ? [{ key: 'posted', label: filters.postedWithinDays === 1 ? 'Last 24h' : `Last ${filters.postedWithinDays} days`, remove: () => update({ postedWithinDays: null }) }]
       : []),

@@ -95,3 +95,11 @@ html:not(.dark) .aurora::after {
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation: none !important; transition: none !important; }
 }
+
+/* a row that scrolls sideways without showing a scrollbar (the quick filter bar on a phone) */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
