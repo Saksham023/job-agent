@@ -122,6 +122,9 @@ jobRequisitionLocation.descriptor, a posting with no location at all gets the co
 re-run locally (old run deleted: jobs, crawl_runs, companies, flyway row 47) so the local checksum matches the edited file. Re-crawl: JioStar
 236/236, HackerRank 18 in Bengaluru, Cloudera 1 (Mumbai), DoorDash Hyderbad -> Hyderabad. Fix 5 (JioStar 'Preferred' years LOW) left to the
 Air's gap fill, no rule change.
+LinkedIn ids round 5 (user-verified, 18 companies; JioStar = JioStar + JioHotstar pages) in V48__add_round5_linkedin_ids.sql (dry run:
+18 updated, every enabled company has an id except Squarepoint); research/linkedin-ids-checklist.html now lists round 5. User pushes
+everything (8be4915, ae134da, V48) in ONE deploy.
 PARKED 2026-10-13 (user: "park that, add to the backlog"; research by probe round 5, tier list screenshot): Kotak (Oracle hcbt.fa.em2 / CX,
 ~15,900 India jobs, almost all branch banking: needs an Oracle keyword/category filter option first, ~150 tech); NEW ADAPTERS: TurboHire
 (Navi orgId 3e818601-0baa-429c-b6f8-4b21903ae0e6 37 jobs, Ola olacareers.turbohire.co orgId e0c1eb37-eb7a-4ca4-bcc5-d59ce4ce9212 0 jobs,
