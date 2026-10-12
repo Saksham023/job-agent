@@ -1,4 +1,5 @@
 import { Radar } from 'lucide-react'
+import { RefreshButton } from './RefreshButton'
 import { ThemeToggle } from './ThemeToggle'
 import { UserMenu } from './UserMenu'
 import type { User } from '../lib/auth'
@@ -33,6 +34,7 @@ export function Header({ lastCrawlAt, onHome, user, onProfile, onResume, onAlert
               Updated {ago(lastCrawlAt)}
             </span>
           )}
+          <RefreshButton />
           <ThemeToggle />
           <UserMenu user={user} onProfile={onProfile} onResume={onResume} onAlerts={onAlerts} />
         </div>

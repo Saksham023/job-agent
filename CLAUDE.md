@@ -9,7 +9,69 @@ This file holds everything decided so far (planned 2026-10-01..04 in the `python
 
 ## 0. RESUME HERE (read first after a context compaction)
 
-### >>> HANDOFF 2026-10-11 (NEWEST, written right before a compaction: READ THIS FIRST; older blocks below are history) <<<
+### >>> HANDOFF 2026-10-12 (NEWEST, written right before a compaction: READ THIS FIRST; every block below is history) <<<
+GIT: main == origin/main at d78858e, everything PUSHED and DEPLOYED on the Air by the user. Commits since the 2026-10-11 handoff:
+df95156 Job alerts on Telegram (+ webhook mode, strict filter validation; V39, V40); 3f0a39a solid account menu + short README;
+eac847c live site link in the README; 975a708 alerts never send old jobs; 0d47571 alerts: re-posted jobs + the website's posted time +
+wait for the gap fill (V41); dbd70df job status per user + "also hide" + quick filter bar (V42); d78858e one-click Not interested.
+Only CLAUDE.md is uncommitted (notes). Commit messages: plain, NO Claude/Anthropic/Co-Authored-By (user's rule); commit ONLY when the user
+says so in that message; the user pushes. Stop any local servers before committing when the user asks "stop and commit".
+WHAT IS LIVE NOW (details in the dated blocks below):
+- Telegram alerts: bot @JobRadarIndiaBot (display name "JobRadar", webhook mode on the Air, secret checked); local dev bot @JobRadarDev_bot
+  (polling). User's alert works: SWE + 0-3 yrs + Java. Alert rule = the website's rule: a job is sent when it fits the filters AND its
+  POSTED time (JobSearch.POSTED, the UI's "posted X ago") is within jobagent.alerts.max-job-age (P2D); new jobs AND re-posts (posted_at moved
+  forward) are queued by the crawl; a job awaiting Claude's gap fill waits up to jobagent.alerts.gap-fill-wait (PT30M); reapply() after
+  re-reads never queues. Latency = crawl cadence: each server group re-crawls 30 min after its round ended (Microsoft's crawl itself ~8
+  min, throttled), so an alert arrives ~5-35 min after posting. User CHECKED the 15:25 / 15:48 timings (15:48 = the one-time V41 catch-up of
+  a re-post missed before the fix) and said: "no fix needed". Offered, NOT taken: crawl every 15 min for quick sites.
+- Telegram: the bot answers non-text updates (e.g. an Auto-Delete timer change) with the help text; user: "perfectly fine", no change.
+  User enabled Telegram auto-delete (2 days) in the bot chat themselves.
+- Job status per user (V42 user_job_status, one row per marked job): SAVED / APPLIED / REFERRAL_ASKED / NOT_INTERESTED; NOT_INTERESTED is
+  hidden by default; "My jobs" filter: Show only (status=) and Also hide (hide= SAVED/APPLIED/REFERRAL_ASKED, ignored while status= is
+  set); card: chip in the tag row, "..." status menu, ONE-CLICK eye-off button in the top-right corner (Not interested; in the Not
+  interested view an eye = show again); drawer: 4 status buttons above Apply; undo toast with matching text ("Hidden ...", "... is back
+  in your search", "Marked ... as Applied"). Per-title/company MUTE rules were REJECTED by the user (titles change daily); no grouping.
+- Web layout = OPTION C (user's choice): no left column; sticky quick bar under the header: Match my resume, Companies, Location, Skills,
+  My jobs (dropdowns) + "All filters" drawer (order: My jobs, Companies, Location, Skills, Job family, Experience, Posted); results 2-3
+  columns. User's most-used filters: companies, location, skills, my jobs (family + experience come from "Match my resume", posted rarely).
+- Header REFRESH button (2026-10-12, user's request): round icon left of the theme toggle (web/src/components/RefreshButton.tsx);
+  re-fetches jobs, facets, meta and open job details from OUR database (no crawl), keeps filters + scroll, spins while loading.
+- PayPal: has both Eightfold (paypal.eightfold.ai, linked from careers.pypl.com) and Workday; SAME requisitions (atsJobId R0138281 =
+  Workday ...R0138281-1); KEEP Workday (system of record); switching would re-alert and close all PayPal jobs. No change.
+NEXT, IN THIS ORDER (user: "we'll be following your recommendation"; explain the plan first, then build, test, commit only when asked):
+  (1) ONE MIGRATION (next number V43) adding the 12 one-row companies from PROBE ROUND 3 (block below): Greenhouse arcesiumllc (Arcesium),
+      imc (IMC), optiverus (Optiver), alphagrepsecurities (AlphaGrep), nksecuritiesresearch (NK Securities), observeai (Observe.AI), agoda
+      (Agoda); Lever mindtickle (Mindtickle); Workday zendesk.wd1.myworkdayjobs.com tenant zendesk site zendesk (Zendesk; India facet values
+      "India" + "Pune, India" + "India - Karnataka - Fully Flexible"; NEVER "Indiana"), uniphore.wd503.myworkdayjobs.com tenant uniphore site
+      Uniphore (Uniphore; "India - Bangalore", "India - Chennai"); Eightfold host app.eightfold.ai domain eightfold.ai (Eightfold AI) and
+      host apply.ukg.com domain ukg.com (UKG; PCSX search worked WITHOUT the cookie/CSRF handshake; check the detail call too). The user may
+      drop Uniphore / Mindtickle / UKG (mid pay or many non-tech roles): ASK when presenting the plan. Same procedure as rounds 1-2: copy the
+      config shape of existing rows of each platform (look at V10/V11/V33/V37), local crawl on port 8091 against the local db (schedulers
+      off), rules check BEFORE any rule edit (unclassified / guessed / no years / unresolved locations, sample ~20), no local gap fill (the
+      Air does it), then LinkedIn ids for them (user collects by hand; never fetch LinkedIn).
+  (2) TWO CUSTOM ADAPTERS: APPLE (~174 India; jobs.apple.com/en-in/search?location=india-INDC allowed by robots; job data in the page's
+      window.__staticRouterHydrationData blob, paged; recipe in section 3.2) and D. E. SHAW (www.deshawindia.com/careers allowed by robots;
+      Next.js page, __NEXT_DATA__ (~830 KB) holds all 71 positions (~19 tech), one request per crawl; job pages /careers/<slug>-<id>).
+      Each: adapter + migration row + adapter test with a saved sample + local crawl + rules check. Navi (TurboHire, 37 jobs mostly
+      business) LATER.
+OPEN / BACKLOG (offered 2026-10-12, user picked companies first): close sign-up (JOBAGENT_AUTH_SIGNUP_ENABLED=false on the Air) or an
+Anthropic API key BEFORE other people use the app (resume reads run on the user's Claude subscription); pin ubuntu-latest -> ubuntu-24.04
+in .github/workflows/deploy.yml (GitHub moves the label to Ubuntu 26 on 2026-10-19); log rotation on the Air (DEBUG log grows); nightly
+pg_dump backup; admin dashboard (crawl history, errors, server stats, Claude usage; then CSVs into DB tables); faster alerts (15-min
+rounds for quick servers); duplicate postings; Workday re-posts show first_seen in POSTED (UI quirk); README numbers (~66 companies,
+~7,000 jobs); IBM / Deutsche Bank / AMD / Intuit adapters: user NOT interested (not high-paying enough); Cisco not targeted.
+LOCAL RUN for the user's own look (they did this twice): backend `source ~/.zshrc; JOBAGENT_LLM_CLAUDECLI_COMMAND=~/.local/bin/claude
+<JDK25>/bin/java -jar target/jobagent-0.0.1-SNAPSHOT.jar` (port 8080, run in background) + preview_start "web" (Vite 5173, proxies /api
+to 8080); rebuild the jar first if the backend changed (`./mvnw -q -o package -DskipTests`, JDK 25 path); stop with pkill + preview_stop.
+TEST HABITS that worked: python API checks with throwaway @example.test accounts (deleted afterwards), browser checks desktop + phone
+(375 px) + light/dark; the browser pane is often HIDDEN, so animations freeze in screenshots (read the DOM / DB instead of trusting a
+half-faded screenshot; click by ref, viewport is 1024 px while screenshots are 800 px wide).
+USER PREFERENCES (unchanged): explain every plan BEFORE changing code and wait for OK (small UI fixes the user asked for directly may
+just be done and explained); ELABORATE but clear, step by step, no crammed answers; never silently change an agreed design; no em-dashes;
+never put tokens/keys in chat or git; ask before downloads; never fetch LinkedIn; never bypass bot protection; respect robots.txt using
+RFC 9309 longest-match (NOT Python's urllib.robotparser, which is first-match and wrongly blocks "Disallow: / + Allow: /api/pcsx").
+
+### >>> HANDOFF 2026-10-11 (older handoff; history) <<<
 GIT: main == origin/main at 0843172, everything up to there is PUSHED and deployed by the user: 371905a (12 companies + QUANT family),
 9e3d022 (LinkedIn ids round 2 + profile error bar + .gitignore), 4622b38 (Indian cities only + company-voice years, extractor v15),
 990a3d4 (Atlassian adapter, V35/V36), f72dee2 (20 well-paying companies V37 + LinkedIn ids V38), 0843172 (Workday title fix).
@@ -84,6 +146,18 @@ USER'S SETUP PROGRESS (Telegram):
   MatchResumeButton/MyJobsPicker/myJobsCount/CompanyPicker/LocationPicker/SkillPicker; results grid md:2 xl:3 columns; .scrollbar-none.
   Tested in the browser (desktop dark, phone light): dropdowns, picks in the URL, pill summary "Amazon +1", drawer order, Esc, phone
   sideways bar, dropdown fits 375 px. Backend on 8080 + Vite 5173 left RUNNING for the user's look (stop them when done).
+  PROBE ROUND 3 (2026-10-12, no code; waiting for the user's pick; scripts in the session scratchpad probe3/): ONE ROW (platforms we
+  support): Greenhouse arcesiumllc 22 India (half finance), imc 18 (~half tech), optiverus 4, alphagrepsecurities 6, nksecuritiesresearch
+  13, observeai 5, agoda 12 (several backend SWE, Gurgaon); Lever mindtickle ~19; Workday zendesk.wd1/zendesk ~28 India (facets India +
+  Pune, India; NOT Indiana), uniphore.wd503/Uniphore 6; Eightfold app.eightfold.ai domain=eightfold.ai 23 (Eightfold AI itself),
+  apply.ukg.com domain=ukg.com 87 (PCSX search works without CSRF now). NEW ADAPTER: Apple (jobs.apple.com/en-in/search?location=india-INDC
+  allowed, totalRecords 174), D. E. Shaw (www.deshawindia.com/careers allowed, Next.js __NEXT_DATA__ holds all 71 positions, ~19 tech),
+  Navi (TurboHire navi.turbohire.co orgId 3e818601-0baa-429c-b6f8-4b21903ae0e6, anonymous token key access_token, 37 jobs mostly
+  business). NOT POSSIBLE: Millennium (Eightfold "PCSX is not enabled"), Citadel (403), Netflix (PCSX 403), Qube RT (robots disallow),
+  Jane Street (0 India), Marvell (robots 403), Wayfair (429); no public listing found: Zerodha (tiny SPA), Urban Company, Innovaccer,
+  Media.net, Whatfix, INDmoney, Slice, Hasura/PromptQL, Krutrim, smallcase, Quadeye, Tesco, Synopsys; other systems: Darwinbox (own
+  Darwinbox ATS), Booking.com + Arm (iCIMS), Rippling (own). LESSON: Python's urllib.robotparser applies the FIRST matching rule;
+  RFC 9309 (Google) uses the LONGEST match, so "Disallow: / ... Allow: /api/pcsx" ALLOWS the job API; use a 9309 matcher.
   (Username cannot change later; display name via /setname. Never paste the token in chat.)
 REMAINING STEPS FOR THE USER (Part B, Air):
   7. ssh serverserver@jobserver.local; cp ~/jobagent/env ~/jobagent/env.bak;
@@ -107,7 +181,7 @@ USER PREFERENCES THIS SESSION: explain every plan BEFORE changing code and wait 
 complained about crammed answers and about me silently switching a design: never change an agreed design without saying so clearly);
 step-by-step instructions for anything the user must do; no em-dashes; never put tokens/keys in chat or git; ask before downloads.
 
-### >>> HANDOFF 2026-10-10 (written right before a compaction; THIS block is the current state, read it first) <<<
+### >>> HANDOFF 2026-10-10 (older handoff; history) <<<
 UPDATE (end of 2026-10-10): L1-L6 ALL DONE AND DEPLOYED (commit 7764bb9, pushed by the user, deploy green, JWT secret set on the Air). The
 notes below about "uncommitted" describe the state before that commit. Open: Anthropic API key (or JOBAGENT_AUTH_SIGNUP_ENABLED=false)
 before anyone else uses the app; small fix: show an error when loading the profile fails; then backlog (admin dashboards, Atlassian and
